@@ -59,8 +59,8 @@ class DiscreteDataset(Dataset):
         sensor_coord_x_list = []
         sensor_coord_y_list = []
         for sensor in sensor_id_list:
-            coord_x = wtd_names.loc[wtd_names["CODICE_PUN"] == sensor].geometry.x.values[0]
-            coord_y = wtd_names.loc[wtd_names["CODICE_PUN"] == sensor].geometry.y.values[0]
+            coord_x = wtd_names.loc[wtd_names["sensor_id"] == sensor].geometry.x.values[0]
+            coord_y = wtd_names.loc[wtd_names["sensor_id"] == sensor].geometry.y.values[0]
             sensor_coord_x_list.append(coord_x)
             sensor_coord_y_list.append(coord_y)
 
