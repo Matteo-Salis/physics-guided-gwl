@@ -151,7 +151,7 @@ class ContinuousDataset(Dataset):
                                                 y = wtd_t0_lat[sensor],
                                                 method = "nearest") for sensor in range(len(wtd_t0_lat))])
         
-        wtd_t0_mask = np.isnan(wtd_t0_values)
+        wtd_t0_mask = 1*~np.isnan(wtd_t0_values)
         
         X = [torch.from_numpy(wtd_t0_lat),
              torch.from_numpy(wtd_t0_lon),
@@ -178,7 +178,7 @@ class ContinuousDataset(Dataset):
                                           (self.wtd_df.index.get_level_values(2) == sample_lon)]
         
         wtd_t1_T_values =  wtd_t1_T.values
-        wtd_t1_T_mask =  np.isnan(wtd_t1_T_values)
+        wtd_t1_T_mask =  1*~np.isnan(wtd_t1_T_values)
         
         Y = [torch.from_numpy(wtd_t1_T_values),
              torch.from_numpy(wtd_t1_T_mask)]
