@@ -149,7 +149,7 @@ class ContinuousDataset(Dataset):
         wtd_t0_lon = wtd_t0.index.get_level_values(2).values
         wtd_t0_dtm = np.array([self.dtm_roi.sel(x = wtd_t0_lon[sensor],
                                                 y = wtd_t0_lat[sensor],
-                                                method = "nearest") for sensor in range(len(wtd_t0_lat))])
+                                                method = "nearest") for sensor in range(len(wtd_t0_lat))]).squeeze()
         
         wtd_t0_mask = 1*~np.isnan(wtd_t0_values)
         
@@ -158,10 +158,12 @@ class ContinuousDataset(Dataset):
              torch.from_numpy(wtd_t0_dtm),
              torch.from_numpy(wtd_t0_values),
              torch.from_numpy(wtd_t0_mask)]
+        X = torch.stack(X)
         
-        Z = [torch.tensor(sample_lat),
-             torch.tensor(sample_lon),
-             torch.tensor(sample_dtm)]
+        Z = [torch.tensor(sample_lat).reshape(1),
+             torch.tensor(sample_lon).reshape(1),
+             torch.tensor(sample_dtm).reshape(1)]
+        Z = torch.stack(Z)
         
         ## Retrieve weather data
         weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, "D"),
@@ -182,6 +184,7 @@ class ContinuousDataset(Dataset):
         
         Y = [torch.from_numpy(wtd_t1_T_values),
              torch.from_numpy(wtd_t1_T_mask)]
+        Y = torch.stack(Y)
         
         if self.transform:
             sample = self.transform(sample)
