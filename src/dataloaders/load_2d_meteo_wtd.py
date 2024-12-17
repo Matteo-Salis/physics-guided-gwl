@@ -15,9 +15,7 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn as nn
 
-import torch
-from torch.utils.data import Dataset
-import torch.nn as nn
+from shapely.geometry import box
 
 class DiscreteDataset(Dataset):
     """..."""
@@ -89,6 +87,11 @@ class DiscreteDataset(Dataset):
         wtd_df, geometry=gpd.points_from_xy(wtd_df["x"], 
                                             wtd_df["y"]), crs="EPSG:4326")
         wtd_data_geop = wtd_data_geop[["date","wtd","geometry"]]
+
+        self.minx = self.dtm_roi_downsampled.x.min()
+        self.miny = self.dtm_roi_downsampled.y.min()
+        self.maxx = self.dtm_roi_downsampled.x.max()
+        self.maxy = self.dtm_roi_downsampled.y.max()
         
         rasterized_ds_list = []
         for date_idx in range(len(all_dates)):
@@ -98,12 +101,16 @@ class DiscreteDataset(Dataset):
             rasterized_ds = make_geocube(vector_data=vector_ds,
                                         measurements=['wtd'],
                                         output_crs="epsg:4326",
-                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, self.dtm_roi_downsampled.rio.transform().e))
+                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, self.dtm_roi_downsampled.rio.transform().e),
+                                        geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
             rasterized_ds_list.append(rasterized_ds)
 
         self.wtd_data_raserized = xarray.concat(rasterized_ds_list, dim = "time")
         self.wtd_data_raserized = self.wtd_data_raserized.assign_coords({"time": all_dates})
+
+        self.wtd_data_raserized = self.wtd_data_raserized.reindex(y=list(reversed(self.wtd_data_raserized.y)))
+        self.wtd_data_raserized = self.wtd_data_raserized.reindex(x=list(reversed(self.wtd_data_raserized.x)))
 
     def __len__(self):
         return len(self.wtd_data_raserized["wtd"]) - self.timesteps
