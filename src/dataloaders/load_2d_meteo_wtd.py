@@ -18,7 +18,7 @@ import torch.nn as nn
 from shapely.geometry import box
 
 class DiscreteDataset(Dataset):
-    """..."""
+    """... dataset."""
 
     def __init__(self, dict_files, transform=None):
         """
@@ -102,6 +102,7 @@ class DiscreteDataset(Dataset):
                                         measurements=['wtd'],
                                         output_crs="epsg:4326",
                                         resolution=(self.dtm_roi_downsampled.rio.transform().a, self.dtm_roi_downsampled.rio.transform().e),
+                                        # Global extent in degrees of longitude and latitude
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
             rasterized_ds_list.append(rasterized_ds)
@@ -111,6 +112,14 @@ class DiscreteDataset(Dataset):
 
         self.wtd_data_raserized = self.wtd_data_raserized.reindex(y=list(reversed(self.wtd_data_raserized.y)))
         self.wtd_data_raserized = self.wtd_data_raserized.reindex(x=list(reversed(self.wtd_data_raserized.x)))
+
+        mask = self.wtd_data_raserized.notnull()
+        mask = mask.rename({'wtd':'nan_mask'})
+        self.wtd_data_raserized = self.wtd_data_raserized.assign(wtd_mask = mask["nan_mask"])
+
+        self.wtd_data_raserized = self.wtd_data_raserized.fillna(0)
+        self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
+
 
     def __len__(self):
         return len(self.wtd_data_raserized["wtd"]) - self.timesteps
@@ -123,17 +132,13 @@ class DiscreteDataset(Dataset):
         if idx < 0:
             idx = self.__len__() + idx
 
-        input_wtd = self.wtd_data_raserized["wtd"][idx].to_numpy()
-        input_wtd_mask = np.ones_like(input_wtd) - np.isnan(input_wtd)
-        input_wtd = np.stack((input_wtd, input_wtd_mask), axis=-1)
+        input_wtd = self.wtd_numpy[:,idx,:,:] # OK
 
         d1 = self.wtd_data_raserized["time"][idx+1]
         d2 = self.wtd_data_raserized["time"][idx+self.timesteps]
-        input_weather = self.weather_xr.sel(time=slice(d1, d2)).to_array().values
+        input_weather = self.weather_xr.sel(time=slice(d1, d2)).to_array().values.astype(np.float32)
 
-        output_wtd = self.wtd_data_raserized["wtd"][idx+1:idx+1+self.timesteps].to_numpy()
-        output_wtd_mask = np.ones_like(output_wtd) - np.isnan(output_wtd)
-        output_wtd = np.stack((output_wtd, output_wtd_mask), axis=-1)
+        output_wtd = self.wtd_numpy[:,idx+1:idx+1+self.timesteps,:,:]
 
         if self.transform:
             sample = self.transform(sample)
