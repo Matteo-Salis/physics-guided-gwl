@@ -1,0 +1,47 @@
+{
+    "experiment_name": "first_pinns_test_1D",
+
+    "wandb_dir" : "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/runs",
+    "save_model_dir": "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/runs/continuous_1d",
+
+    "data_dir": "/leonardo_work/IscrC_DL4EO/trials/data/",
+    "wtd_csv_path" : "/leonardo_work/IscrC_DL4EO/trials/data/dataset_wtd_roi.csv",
+    "weather_nc_path" : "/leonardo_work/IscrC_DL4EO/trials/data/meteo_bucket_model_snowpack_ROI_1958_2023.nc",
+    "wtd_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/underground_wtd_sensor_roi.shp",
+    "piedmont_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/piemonte_admin_boundaries.shp",
+    "dtm_nc" : "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI.nc",
+    "weather_dtm": "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI_arpa_weather.nc",
+    "timesteps" : 180,
+    "test_split_p" : 0.2,
+    "all_dataset" : false,
+    "max_ds_elems" : 1000,
+
+    "tensorboard": true,
+    "dataset": "wtd_weather_2001_2023",
+    "input_channels": 10,
+    "input_height": 9,
+    "input_width": 12,
+    "shift_pixels": 0,
+    "augmentation": true,
+
+    "model": "Discrete2DNN",
+    "start_epoch": 0,
+    "epochs": 10,
+    "batch_size": 128,
+    "optimizer": "adam",
+    "lr": 5e-4,
+    "min_lr": 0,
+    "decay_rate": 0.99,
+    "decay_steps": 1,
+
+    "monitor": "loss",
+    "iter_size": 1,
+    "patience": 10,
+    "use_cuda": true,
+    "cuda_device": "cuda:0",
+    "num_workers": 1,
+    "print_every": 10,
+    "save_every": 1,
+    "seeds": [42]
+
+}
