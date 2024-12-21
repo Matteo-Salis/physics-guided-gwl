@@ -6,6 +6,7 @@ from operator import itemgetter
 from tqdm import tqdm
 import time
 from datetime import datetime
+import json
 
 import numpy as np
 import pandas as pd
@@ -21,18 +22,21 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data.sampler import SequentialSampler
 import torch.nn as nn
 from torch.autograd import Variable
 
+import wandb
+
 # %% [markdown]
-# # Directories
+# # Load dictionary
 
 # %%
-wtd_csv_path = "/leonardo_work/IscrC_DL4EO/trials/data/dataset_wtd_roi.csv"
-meteo_nc_path = "/leonardo_work/IscrC_DL4EO/trials/data/meteo_bucket_model_snowpack_ROI_1958_2023.nc"
-wtd_stations_shp_path = "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/underground_wtd_sensor_roi.shp"
-dtm_nc_path = "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI.nc"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/discrete_2D_wtd/test_1D.json"
+dict_files = {}
+with open(json_file) as f:
+    dict_files = json.load(f)
+    print(f"Read data.json: {dict_files}")
 
 # %% [markdown]
 # # Dataset class
@@ -81,8 +85,14 @@ class ContinuousDataset(Dataset):
         # Compute coord matrix
         lat_matrix = np.vstack([self.weather_xr.lat.values for i in range(len(self.weather_xr.lon.values))]).transpose()
         lon_matrix = np.vstack([self.weather_xr.lon.values for i in range(len(self.weather_xr.lat.values))])
+        
         self.weather_coords = np.stack([lat_matrix,lon_matrix], axis = -1)
         
+        self.weather_dtm = rioxarray.open_rasterio(self.dict_files["weather_dtm"],
+                                               engine='fiona')
+        
+        self.weather_dtm = self.weather_dtm.values
+        self.weather_dtm = np.moveaxis(self.weather_dtm, 0,-1)
 
     def loading_point_wtd(self, fill_value = 0):
         
@@ -147,9 +157,9 @@ class ContinuousDataset(Dataset):
             idx = self.__len__() + idx
         
         # Retrieve date and coords for idx instance
-        start_date = self.wtd_df.iloc[idx, :].name[0]
-        sample_lat = self.wtd_df.iloc[idx, :].name[1]
-        sample_lon = self.wtd_df.iloc[idx, :].name[2]
+        start_date = self.wtd_df.iloc[idx, :].dropna().name[0]
+        sample_lat = self.wtd_df.iloc[idx, :].dropna().name[1]
+        sample_lon = self.wtd_df.iloc[idx, :].dropna().name[2]
         sample_dtm = self.dtm_roi.sel(x = sample_lon,
                                       y = sample_lat,
                                       method = "nearest").values  
@@ -160,9 +170,9 @@ class ContinuousDataset(Dataset):
         # print("end date: ", str(end_date))
         
         # Initial state WTD (t0) data
-        wtd_t0 = self.wtd_df[["wtd", "nan_mask"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
+        wtd_t0 = self.wtd_df[["wtd", "nan_mask"]].loc[self.wtd_df.index.get_level_values(0) == start_date].dropna()
         wtd_t0_values = wtd_t0["wtd"].values
-        wtd_t0_mask = wtd_t0["nan_mask"].values
+        #wtd_t0_mask = wtd_t0["nan_mask"].values
         wtd_t0_lat = wtd_t0.index.get_level_values(1).values
         wtd_t0_lon = wtd_t0.index.get_level_values(2).values
         wtd_t0_dtm = np.array([self.dtm_roi.sel(x = wtd_t0_lon[sensor],
@@ -174,21 +184,21 @@ class ContinuousDataset(Dataset):
              torch.from_numpy(wtd_t0_lon).to(torch.float32),
              torch.from_numpy(wtd_t0_dtm).to(torch.float32),
              torch.from_numpy(wtd_t0_values).to(torch.float32),
-             torch.from_numpy(wtd_t0_mask).to(torch.float32)]
+             #torch.from_numpy(wtd_t0_mask).to(torch.float32)
+             ]
         X = torch.stack(X, dim = -1)
         
         Z = [torch.tensor(sample_lat).reshape(1).to(torch.float32),
              torch.tensor(sample_lon).reshape(1).to(torch.float32),
              torch.tensor(sample_dtm).reshape(1).to(torch.float32)]
         
-        Z = torch.stack(Z, dim = -1)
+        Z = torch.stack(Z, dim = -1).squeeze()
         
         # Retrieve weather data
         weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, "D"),
                                                     end_date)) #slice include extremes
         weather_video = weather_video.to_array().values
-        W = [torch.from_numpy(weather_video).to(torch.float32),
-             torch.from_numpy(self.weather_coords).to(torch.float32)]
+        W = torch.from_numpy(weather_video).to(torch.float32)
         
         # Retrieve wtd values from t0+1 to T for the idx instance sensor
         wtd_t1_T = self.wtd_df[["wtd", "nan_mask"]].loc[(self.wtd_df.index.get_level_values(0) > start_date) &
@@ -208,21 +218,21 @@ class ContinuousDataset(Dataset):
             sample = self.transform(sample)
         
         return [X, Z, W, Y]
+    
+    def get_weather_dtm(self):
+        return torch.from_numpy(self.weather_dtm).to(torch.float32)
+        
+    def get_weather_coords(self):
+        return torch.from_numpy(self.weather_coords).to(torch.float32)
 
 # %%
-dict_files = {
-    "wtd_csv_path" : "/leonardo_work/IscrC_DL4EO/trials/data/dataset_wtd_roi.csv",
-    "weather_nc_path" : "/leonardo_work/IscrC_DL4EO/trials/data/meteo_bucket_model_snowpack_ROI_1958_2023.nc",
-    "wtd_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/underground_wtd_sensor_roi.shp",
-    "piedmont_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/piemonte_admin_boundaries.shp",
-    "dtm_nc" : "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI.nc",
-    "timesteps" : 180
-}
-
 ds = ContinuousDataset(dict_files)
 
 # %%
 print(f"Length of the dataset: {ds.__len__()}")
+
+# %%
+ds[0][0][:,:3].shape
 
 # %% [markdown]
 # # Model 
@@ -239,7 +249,9 @@ device = (
 class Continuous1DNN(nn.Module):
     def __init__(self,
                  timestep = 180,
-                 num_sensor = 31,
+                 cb_fc_layer = 5,
+                 cb_fc_neurons = 16,
+                 conv_filters = 16,
                  lstm_layer = 3,
                  lstm_input_units = 16,
                  lstm_units = 32):
@@ -249,52 +261,44 @@ class Continuous1DNN(nn.Module):
         self.lstm_layer = lstm_layer
         self.lstm_input_units = lstm_input_units
         self.lstm_units = lstm_units
-        self.num_sensor = num_sensor
+        self.cb_fc_layer = cb_fc_layer
+        self.cb_fc_neurons = cb_fc_neurons
+        self.conv_filters = conv_filters
         
-        # Conditioning block - gate fashion        
-        # Values embedding
-        cb_vemb = []
-        cb_vemb.append(nn.Linear(2, 1))
-        cb_vemb.append(nn.ReLU())
-        self.cb_vemb = nn.Sequential(*cb_vemb)
-        # Coordinates embedding
-        cb_cemb = []
-        cb_cemb.append(nn.Linear(3, 1))
-        cb_cemb.append(nn.ReLU())
-        self.cb_cemb = nn.Sequential(*cb_cemb)
-        
-        self.cb_softmax = nn.Softmax(dim = 1)
+        self.wgamma = nn.Sigmoid()
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(self.num_sensor, 32))
+        cb_fc.append(nn.Linear(4, self.cb_fc_neurons))
         cb_fc.append(nn.ReLU())
-        cb_fc.append(nn.Linear(32, 32))
-        cb_fc.append(nn.ReLU())
-        cb_fc.append(nn.Linear(32, 32))
-        cb_fc.append(nn.ReLU())
-        cb_fc.append(nn.Linear(32, self.lstm_units))
+        for l in range(self.cb_fc_layer - 2):
+            cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+            cb_fc.append(nn.ReLU())
+        
+        cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
         cb_fc.append(nn.ReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
+        self.weather_wgamma = nn.Sigmoid()
+        
         conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(12, 32, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        conv3d_stack.append(nn.BatchNorm3d(32))
+        conv3d_stack.append(nn.Conv3d(10, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
+        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
         conv3d_stack.append(nn.ReLU())
         
         for i in range(4):
-            conv3d_stack.append(nn.Conv3d(32, 32, (1,2,2)))
-            conv3d_stack.append(nn.BatchNorm3d(32))
+            conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
+            conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
             conv3d_stack.append(nn.ReLU())
             
         conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(32, 32, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(32))
+        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
         conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(32, 32, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(32))
+        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
         conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(32, self.lstm_input_units, (1,2,2)))
+        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.lstm_input_units, (1,2,2)))
         conv3d_stack.append(nn.BatchNorm3d(self.lstm_input_units))
         conv3d_stack.append(nn.ReLU())
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
@@ -313,62 +317,56 @@ class Continuous1DNN(nn.Module):
 
     def forward(self, x, z, w):
         """
-        input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 2)
+        input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         return 
             lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
         x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
         """
         
-        # #x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 2); y (180, 2)
+        # #x (31, 5); z (3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3); y (180, 2)
         # [wtd_t0_lat, wtd_t0_lon,
         #  wtd_t0_dtm, wtd_t0_values,
         #  wtd_t0_mask] = x
         
         # [sample_lat, sample_lon, sample_dtm] = z
         
-        
         # Conditioning block
-        cb_value_emb = self.cb_vemb(x[:,:,3:])
         
-        cb_coord_emb = torch.cat((x[:,:,:3], z), dim = 1)
-        cb_coord_emb = self.cb_cemb(cb_coord_emb)
-        cb_coord_emb_s = cb_coord_emb[:,:x[:,:,:3].shape[1],:]
-        cb_coord_emb_p = cb_coord_emb[:,-1,:].unsqueeze(dim = 1)
-        cb_coord_emb = 1-self.cb_softmax(cb_coord_emb_s - cb_coord_emb_p) 
         
-        cb_wtd0 = torch.mul(cb_value_emb, cb_coord_emb)
-        cb_wtd0 = torch.movedim(cb_wtd0, 1, -1)
-        cb_wtd0 = self.cb_fc(cb_wtd0)
+        wtd_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
+        wtd_sim = self.wgamma(wtd_sim)
+        print("sim", wtd_sim.shape)
+        
+        wtd0 = torch.sum(x[:,:,:-1] * wtd_sim, dim = (1,2))/torch.sum(wtd_sim, dim = (1,2))
+        print("wtd0", wtd0.shape)
+        print("z", z.shape)
+        wtd0 = torch.cat([z, wtd0.unsqueeze(-1)], dim = -1)
+        print("wtd0", wtd0.shape)
+        
+        wtd0 = self.cb_fc(wtd0)
+        print("wtd0 emb", wtd0.shape)
         
         # Weather block
-        ## w[0] (10, 180, 9, 12); w[1] (9, 12, 2)
-        ## Compute distances
-        weather_distances_lat = w[1][:,:,:,0] - z[:,:,0].unsqueeze(-1)
-        weather_distances_lat = weather_distances_lat[None, None, ...].expand([self.timestep,
-                                                                           -1,-1,-1,-1])
-        weather_distances_lat = torch.movedim(weather_distances_lat,
-                                              (0,2), (2,0))
+        ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_sim = torch.sum(weather_sim, dim = -1)
+        weather_sim = self.weather_wgamma(weather_sim)
+        weather_sim = weather_sim[:, None, None, : ,:].expand(-1, w[0].shape[1], w[0].shape[2], -1, -1 )
         
-        weather_distances_lon = w[1][:,:,:,1] - z[:,:,1].unsqueeze(-1)
-        weather_distances_lon = weather_distances_lon[None, None, ...].expand([self.timestep,
-                                                                           -1,-1,-1,-1])
-        weather_distances_lon = torch.movedim(weather_distances_lon,
-                                              (0,2), (2,0))
-        ## Concat with w[0] and forward
-        weather_video = torch.cat((w[0], weather_distances_lat, weather_distances_lon), dim = 1)
+        weather = w[0] * weather_sim
         
-        wb_td3dconv = self.conv3d_stack(weather_video)
+        wb_td3dconv = self.conv3d_stack(weather)
         
         wb_td3dconv = wb_td3dconv.squeeze()
         wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
         
         # Sequential block
-        cb_wtd0 = cb_wtd0.expand([-1,self.lstm_layer,-1])
-        cb_wtd0 = torch.movedim(cb_wtd0, 0, 1)
+        wtd0 = wtd0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
+        wtd0 = torch.movedim(wtd0, 0, 1)
         
         wtd_series = self.lstm_1(wb_td3dconv,
-                                 (cb_wtd0.contiguous(),
-                                  cb_wtd0.contiguous())) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                 (wtd0.contiguous(),
+                                  wtd0.contiguous())) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
         wtd_series = self.fc(wtd_series[0])
         
@@ -383,18 +381,25 @@ print("Total number of trainable parameters: " ,sum(p.numel() for p in model.par
 # # Training
 
 # %%
-batch_size = 31*30
-max_epochs = 10
+batch_size = dict_files["batch_size"]
+max_epochs = dict_files["epochs"]
 
-test_split_p = 0.35
+test_split_p = dict_files["test_split_p"]
 train_split_p = 1 - test_split_p
-train_idx = int(ds.__len__()*train_split_p)
-test_idx = int(ds.__len__()*test_split_p)
+
+max_ds_elems = ds.__len__()
+if not dict_files["all_dataset"]:
+    max_ds_elems = dict_files["max_ds_elems"]
+
+train_idx = int(max_ds_elems*train_split_p)
+test_idx = int(max_ds_elems*test_split_p)
+
+print(f"Traing size: {train_idx}, Test size: {test_idx}")
 
 train_idxs, test_idxs = np.arange(train_idx), np.arange(train_idx, train_idx + test_idx)
 
-train_sampler = SubsetRandomSampler(train_idxs)
-test_sampler = SubsetRandomSampler(test_idxs)
+train_sampler = SequentialSampler(train_idxs)
+test_sampler = SequentialSampler(test_idxs)
 
 train_loader = torch.utils.data.DataLoader(dataset=ds,
                                             batch_size=batch_size,
@@ -405,18 +410,6 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
                                             sampler=test_sampler)
 
 # %%
-def plot_loss(iterations, loss, save_dir = None):
-    fig, ax = plt.subplots()
-    fig.suptitle("Loss vs iterations")
-    ax.plot(iterations, loss, label = "loss")
-    ax.legend()
-    if save_dir:
-        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
-    else:
-        plt.tight_layout()
-        plt.show()
-        
-        
 def plot_predictions(x, y, y_hat, save_dir = None):
     fig, ax = plt.subplots()
     fig.suptitle("Loss vs iterations")
@@ -437,55 +430,112 @@ def masked_mse(y_hat, y, mask):
     return torch.sum(((y_hat-y)*mask)**2.0)  / torch.sum(mask)
 
 # %%
-optimizer = torch.optim.Adam(model.parameters(), lr=2.5e-5)
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
 
 # %%
-model.train()
-start_time = time.time()
-loss_list = []
+wandb.init(
+    entity="gsartor-unito",
+    project=dict_files["experiment_name"],
+    dir =dict_files["wandb_dir"],
+    config=dict_files,
+    mode="offline",
+)
+
+# Magic
+wandb.watch(model, log_freq=100)
+
+# %%
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-save_dir = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/runs"
+#save_dir = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/runs/continuous_1d"
+
+weather_coords = ds.get_weather_coords()
+weather_dtm = ds.get_weather_dtm()
+weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
+weather_coords = weather_coords.unsqueeze(0).expand(batch_size, -1, -1, -1)
+
+print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+#print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
 for i in range(max_epochs):
-    with tqdm(test_loader, unit="batch") as tepoch:
-            for batch_idx, (x, z, w, y) in enumerate(tepoch):
+    
+    model.train(True)
+    start_time = time.time()
+    print(f"############### Training epoch {i} ###############")
+    
+    with tqdm(train_loader, unit="batch") as tepoch:
+            for batch_idx, (x, z, w_values, y) in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {i}")
                 
                 x = x.to(device)
                 z = z.to(device)
-                w[0] = w[0].to(device)
-                w[1] = w[1].to(device)
+                w = [w_values.to(device), weather_coords.to(device)]
                 y = y.to(device)
-                print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                 
                 optimizer.zero_grad()
                 
                 y_hat = model(x, z, w)
-                print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                 loss = masked_mse(y_hat,
                                   y[:,:,0],
                                   y[:,:,1])
-                print(loss)
-                loss_list.append(loss.detach().cpu().numpy())
-
+                
+                print(f"Train loss: {loss}")
                 
                 loss.backward()
                 optimizer.step()
-            
-                if (round(batch_idx/len(list(enumerate(tepoch))), 2)*100)%25 == 0:
-                    plot_loss(np.arange(len(loss_list)),
-                          np.array(loss_list),
-                          save_dir = f"{save_dir}/loss_{timestamp}")
                 
-                    plot_predictions(np.arange(180),
-                                 y_hat = y_hat[-1,:].detach().cpu().numpy(),
-                                 y = y[-1,:,0].detach().cpu().numpy(),
-                                 save_dir= f"{save_dir}/pred_{timestamp}")
+                metrics = {
+                    "train_loss" : loss
+                }
+                wandb.log(metrics)              
+                
+    end_time = time.time()
+    exec_time = end_time-start_time
+
+    wandb.log({"tr_epoch_exec_t" : exec_time})
+
+    model_name = 'model_{}_{}.pt'.format(timestamp, i)    
+    model_dir = dict_files["save_model_dir"]
+    torch.save(model.state_dict(), f"{model_dir}/{model_name}") 
+
+    print(f"############### Test epoch {i} ###############")
+    # Set the model to evaluation mode, disabling dropout and using population
+    # statistics for batch normalization.
+    model.eval()
+    start_time = time.time()
+    # Disable gradient computation and reduce memory consumption.
+    with torch.no_grad():
+        with tqdm(test_loader, unit="batch") as tepoch:
+                for batch_idx, (x, z, w_values, y) in enumerate(tepoch):
+                    tepoch.set_description(f"Epoch {i}")
+
+                    x = x.to(device)
+                    z = z.to(device)
+                    w = [w_values.to(device), weather_coords.to(device)]
+                    y = y.to(device)
+                    # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+
+                    y_hat = model(x, z, w)
+                    # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+
+                    loss = masked_mse(y_hat,
+                                  y[:,:,0],
+                                  y[:,:,1])
+                    print(f"Test loss: {loss}")
+
+                    metrics = {
+                        "test_loss" : loss
+                    }
+
+                    wandb.log(metrics)
         
-            model_path = 'model_{}_{}.pt'.format(timestamp, i)
-            torch.save(model.state_dict(), f"{save_dir}/{model_path}")
-                    
-                
-end_time = time.time()
+    end_time = time.time()
+    exec_time = end_time-start_time
+    wandb.log({"test_epoch_exec_t" : exec_time})
+
+wandb.finish()
+
+print(f"Execution time: {end_time-start_time}s")
 
 

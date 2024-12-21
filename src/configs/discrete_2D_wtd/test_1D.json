@@ -14,7 +14,7 @@
     "timesteps" : 180,
     "test_split_p" : 0.2,
     "all_dataset" : false,
-    "max_ds_elems" : 1000,
+    "max_ds_elems" : 10000,
 
     "tensorboard": true,
     "dataset": "wtd_weather_2001_2023",
