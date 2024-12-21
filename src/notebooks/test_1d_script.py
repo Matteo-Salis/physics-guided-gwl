@@ -335,16 +335,11 @@ class Continuous1DNN(nn.Module):
         
         wtd_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
         wtd_sim = self.wgamma(wtd_sim)
-        print("sim", wtd_sim.shape)
         
         wtd0 = torch.sum(x[:,:,:-1] * wtd_sim, dim = (1,2))/torch.sum(wtd_sim, dim = (1,2))
-        print("wtd0", wtd0.shape)
-        print("z", z.shape)
         wtd0 = torch.cat([z, wtd0.unsqueeze(-1)], dim = -1)
-        print("wtd0", wtd0.shape)
         
         wtd0 = self.cb_fc(wtd0)
-        print("wtd0 emb", wtd0.shape)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
