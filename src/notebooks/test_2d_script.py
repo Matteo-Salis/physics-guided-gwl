@@ -25,17 +25,18 @@ from torch.utils.data.sampler import SequentialSampler
 
 from tqdm import tqdm
 import time
+from datetime import datetime
 import wandb
 from time import sleep
 
-from models.load_models_2d import Discrete2DNN
+from models.load_models_2d import *
 from dataloaders.load_2d_meteo_wtd import DiscreteDataset
 
 
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/discrete_2D_wtd/test_2D.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/discrete_2D_wtd/test_2D_blocks.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -60,8 +61,14 @@ device = (
     else "cpu"
 )
 
+model = None
 
-model = Discrete2DNN(timesteps).to(device)
+if dict_files["model"] == "Discrete2DMidConcatNN":
+    model = Discrete2DMidConcatNN(timesteps).to(device)
+elif dict_files["model"] == "Discrete2DNN":
+    model = Discrete2DNN(timesteps).to(device)
+else:
+     raise Exception("Model name unknown.")
 
 print("Total number of trainable parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
@@ -123,10 +130,12 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
-model.train()
-
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+model_name = 'model_{}.pt'.format(timestamp)    
 
 for i in range(max_epochs):
+    model.train()
+
     start_time = time.time()
 
     print(f"############### Training epoch {i} ###############")
@@ -159,10 +168,11 @@ for i in range(max_epochs):
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
 
-    torch.save(model.state_dict(), "model_test.pt")
+    torch.save(model.state_dict(), f"{dict_files['save_model_dir']}/{model_name}")
 
     print(f"############### Test epoch {i} ###############")
 
+    model.eval()
     start_time = time.time()
 
     with tqdm(test_loader, unit="batch") as tepoch:
