@@ -142,8 +142,8 @@ class ContinuousDataset(Dataset):
         self.input_dates = self.dates[self.dates <= last_date]
         
         # Create nan-mask
-        self.wtd_df["nan_mask"] = 1*~self.wtd_df["wtd"].isna()
-        self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
+        self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
+        #self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
         
     def __len__(self):
         data = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= self.input_dates.max(),
@@ -170,9 +170,9 @@ class ContinuousDataset(Dataset):
         # print("end date: ", str(end_date))
         
         # Initial state WTD (t0) data
-        wtd_t0 = self.wtd_df[["wtd", "nan_mask"]].loc[self.wtd_df.index.get_level_values(0) == start_date].dropna()
+        wtd_t0 = self.wtd_df[["wtd", "nan_mask"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
         wtd_t0_values = wtd_t0["wtd"].values
-        #wtd_t0_mask = wtd_t0["nan_mask"].values
+        wtd_t0_mask = wtd_t0["nan_mask"].values
         wtd_t0_lat = wtd_t0.index.get_level_values(1).values
         wtd_t0_lon = wtd_t0.index.get_level_values(2).values
         wtd_t0_dtm = np.array([self.dtm_roi.sel(x = wtd_t0_lon[sensor],
@@ -183,8 +183,7 @@ class ContinuousDataset(Dataset):
         X = [torch.from_numpy(wtd_t0_lat).to(torch.float32),
              torch.from_numpy(wtd_t0_lon).to(torch.float32),
              torch.from_numpy(wtd_t0_dtm).to(torch.float32),
-             torch.from_numpy(wtd_t0_values).to(torch.float32),
-             #torch.from_numpy(wtd_t0_mask).to(torch.float32)
+             torch.from_numpy(wtd_t0_values).to(torch.float32)
              ]
         X = torch.stack(X, dim = -1)
         
@@ -209,15 +208,16 @@ class ContinuousDataset(Dataset):
         wtd_t1_T_values =  wtd_t1_T["wtd"].values
         wtd_t1_T_mask =  wtd_t1_T["nan_mask"].values        
         
-        Y = [torch.from_numpy(wtd_t1_T_values).to(torch.float32),
-             torch.from_numpy(wtd_t1_T_mask).to(torch.float32)]
+        Y = torch.from_numpy(wtd_t1_T_values).to(torch.float32)
         
-        Y = torch.stack(Y, dim = -1)
+        X_mask = torch.from_numpy(wtd_t0_mask).to(torch.bool)
+                 
+        Y_mask = torch.from_numpy(wtd_t1_T_mask).to(torch.bool)
         
         if self.transform:
             sample = self.transform(sample)
         
-        return [X, Z, W, Y]
+        return [X, Z, W, Y, X_mask, Y_mask]
     
     def get_weather_dtm(self):
         return torch.from_numpy(self.weather_dtm).to(torch.float32)
@@ -230,9 +230,6 @@ ds = ContinuousDataset(dict_files)
 
 # %%
 print(f"Length of the dataset: {ds.__len__()}")
-
-# %%
-ds[0][0][:,:3].shape
 
 # %% [markdown]
 # # Model 
@@ -250,9 +247,9 @@ class Continuous1DNN(nn.Module):
     def __init__(self,
                  timestep = 180,
                  cb_fc_layer = 5,
-                 cb_fc_neurons = 16,
-                 conv_filters = 16,
-                 lstm_layer = 3,
+                 cb_fc_neurons = 32,
+                 conv_filters = 32,
+                 lstm_layer = 5,
                  lstm_input_units = 16,
                  lstm_units = 32):
         super().__init__()
@@ -315,7 +312,7 @@ class Continuous1DNN(nn.Module):
         self.fc = nn.Sequential(*fc)
 
 
-    def forward(self, x, z, w):
+    def forward(self, x, z, w, x_mask):
         """
         input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         return 
@@ -323,20 +320,12 @@ class Continuous1DNN(nn.Module):
         x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
         """
         
-        # #x (31, 5); z (3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3); y (180, 2)
-        # [wtd_t0_lat, wtd_t0_lon,
-        #  wtd_t0_dtm, wtd_t0_values,
-        #  wtd_t0_mask] = x
-        
-        # [sample_lat, sample_lon, sample_dtm] = z
-        
         # Conditioning block
-        
         
         wtd_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
         wtd_sim = self.wgamma(wtd_sim)
-        
-        wtd0 = torch.sum(x[:,:,:-1] * wtd_sim, dim = (1,2))/torch.sum(wtd_sim, dim = (1,2))
+        wtd_sim = wtd_sim.squeeze() * x_mask # masking nan
+        wtd0 = torch.sum(x[:,:,-2] * wtd_sim, dim = 1)/torch.sum(wtd_sim, dim = 1)
         wtd0 = torch.cat([z, wtd0.unsqueeze(-1)], dim = -1)
         
         wtd0 = self.cb_fc(wtd0)
@@ -405,24 +394,27 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
                                             sampler=test_sampler)
 
 # %%
-def plot_predictions(x, y, y_hat, save_dir = None):
+def plot_predictions(x, y, y_hat, save_dir = None, title = None):
     fig, ax = plt.subplots()
     fig.suptitle("Loss vs iterations")
     ax.plot(x, y_hat, label = "predicted")
     ax.plot(x, y, label = "true")
     ax.legend()
+    
+    if title is not None:
+        ax.set_title(title)
+        
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
-    else:
-        plt.tight_layout()
-        plt.show()
+    
+    return fig
 
 # %%
 def masked_mse(y_hat, y, mask):
     # y_hat = y_hat.to(device)
     # y = y.to(device)
     # mask = mask.to(device)
-    return torch.sum(((y_hat-y)*mask)**2.0)  / torch.sum(mask)
+    return torch.sum(((y_hat[mask]-y[mask]))**2.0)  / torch.sum(mask)
 
 # %%
 optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
@@ -441,15 +433,13 @@ wandb.watch(model, log_freq=100)
 
 # %%
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-#save_dir = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/runs/continuous_1d"
 
 weather_coords = ds.get_weather_coords()
 weather_dtm = ds.get_weather_dtm()
 weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
-weather_coords = weather_coords.unsqueeze(0).expand(batch_size, -1, -1, -1)
 
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-#print(torch.cuda.memory_summary(device=None, abbreviated=False))
+print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
 for i in range(max_epochs):
     
@@ -458,22 +448,25 @@ for i in range(max_epochs):
     print(f"############### Training epoch {i} ###############")
     
     with tqdm(train_loader, unit="batch") as tepoch:
-            for batch_idx, (x, z, w_values, y) in enumerate(tepoch):
+            for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {i}")
                 
                 x = x.to(device)
+                x_mask = x_mask.to(device)
                 z = z.to(device)
-                w = [w_values.to(device), weather_coords.to(device)]
+                weather_coords_batch = weather_coords.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
+                w = [w_values.to(device), weather_coords_batch.to(device)]
                 y = y.to(device)
+                y_mask = y_mask.to(device)
                 #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                 
                 optimizer.zero_grad()
                 
-                y_hat = model(x, z, w)
+                y_hat = model(x, z, w, x_mask)
                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                 loss = masked_mse(y_hat,
-                                  y[:,:,0],
-                                  y[:,:,1])
+                                  y,
+                                  y_mask)
                 
                 print(f"Train loss: {loss}")
                 
@@ -489,6 +482,9 @@ for i in range(max_epochs):
     exec_time = end_time-start_time
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
+    # Log the plot
+    wandb.log({"training_pred": plot_predictions(np.arange(0,len(y_hat)), y[-1,:,0], y_hat,
+                                        title = f"lat: {z[-1,0]} lon:{z[-1,1]} dtm{z[-1,2]}")})
 
     model_name = 'model_{}_{}.pt'.format(timestamp, i)    
     model_dir = dict_files["save_model_dir"]
@@ -502,21 +498,24 @@ for i in range(max_epochs):
     # Disable gradient computation and reduce memory consumption.
     with torch.no_grad():
         with tqdm(test_loader, unit="batch") as tepoch:
-                for batch_idx, (x, z, w_values, y) in enumerate(tepoch):
+                for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
                     tepoch.set_description(f"Epoch {i}")
 
                     x = x.to(device)
+                    x_mask = x_mask.to(device)
                     z = z.to(device)
-                    w = [w_values.to(device), weather_coords.to(device)]
+                    weather_coords_batch = weather_coords.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
+                    w = [w_values.to(device), weather_coords_batch.to(device)]
                     y = y.to(device)
+                    y_mask = y_mask.to(device)
                     # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                    y_hat = model(x, z, w)
+                    y_hat = model(x, z, w, x_mask)
                     # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                     loss = masked_mse(y_hat,
-                                  y[:,:,0],
-                                  y[:,:,1])
+                                  y,
+                                  y_mask)
                     print(f"Test loss: {loss}")
 
                     metrics = {
@@ -528,9 +527,16 @@ for i in range(max_epochs):
     end_time = time.time()
     exec_time = end_time-start_time
     wandb.log({"test_epoch_exec_t" : exec_time})
+    # Log the plot
+    wandb.log({"test_pred": plot_predictions(np.arange(0,len(y_hat)), y[-1,:,0], y_hat,
+                                        title = f"lat: {z[-1,0]} lon:{z[-1,1]} dtm{z[-1,2]}")})
+
 
 wandb.finish()
 
 print(f"Execution time: {end_time-start_time}s")
+
+# %%
+
 
 
