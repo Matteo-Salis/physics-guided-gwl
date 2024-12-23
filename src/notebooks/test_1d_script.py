@@ -426,6 +426,7 @@ wandb.init(
     dir =dict_files["wandb_dir"],
     config=dict_files,
     mode="offline",
+    name=dict_files["run_name"]
 )
 
 # Magic
