@@ -483,8 +483,13 @@ for i in range(max_epochs):
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
     # Log the plot
-    wandb.log({"training_pred": plot_predictions(np.arange(0,len(y_hat)), y[-1,:,0], y_hat,
-                                        title = f"lat: {z[-1,0]} lon:{z[-1,1]} dtm{z[-1,2]}")})
+    lat_plot = round(float(z[-1,0].detach().cpu()), 4)
+    lon_plot = round(float(z[-1,1].detach().cpu()), 4)
+    dtm_plot = round(float(z[-1,2].detach().cpu()))
+    wandb.log({"training_pred":wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
+                                                 y[-1,:].detach().cpu(), y_hat[-1,:].detach().cpu(),
+                                        title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
+               })
 
     model_name = 'model_{}_{}.pt'.format(timestamp, i)    
     model_dir = dict_files["save_model_dir"]
@@ -528,9 +533,12 @@ for i in range(max_epochs):
     exec_time = end_time-start_time
     wandb.log({"test_epoch_exec_t" : exec_time})
     # Log the plot
-    wandb.log({"test_pred": plot_predictions(np.arange(0,len(y_hat)), y[-1,:,0], y_hat,
-                                        title = f"lat: {z[-1,0]} lon:{z[-1,1]} dtm{z[-1,2]}")})
-
+    lat_plot = round(float(z[-1,0].detach().cpu()), 4)
+    lon_plot = round(float(z[-1,1].detach().cpu()), 4)
+    dtm_plot = round(float(z[-1,2].detach().cpu()))
+    wandb.log({"test_pred": wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]), y[-1,:].detach().cpu(), y_hat[-1,:].detach().cpu(),
+                                        title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
+               })
 
 wandb.finish()
 
