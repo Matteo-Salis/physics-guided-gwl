@@ -25,6 +25,7 @@ class ContinuousDataset(Dataset):
 
     def __init__(self, dict_files, #meteo_nc_path, wtd_csv_path, wtd_stations_shp_path,
                  fill_value = 0,
+                 normalization = True,
                  transform = None):
         """
         Args:
@@ -45,6 +46,36 @@ class ContinuousDataset(Dataset):
         
         # Water Table Depth data loading 
         self.loading_point_wtd(fill_value = fill_value)
+        
+        if normalization is True:
+            self.wtd_mean = self.wtd_df["wtd"].mean()
+            self.wtd_std = self.wtd_df["wtd"].std()
+            self.dtm_mean = self.dtm_roi.mean()
+            self.dtm_std = self.dtm_roi.std()
+            self.lat_mean = self.weather_coords.mean(axis=(0,1))[0]
+            self.lat_std = self.weather_coords.std(axis=(0,1))[0]
+            self.lon_mean = self.weather_coords.mean(axis=(0,1))[1]
+            self.lon_std = self.weather_coords.std(axis=(0,1))[1]
+            self.weather_mean = self.weather_xr.mean()
+            self.weather_std = self.weather_xr.std()
+            
+            self.wtd_df["wtd"] = (self.wtd_df["wtd"] - self.wtd_mean)/self.wtd_std
+            
+            wtd_lat_norm = (self.wtd_df.index.get_level_values(1) - self.lat_mean)/self.lat_std
+            wtd_lon_norm = (self.wtd_df.index.get_level_values(2) - self.lon_mean)/self.lon_std
+            self.wtd_df.rename(index=dict(zip(self.wtd_df.index.get_level_values(1),
+                                              wtd_lat_norm)), level = 1, inplace = True)
+            self.wtd_df.rename(index=dict(zip(self.wtd_df.index.get_level_values(2),
+                                              wtd_lon_norm)), level = 2, inplace = True)
+            
+            
+            self.dtm_roi = (self.dtm_roi - self.dtm_mean)/self.dtm_std
+            self.weather_dtm = (self.weather_dtm - self.dtm_mean.values)/self.dtm_std.values
+            
+            self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.lat_mean)/self.lat_std
+            self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.lon_mean)/self.lon_std
+            
+            self.weather_xr = (self.weather_xr - self.weather_mean)/self.weather_std
 
         # Transform       
         self.transform = transform
@@ -200,7 +231,9 @@ class ContinuousDataset(Dataset):
         return torch.from_numpy(self.weather_dtm).to(torch.float32)
         
     def get_weather_coords(self):
-        return torch.from_numpy(self.weather_coords).to(torch.float32)   
+        return torch.from_numpy(self.weather_coords).to(torch.float32) 
+    
+     
     
 if __name__ == "__main__":
     dict_files = {}

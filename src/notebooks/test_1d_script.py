@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SequentialSampler
+from torch.utils.data.sampler import RandomSampler
 import torch.nn as nn
 from torch.autograd import Variable
 
@@ -35,7 +36,7 @@ from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/discrete_2D_wtd/test_1D.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -91,13 +92,15 @@ if not dict_files["all_dataset"]:
 
 train_idx = int(max_ds_elems*train_split_p)
 test_idx = int(max_ds_elems*test_split_p)
+offset_idx = 100000
 
 print(f"Traing size: {train_idx}, Test size: {test_idx}")
 
-train_idxs, test_idxs = np.arange(train_idx), np.arange(train_idx, train_idx + test_idx)
+train_idxs, test_idxs = np.arange(offset_idx+train_idx), np.arange(offset_idx + train_idx,
+                                                                   offset_idx + train_idx + test_idx)
 
-train_sampler = SequentialSampler(train_idxs)
-test_sampler = SequentialSampler(test_idxs)
+train_sampler = RandomSampler(train_idxs)
+test_sampler = RandomSampler(test_idxs)
 
 train_loader = torch.utils.data.DataLoader(dataset=ds,
                                             batch_size=batch_size,
@@ -198,11 +201,11 @@ for i in range(max_epochs):
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
     # Log the plot
-    lat_plot = round(float(z[-1,0].detach().cpu()), 4)
-    lon_plot = round(float(z[-1,1].detach().cpu()), 4)
-    dtm_plot = round(float(z[-1,2].detach().cpu()))
+    lat_plot = round(float(z[3,0].detach().cpu()), 4)
+    lon_plot = round(float(z[3,1].detach().cpu()), 4)
+    dtm_plot = round(float(z[3,2].detach().cpu()))
     wandb.log({"training_pred":wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
-                                                 y[-1,:].detach().cpu(), y_hat[-1,:].detach().cpu(),
+                                                 y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
                                         title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
                }, )
 
@@ -248,10 +251,11 @@ for i in range(max_epochs):
     exec_time = end_time-start_time
     wandb.log({"test_epoch_exec_t" : exec_time})
     # Log the plot
-    lat_plot = round(float(z[-1,0].detach().cpu()), 4)
-    lon_plot = round(float(z[-1,1].detach().cpu()), 4)
-    dtm_plot = round(float(z[-1,2].detach().cpu()))
-    wandb.log({"test_pred": wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]), y[-1,:].detach().cpu(), y_hat[-1,:].detach().cpu(),
+    lat_plot = round(float(z[3,0].detach().cpu()), 4)
+    lon_plot = round(float(z[3,1].detach().cpu()), 4)
+    dtm_plot = round(float(z[3,2].detach().cpu()))
+    wandb.log({"test_pred": wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
+                                                         y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
                                         title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
                })
 

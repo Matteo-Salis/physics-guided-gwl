@@ -88,6 +88,7 @@ class Continuous1DNN(nn.Module):
         # Conditioning block
         
         wtd_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
+        wtd_sim = wtd_sim/torch.sqrt(torch.tensor(z.shape[-1])) 
         wtd_sim = self.wgamma(wtd_sim)
         wtd_sim = wtd_sim.squeeze() * x_mask # masking nan
         wtd0 = torch.sum(x[:,:,-2] * wtd_sim, dim = 1)/torch.sum(wtd_sim, dim = 1)
@@ -98,7 +99,7 @@ class Continuous1DNN(nn.Module):
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
-        weather_sim = torch.sum(weather_sim, dim = -1)
+        weather_sim = torch.sum(weather_sim, dim = -1)/torch.sqrt(torch.tensor(weather_sim.shape[-1]))
         weather_sim = self.weather_wgamma(weather_sim)
         weather_sim = weather_sim[:, None, None, : ,:].expand(-1, w[0].shape[1], w[0].shape[2], -1, -1 )
         
