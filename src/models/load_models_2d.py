@@ -164,6 +164,21 @@ class Discrete2DMidConcatNN(nn.Module):
         return out
 ###########################################
 
+class ConvLatPDF(nn.Module):
+    def __init__(self):
+        super(ConvLatPDF, self).__init__()
+
+        self.kernel_size = (3, 3)
+        self.kernel = torch.Tensor()
+
+    def forward(self,x):
+        pass
+
+
+
+###########################################
+
+
     
 if __name__ == "__main__":
     print("Loading data.json...")
