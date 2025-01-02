@@ -23,10 +23,7 @@ import torch.nn as nn
 class ContinuousDataset(Dataset):
     """Weather and WTD Dataset for the continuous case model"""
 
-    def __init__(self, dict_files, #meteo_nc_path, wtd_csv_path, wtd_stations_shp_path,
-                 fill_value = 0,
-                 normalization = True,
-                 transform = None):
+    def __init__(self, dict_files):
         """
         Args:
             dict_files (string): Path to the .nc file.
@@ -45,29 +42,22 @@ class ContinuousDataset(Dataset):
         self.loading_dtm()
         
         # Water Table Depth data loading 
-        self.loading_point_wtd(fill_value = fill_value)
+        self.loading_point_wtd(fill_value = dict_files["fill_value"])
         
-        if normalization is True:
-            self.wtd_mean = self.wtd_df["wtd"].mean()
-            self.wtd_std = self.wtd_df["wtd"].std()
-            self.dtm_mean = self.dtm_roi.mean()
-            self.dtm_std = self.dtm_roi.std()
-            self.lat_mean = self.weather_coords.mean(axis=(0,1))[0]
-            self.lat_std = self.weather_coords.std(axis=(0,1))[0]
-            self.lon_mean = self.weather_coords.mean(axis=(0,1))[1]
-            self.lon_std = self.weather_coords.std(axis=(0,1))[1]
-            self.weather_mean = self.weather_xr.mean()
-            self.weather_std = self.weather_xr.std()
+        if dict_files["piezo_head"] is True:
+            self.compute_piezo_head()
+            self.target = "h"
+        else:
+            self.target = "wtd"
+        
+        if dict_files["normalization"] is True:
             
-            self.wtd_df["wtd"] = (self.wtd_df["wtd"] - self.wtd_mean)/self.wtd_std
+            self.norm_factors(date_max = np.datetime64(dict_files["date_max_norm"]))
             
-            wtd_lat_norm = (self.wtd_df.index.get_level_values(1) - self.lat_mean)/self.lat_std
-            wtd_lon_norm = (self.wtd_df.index.get_level_values(2) - self.lon_mean)/self.lon_std
-            self.wtd_df.rename(index=dict(zip(self.wtd_df.index.get_level_values(1),
-                                              wtd_lat_norm)), level = 1, inplace = True)
-            self.wtd_df.rename(index=dict(zip(self.wtd_df.index.get_level_values(2),
-                                              wtd_lon_norm)), level = 2, inplace = True)
+            self.wtd_df[self.target] = (self.wtd_df[self.target] - self.self.target_mean)/self.self.target_std
             
+            self.wtd_df["lat"] = (self.wtd_df["lat"] - self.lat_mean)/self.lat_std
+            self.wtd_df["lon"] = (self.wtd_df["lon"] - self.lon_mean)/self.lon_std
             
             self.dtm_roi = (self.dtm_roi - self.dtm_mean)/self.dtm_std
             self.weather_dtm = (self.weather_dtm - self.dtm_mean.values)/self.dtm_std.values
@@ -78,7 +68,53 @@ class ContinuousDataset(Dataset):
             self.weather_xr = (self.weather_xr - self.weather_mean)/self.weather_std
 
         # Transform       
-        self.transform = transform
+        self.transform = dict_files["transform"]
+        
+    def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = False, dict_out = False):
+        subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
+                                                       :]]
+        subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
+        
+        target_mean = subset_wtd_df[self.target].mean()
+        target_std = subset_wtd_df[self.target].std()
+        dtm_mean = self.dtm_roi.mean()
+        dtm_std = self.dtm_roi.std()
+        lat_mean = self.weather_coords.mean(axis=(0,1))[0]
+        lat_std = self.weather_coords.std(axis=(0,1))[0]
+        lon_mean = self.weather_coords.mean(axis=(0,1))[1]
+        lon_std = self.weather_coords.std(axis=(0,1))[1]
+        weather_mean = subset_weather_xr.mean()
+        weather_std = subset_weather_xr.std()
+        
+        self.norm_factors = {"target_mean": target_mean,
+                            "target_std": target_std,
+                            "dtm_mean": dtm_mean,
+                            "dtm_std": dtm_std,
+                            "lat_mean": lat_mean,
+                            "lat_std": lat_std,
+                            "lon_mean": lon_mean,
+                            "lon_std": lon_std,
+                            "weather_mean": weather_mean,
+                            "weather_std": weather_std}
+        
+        if verbose is True:
+            print("Norm factors:")
+            print(self.norm_factors)
+            
+        if dict_out is True:
+            return self.norm_factors
+        
+    def normalize(self, norm_factors = None):
+        if norm_factors is None:
+            self.compute_norm_factors()
+            ## compute norm factors by default
+            
+        # else: if n.f are provided
+        
+        # compute norm
+        pass            
+        
+            
         
     def loading_dtm(self):
         self.dtm_roi = rioxarray.open_rasterio(self.dict_files["dtm_nc"],
@@ -102,7 +138,7 @@ class ContinuousDataset(Dataset):
         self.weather_dtm = self.weather_dtm.values
         self.weather_dtm = np.moveaxis(self.weather_dtm, 0,-1)
 
-    def loading_point_wtd(self, fill_value = 0):
+    def loading_point_wtd(self, fill_value = None):
         
         # Water Table Depth data loading
         self.wtd_df = pd.read_csv(self.dict_files["wtd_csv_path"], 
@@ -140,10 +176,10 @@ class ContinuousDataset(Dataset):
         coordinates_y = itemgetter(*queries)(from_id_to_coord_y_dict)
 
         # insert new columns containing coordinates
-        self.wtd_df["x"] = coordinates_x
-        self.wtd_df["y"] = coordinates_y
+        self.wtd_df["lon"] = coordinates_x
+        self.wtd_df["lat"] = coordinates_y
         
-        self.wtd_df = self.wtd_df.set_index(["date","y","x"])
+        self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
         
         # Subset wtd data truncating the last `timestep` instances
         last_date = self.dates.max() - np.timedelta64(self.timesteps, 'D')
@@ -151,11 +187,29 @@ class ContinuousDataset(Dataset):
         
         # Create nan-mask
         self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
-        #self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
+        
+        if fill_value:
+            self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
+        
+    def compute_piezo_head(self):
+        heights = []
+        self.wtd_df["h"] = np.nan
+
+        for station_idx in range(len(self.sensor_id_list)):
+    
+                altitude_idx = self.dtm_roi.sel(x = self.wtd_names.geometry.x[station_idx],
+                y = self.wtd_names.geometry.y[station_idx],
+                method = "nearest").values
+    
+                self.wtd_df.loc[self.wtd_df.index.get_level_values(1) == self.sensor_id_list[station_idx], "h"] = altitude_idx - self.wtd_df.loc[self.wtd_df.index.get_level_values(1) == self.sensor_id_list[station_idx], "wtd"] 
+    
+                heights.append(altitude_idx)
+    
+    
+        self.wtd_names["height"] = np.array(heights)
         
     def __len__(self):
         data = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= self.input_dates.max(),
-                                                       :,
                                                        :]]
         return len(data)
     
@@ -165,9 +219,9 @@ class ContinuousDataset(Dataset):
             idx = self.__len__() + idx
         
         # Retrieve date and coords for idx instance
-        start_date = self.wtd_df.iloc[idx, :].dropna().name[0]
-        sample_lat = self.wtd_df.iloc[idx, :].dropna().name[1]
-        sample_lon = self.wtd_df.iloc[idx, :].dropna().name[2]
+        start_date = self.wtd_df.iloc[idx, :].name[0]
+        sample_lat = self.wtd_df["lat"].iloc[idx]
+        sample_lon = self.wtd_df["lon"].iloc[idx]
         sample_dtm = self.dtm_roi.sel(x = sample_lon,
                                       y = sample_lat,
                                       method = "nearest").values  
@@ -178,20 +232,20 @@ class ContinuousDataset(Dataset):
         # print("end date: ", str(end_date))
         
         # Initial state WTD (t0) data
-        wtd_t0 = self.wtd_df[["wtd", "nan_mask"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
-        wtd_t0_values = wtd_t0["wtd"].values
-        wtd_t0_mask = wtd_t0["nan_mask"].values
-        wtd_t0_lat = wtd_t0.index.get_level_values(1).values
-        wtd_t0_lon = wtd_t0.index.get_level_values(2).values
-        wtd_t0_dtm = np.array([self.dtm_roi.sel(x = wtd_t0_lon[sensor],
-                                                y = wtd_t0_lat[sensor],
-                                                method = "nearest") for sensor in range(len(wtd_t0_lat))]).squeeze()
+        target_t0 = self.wtd_df[[self.target, "nan_mask", "lat", "lon"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
+        target_t0_values = target_t0[self.target].values
+        target_t0_mask = target_t0["nan_mask"].values
+        target_t0_lat = target_t0["lat"].values
+        target_t0_lon = target_t0["lon"].values
+        target_t0_dtm = np.array([self.dtm_roi.sel(x = target_t0_lon[sensor],
+                                                y = target_t0_lat[sensor],
+                                                method = "nearest") for sensor in range(len(target_t0_lat))]).squeeze()
         
-        #wtd_t0_mask = 1*~np.isnan(wtd_t0_values)
-        X = [torch.from_numpy(wtd_t0_lat).to(torch.float32),
-             torch.from_numpy(wtd_t0_lon).to(torch.float32),
-             torch.from_numpy(wtd_t0_dtm).to(torch.float32),
-             torch.from_numpy(wtd_t0_values).to(torch.float32)
+        #target_t0_mask = 1*~np.isnan(target_t0_values)
+        X = [torch.from_numpy(target_t0_lat).to(torch.float32),
+             torch.from_numpy(target_t0_lon).to(torch.float32),
+             torch.from_numpy(target_t0_dtm).to(torch.float32),
+             torch.from_numpy(target_t0_values).to(torch.float32)
              ]
         X = torch.stack(X, dim = -1)
         
@@ -208,19 +262,19 @@ class ContinuousDataset(Dataset):
         W = torch.from_numpy(weather_video).to(torch.float32)
         
         # Retrieve wtd values from t0+1 to T for the idx instance sensor
-        wtd_t1_T = self.wtd_df[["wtd", "nan_mask"]].loc[(self.wtd_df.index.get_level_values(0) > start_date) &
+        target_t1_T = self.wtd_df[[self.target, "nan_mask"]].loc[(self.wtd_df.index.get_level_values(0) > start_date) &
                                           (self.wtd_df.index.get_level_values(0) <= end_date)  & 
-                                          (self.wtd_df.index.get_level_values(1) == sample_lat)&
-                                          (self.wtd_df.index.get_level_values(2) == sample_lon)]
+                                          (self.wtd_df["lat"] == sample_lat)&
+                                          (self.wtd_df["lon"] == sample_lon)]
         
-        wtd_t1_T_values =  wtd_t1_T["wtd"].values
-        wtd_t1_T_mask =  wtd_t1_T["nan_mask"].values        
+        target_t1_T_values =  target_t1_T[self.target].values
+        target_t1_T_mask =  target_t1_T["nan_mask"].values        
         
-        Y = torch.from_numpy(wtd_t1_T_values).to(torch.float32)
+        Y = torch.from_numpy(target_t1_T_values).to(torch.float32)
         
-        X_mask = torch.from_numpy(wtd_t0_mask).to(torch.bool)
+        X_mask = torch.from_numpy(target_t0_mask).to(torch.bool)
                  
-        Y_mask = torch.from_numpy(wtd_t1_T_mask).to(torch.bool)
+        Y_mask = torch.from_numpy(target_t1_T_mask).to(torch.bool)
         
         if self.transform:
             sample = self.transform(sample)
