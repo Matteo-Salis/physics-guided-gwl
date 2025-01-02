@@ -34,11 +34,18 @@ class DiscreteDataset(Dataset):
 
         self.loading_rasterized_wtd()
 
+        if dict_files["normalization"]:
+            print("Normalization: ON")
+            self.normalize_dataset()
+
         self.transform = transform
 
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.dict_files["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
+
+        self.weather_xr_mean = self.weather_xr.mean()
+        self.weather_xr_std = self.weather_xr.std()
 
     def loading_rasterized_wtd(self):
         wtd_df = pd.read_csv(self.dict_files["wtd_csv_path"], dtype= {"sensor_id": "str"})
@@ -101,7 +108,7 @@ class DiscreteDataset(Dataset):
             rasterized_ds = make_geocube(vector_data=vector_ds,
                                         measurements=['wtd'],
                                         output_crs="epsg:4326",
-                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, self.dtm_roi_downsampled.rio.transform().e),
+                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 6)),
                                         # Global extent in degrees of longitude and latitude
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
@@ -117,9 +124,16 @@ class DiscreteDataset(Dataset):
         mask = mask.rename({'wtd':'nan_mask'})
         self.wtd_data_raserized = self.wtd_data_raserized.assign(wtd_mask = mask["nan_mask"])
 
+        self.wtd_numpy_mean = wtd_df["wtd"].mean().astype(np.float32)
+        self.wtd_numpy_std = wtd_df["wtd"].std().astype(np.float32)
+
         self.wtd_data_raserized = self.wtd_data_raserized.fillna(0)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
 
+    def normalize_dataset(self):
+        self.weather_xr = (self.weather_xr - self.weather_xr_mean) / self.weather_xr_std
+        self.wtd_numpy = (self.wtd_numpy - self.wtd_numpy_mean) / self.wtd_numpy_std
+        self.wtd_numpy = self.wtd_numpy.astype(np.float32)
 
     def __len__(self):
         return len(self.wtd_data_raserized["wtd"]) - self.timesteps
