@@ -26,7 +26,7 @@ class Discrete2DNN(nn.Module):
         self.conv3_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
         self.bn_4 = nn.BatchNorm3d(10)
         self.conv4_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.avg_pool_5 = nn.AdaptiveAvgPool3d((None, 114, 167))
+        self.avg_pool_5 = nn.AdaptiveAvgPool3d((None, 114, 168))
 
         self.conv_6 = nn.Conv3d(12, 1, 1, stride=1, dtype=torch.float32)
 
@@ -64,13 +64,13 @@ class ConvTBlock(nn.Module):
     def __init__(self):
         super(ConvTBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose3d(10, 10, (1,3,3), stride=(1,3,3)),
+            nn.ConvTranspose3d(10, 10, (1,3,3), stride=(1,3,3), dtype=torch.float32),
             nn.BatchNorm3d(10),
             nn.ReLU(),
-            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), padding='same'),
+            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(10),
             nn.ReLU(),
-            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), padding='same'),
+            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(10),
             nn.ReLU()
         )  
@@ -83,13 +83,13 @@ class ConvBlock(nn.Module):
     def __init__(self):
         super(ConvBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), padding='same'),
+            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(2),
             nn.ReLU(),
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), padding='same'),
+            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(2),
             nn.ReLU(),
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), padding='same'),
+            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(2),
             nn.ReLU(),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
@@ -104,13 +104,11 @@ class ConvBlockF(nn.Module):
     def __init__(self):
         super(ConvBlockF, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose3d(12, 12, (1,3,3), stride=(1,3,3)),
+            nn.ConvTranspose3d(12, 12, (1,3,3), stride=(1,3,3), dtype=torch.float32),
             nn.BatchNorm3d(12),
             nn.ReLU(),
-            nn.AdaptiveMaxPool3d((None, 114, 167)),
-            nn.Conv3d(12, 1, (1,3,3), stride=(1,1,1), padding='same'),
-            nn.BatchNorm3d(1),
-            nn.ReLU()
+            nn.AdaptiveMaxPool3d((None, 114, 168)),
+            nn.Conv3d(12, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
         )  
     
     def forward(self, x):
