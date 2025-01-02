@@ -29,6 +29,9 @@ from torch.autograd import Variable
 
 import wandb
 
+import torchview
+from torchview import draw_graph
+
 from models.load_models_1d import *
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 
@@ -92,12 +95,12 @@ if not dict_files["all_dataset"]:
 
 train_idx = int(max_ds_elems*train_split_p)
 test_idx = int(max_ds_elems*test_split_p)
-offset_idx = 100000
+#offset_idx = 100000
 
 print(f"Traing size: {train_idx}, Test size: {test_idx}")
-
-train_idxs, test_idxs = np.arange(offset_idx+train_idx), np.arange(offset_idx + train_idx,
-                                                                   offset_idx + train_idx + test_idx)
+#offset_idx+
+train_idxs, test_idxs = np.arange(train_idx), np.arange(train_idx,
+                                                        train_idx + test_idx)
 
 train_sampler = RandomSampler(train_idxs)
 test_sampler = RandomSampler(test_idxs)
@@ -209,9 +212,9 @@ for i in range(max_epochs):
                                         title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
                }, )
 
-    model_name = 'model_{}.pt'.format(timestamp)    
+    model_name = 'model_{}'.format(timestamp)    
     model_dir = dict_files["save_model_dir"]
-    torch.save(model.state_dict(), f"{model_dir}/{model_name}") 
+    torch.save(model.state_dict(), f"{model_dir}/{model_name}.pt") 
 
     print(f"############### Test epoch {i} ###############")
     # Set the model to evaluation mode, disabling dropout and using population
@@ -259,6 +262,11 @@ for i in range(max_epochs):
                                         title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
                })
 
+model_graph = draw_graph(model, input_data=(x, z, w, x_mask), device=device)
+model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_dir}/")
+model_arch = wandb.Image(f"{model_dir}/{model_name}.png", caption="model's architecture")
+wandb.log({"model_arch": model_arch})
+                
 wandb.finish()
 
 print(f"Execution time: {end_time-start_time}s")

@@ -37,7 +37,7 @@ class Continuous1DNN(nn.Module):
             cb_fc.append(nn.ReLU())
         
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
-        cb_fc.append(nn.ReLU())
+        #cb_fc.append(nn.ReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
@@ -111,16 +111,19 @@ class Continuous1DNN(nn.Module):
         wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
         
         # Sequential block
-        wtd0 = wtd0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
-        wtd0 = torch.movedim(wtd0, 0, 1)
+        wtd0_h = wtd0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
+        wtd0_h = nn.Tanh()(torch.movedim(wtd0_h, 0, 1)) 
         
-        wtd_series = self.lstm_1(wb_td3dconv,
-                                 (wtd0.contiguous(),
-                                  wtd0.contiguous())) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+        wtd_ts = self.lstm_1(wb_td3dconv,
+                                 (wtd0_h.contiguous(),
+                                  torch.zeros_like(wtd0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
-        wtd_series = self.fc(wtd_series[0])
+        wtd0_skip = wtd0.unsqueeze(1).expand([-1,self.timestep,-1])
+        wtd_ts_out = wtd_ts[0] + wtd0_skip
         
-        return wtd_series.squeeze()
+        wtd_ts = self.fc(wtd_ts_out)
+        
+        return wtd_ts.squeeze()
     
 
 ############## MODEL 2 ##############
