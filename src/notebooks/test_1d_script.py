@@ -60,7 +60,7 @@ print(f"Length of the dataset: {ds.__len__()}")
 
 # %%
 device = (
-    "cuda"
+    "cuda:" + str(dict_files["gpu_idx"])
     if torch.cuda.is_available()
     else "mps"
     if torch.backends.mps.is_available()
@@ -86,25 +86,35 @@ print("Total number of trainable parameters: " ,sum(p.numel() for p in model.par
 batch_size = dict_files["batch_size"]
 max_epochs = dict_files["epochs"]
 
-test_split_p = dict_files["test_split_p"]
-train_split_p = 1 - test_split_p
-
 max_ds_elems = ds.__len__()
 if not dict_files["all_dataset"]:
     max_ds_elems = dict_files["max_ds_elems"]
+    
+if type(dict_files["test_split_p"]) is str:
+    
+    train_idx = int(ds.get_iloc_from_date(date_max= np.datetime64(dict_files["test_split_p"])))
+    test_idx = int(max_ds_elems - train_idx)
+else:
+    test_split_p = dict_files["test_split_p"]
+    train_split_p = 1 - test_split_p
+    
+    train_idx = int(max_ds_elems*train_split_p)
+    test_idx = int(max_ds_elems*test_split_p)
 
-train_idx = int(max_ds_elems*train_split_p)
-test_idx = int(max_ds_elems*test_split_p)
-#offset_idx = 100000
-
-print(f"Traing size: {train_idx}, Test size: {test_idx}")
-#offset_idx+
 train_idxs, test_idxs = np.arange(train_idx), np.arange(train_idx,
                                                         train_idx + test_idx)
 
-train_sampler = RandomSampler(train_idxs)
-test_sampler = RandomSampler(test_idxs)
+print(f"Traing size: {train_idx} - {ds.wtd_df.index.get_level_values(0)[train_idxs[-1]]}, Test size: {test_idx} - {ds.wtd_df.index.get_level_values(0)[test_idxs[-1]]}")
 
+# Sampler 
+if dict_files["random_sampler"] is True:
+    train_sampler = RandomSampler(train_idxs)
+else:
+    train_sampler = SequentialSampler(train_idxs)
+    
+test_sampler = SequentialSampler(test_idxs)
+
+# DataLoaders
 train_loader = torch.utils.data.DataLoader(dataset=ds,
                                             batch_size=batch_size,
                                             sampler=train_sampler)
@@ -160,7 +170,7 @@ weather_dtm = ds.get_weather_dtm()
 weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
 
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-print(torch.cuda.memory_summary(device=None, abbreviated=False))
+print(torch.cuda.memory_summary(device=device, abbreviated=False))
 
 for i in range(max_epochs):
     

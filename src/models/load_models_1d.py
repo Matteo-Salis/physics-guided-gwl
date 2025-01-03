@@ -16,7 +16,8 @@ class Continuous1DNN(nn.Module):
                  conv_filters = 32,
                  lstm_layer = 5,
                  lstm_input_units = 16,
-                 lstm_units = 32):
+                 lstm_units = 32,
+                 ):
         super().__init__()
         
         self.timestep = timestep
@@ -27,7 +28,7 @@ class Continuous1DNN(nn.Module):
         self.cb_fc_neurons = cb_fc_neurons
         self.conv_filters = conv_filters
         
-        self.wgamma = nn.Sigmoid()
+        self.wgamma = nn.Softmax(dim = -1)
         # Fully connected
         cb_fc = []
         cb_fc.append(nn.Linear(4, self.cb_fc_neurons))
@@ -41,10 +42,10 @@ class Continuous1DNN(nn.Module):
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        self.weather_wgamma = nn.Sigmoid()
+        #self.weather_wgamma = nn.Softmax(dim = -1)
         
         conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(10, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
+        conv3d_stack.append(nn.Conv3d(14, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
         conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
         conv3d_stack.append(nn.ReLU())
         
@@ -87,23 +88,27 @@ class Continuous1DNN(nn.Module):
         
         # Conditioning block
         
-        wtd_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
-        wtd_sim = wtd_sim/torch.sqrt(torch.tensor(z.shape[-1])) 
-        wtd_sim = self.wgamma(wtd_sim)
-        wtd_sim = wtd_sim.squeeze() * x_mask # masking nan
-        wtd0 = torch.sum(x[:,:,-2] * wtd_sim, dim = 1)/torch.sum(wtd_sim, dim = 1)
-        wtd0 = torch.cat([z, wtd0.unsqueeze(-1)], dim = -1)
+        target_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
+        target_sim = target_sim/torch.sqrt(torch.tensor(z.shape[-1])) 
+        target_sim = self.wgamma(target_sim.squeeze())
+        target_sim = target_sim * x_mask # masking nan
+        target0 = torch.sum(x[:,:,-1] * target_sim, dim = 1)/torch.sum(target_sim, dim = 1)
+        target0 = torch.cat([z, target0.unsqueeze(-1)], dim = -1)
         
-        wtd0 = self.cb_fc(wtd0)
+        target0 = self.cb_fc(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
         weather_sim = torch.sum(weather_sim, dim = -1)/torch.sqrt(torch.tensor(weather_sim.shape[-1]))
-        weather_sim = self.weather_wgamma(weather_sim)
-        weather_sim = weather_sim[:, None, None, : ,:].expand(-1, w[0].shape[1], w[0].shape[2], -1, -1 )
+        #weather_sim = self.weather_wgamma(weather_sim)
         
-        weather = w[0] * weather_sim
+        weather_sim = weather_sim[:, None, None, : ,:].expand(-1, -1, w[0].shape[2], -1, -1 )
+        
+        
+        weather = torch.cat([w[0],
+                             torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
+                             weather_sim], dim = 1)
         
         wb_td3dconv = self.conv3d_stack(weather)
         
@@ -111,19 +116,19 @@ class Continuous1DNN(nn.Module):
         wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
         
         # Sequential block
-        wtd0_h = wtd0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
-        wtd0_h = nn.Tanh()(torch.movedim(wtd0_h, 0, 1)) 
+        target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
+        target0_h = nn.Tanh()(torch.movedim(target0_h, 0, 1)) 
         
-        wtd_ts = self.lstm_1(wb_td3dconv,
-                                 (wtd0_h.contiguous(),
-                                  torch.zeros_like(wtd0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+        target_ts = self.lstm_1(wb_td3dconv,
+                                 (target0_h.contiguous(),
+                                  torch.zeros_like(target0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
-        wtd0_skip = wtd0.unsqueeze(1).expand([-1,self.timestep,-1])
-        wtd_ts_out = wtd_ts[0] + wtd0_skip
+        target0_skip = target0.unsqueeze(1).expand([-1,self.timestep,-1])
+        target_ts_out = target_ts[0] + target0_skip
         
-        wtd_ts = self.fc(wtd_ts_out)
+        target_ts_out = self.fc(target_ts_out)
         
-        return wtd_ts.squeeze()
+        return target_ts_out.squeeze()
     
 
 ############## MODEL 2 ##############

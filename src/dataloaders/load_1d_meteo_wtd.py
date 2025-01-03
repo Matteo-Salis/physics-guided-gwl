@@ -52,25 +52,14 @@ class ContinuousDataset(Dataset):
         
         if dict_files["normalization"] is True:
             
-            self.norm_factors(date_max = np.datetime64(dict_files["date_max_norm"]))
-            
-            self.wtd_df[self.target] = (self.wtd_df[self.target] - self.self.target_mean)/self.self.target_std
-            
-            self.wtd_df["lat"] = (self.wtd_df["lat"] - self.lat_mean)/self.lat_std
-            self.wtd_df["lon"] = (self.wtd_df["lon"] - self.lon_mean)/self.lon_std
-            
-            self.dtm_roi = (self.dtm_roi - self.dtm_mean)/self.dtm_std
-            self.weather_dtm = (self.weather_dtm - self.dtm_mean.values)/self.dtm_std.values
-            
-            self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.lat_mean)/self.lat_std
-            self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.lon_mean)/self.lon_std
-            
-            self.weather_xr = (self.weather_xr - self.weather_mean)/self.weather_std
+            self.normalize(date_max = np.datetime64(dict_files["date_max_norm"]))
 
         # Transform       
         self.transform = dict_files["transform"]
         
-    def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = False, dict_out = False):
+        
+    def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
+        
         subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
                                                        :]]
         subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
@@ -100,20 +89,33 @@ class ContinuousDataset(Dataset):
         if verbose is True:
             print("Norm factors:")
             print(self.norm_factors)
+            print(f"Max date norm: {date_max}")
             
         if dict_out is True:
             return self.norm_factors
         
-    def normalize(self, norm_factors = None):
+    def normalize(self, norm_factors = None, date_max = np.datetime64("2020-01-01")):
         if norm_factors is None:
-            self.compute_norm_factors()
+            self.compute_norm_factors(date_max = date_max)
             ## compute norm factors by default
             
-        # else: if n.f are provided
+        else:
+            ## if provided 
+            self.norm_factors = norm_factors
         
-        # compute norm
-        pass            
-        
+        # Normalizations
+        self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
+            
+        self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+        self.wtd_df["lon"] = (self.wtd_df["lon"] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            
+        self.dtm_roi = (self.dtm_roi - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
+        self.weather_dtm = (self.weather_dtm - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
+            
+        self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+        self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            
+        self.weather_xr = (self.weather_xr - self.norm_factors["weather_mean"])/self.norm_factors["weather_std"]       
             
         
     def loading_dtm(self):
@@ -190,6 +192,9 @@ class ContinuousDataset(Dataset):
         
         if fill_value:
             self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
+            self.fill_value = fill_value
+        else:
+            self.fill_value = 0
         
     def compute_piezo_head(self):
         heights = []
@@ -207,6 +212,10 @@ class ContinuousDataset(Dataset):
     
     
         self.wtd_names["height"] = np.array(heights)
+        
+    def get_iloc_from_date(self, date_max):
+        row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) < date_max].iloc[-1].name)
+        return row_num
         
     def __len__(self):
         data = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= self.input_dates.max(),
@@ -245,7 +254,7 @@ class ContinuousDataset(Dataset):
         X = [torch.from_numpy(target_t0_lat).to(torch.float32),
              torch.from_numpy(target_t0_lon).to(torch.float32),
              torch.from_numpy(target_t0_dtm).to(torch.float32),
-             torch.from_numpy(target_t0_values).to(torch.float32)
+             torch.from_numpy(target_t0_values).to(torch.float32).nan_to_num(self.fill_value)
              ]
         X = torch.stack(X, dim = -1)
         
