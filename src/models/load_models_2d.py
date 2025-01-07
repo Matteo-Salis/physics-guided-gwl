@@ -64,14 +64,24 @@ class ConvTBlock(nn.Module):
     def __init__(self):
         super(ConvTBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose3d(10, 10, (1,3,3), stride=(1,3,3), dtype=torch.float32),
-            nn.BatchNorm3d(10),
+            nn.ConvTranspose3d(10, 16, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.BatchNorm3d(16),
             nn.ReLU(),
-            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(10),
+            nn.Conv3d(16, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Conv3d(10, 10, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(10),
+            nn.Conv3d(32, 64, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(64),
+            nn.ReLU(),
+
+            nn.ConvTranspose3d(64, 32, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            nn.Conv3d(16, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
             nn.ReLU()
         )  
     
@@ -83,17 +93,19 @@ class ConvBlock(nn.Module):
     def __init__(self):
         super(ConvBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(2),
+            nn.Conv3d(2, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(8),
             nn.ReLU(),
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(2),
+            nn.Conv3d(8, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
             nn.ReLU(),
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(2),
+            nn.Conv3d(16, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
             nn.ReLU(),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
-
         )  
     
     def forward(self, x):
@@ -104,11 +116,14 @@ class ConvBlockF(nn.Module):
     def __init__(self):
         super(ConvBlockF, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose3d(12, 12, (1,3,3), stride=(1,3,3), dtype=torch.float32),
-            nn.BatchNorm3d(12),
+            nn.ConvTranspose3d(32, 32, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
             nn.AdaptiveMaxPool3d((None, 114, 168)),
-            nn.Conv3d(12, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            nn.Conv3d(16, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
         )  
     
     def forward(self, x):
@@ -128,10 +143,9 @@ class Discrete2DMidConcatNN(nn.Module):
 
         # transpose conv (upsampling weather)
         self.m_conv_tr_1 = ConvTBlock()
-        self.m_conv_tr_2 = ConvTBlock()
-        self.m_avg_pool_3 = nn.AdaptiveMaxPool3d((None, 72, 96))
+        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 72, 96))
 
-        self.m_conv_f_4 = ConvBlockF()
+        self.m_conv_f_3 = ConvBlockF()
 
 
 
@@ -150,28 +164,16 @@ class Discrete2DMidConcatNN(nn.Module):
 
         # processing weaterh
         x_weather = self.m_conv_tr_1(x_weather)
-        x_weather = self.m_conv_tr_2(x_weather)
-        x_weather = self.m_avg_pool_3(x_weather)
+        x_weather = self.m_avg_pool_2b(x_weather)
 
         # concat
         x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
         concat = torch.concat([x_init, x_weather], dim=1)
 
-        out = self.m_conv_f_4(concat)
+        out = self.m_conv_f_3(concat)
         
         return out
 ###########################################
-
-class ConvLatPDF(nn.Module):
-    def __init__(self):
-        super(ConvLatPDF, self).__init__()
-
-        self.kernel_size = (3, 3)
-        self.kernel = torch.Tensor()
-
-    def forward(self,x):
-        pass
-
 
 
 ###########################################

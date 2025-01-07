@@ -30,9 +30,9 @@ class DiscreteDataset(Dataset):
         self.dict_files = dict_files
         self.timesteps = self.dict_files["timesteps"]
 
-        self.loading_weather()
-
         self.loading_rasterized_wtd()
+
+        self.loading_weather()
 
         if dict_files["normalization"]:
             print("Normalization: ON")
@@ -44,8 +44,14 @@ class DiscreteDataset(Dataset):
         self.weather_xr = xarray.open_dataset(self.dict_files["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
 
-        self.weather_xr_mean = self.weather_xr.mean()
-        self.weather_xr_std = self.weather_xr.std()
+        self.weather_xr_mean = self.weather_xr.sel(time=slice(self.weather_xr["time"][0], 
+                                                              self.weather_xr["time"][self.train_max_index-1])).mean()
+
+        self.weather_xr_std = self.weather_xr.sel(time=slice(self.weather_xr["time"][0], 
+                                                              self.weather_xr["time"][self.train_max_index-1])).std()
+
+        # self.weather_xr_mean = self.weather_xr[:self.train_max_index].mean()
+        # self.weather_xr_std = self.weather_xr[:self.train_max_index].std()
 
     def loading_rasterized_wtd(self):
         wtd_df = pd.read_csv(self.dict_files["wtd_csv_path"], dtype= {"sensor_id": "str"})
@@ -100,6 +106,7 @@ class DiscreteDataset(Dataset):
         self.maxx = self.dtm_roi_downsampled.x.max()
         self.maxy = self.dtm_roi_downsampled.y.max()
         
+        print("Rasterizing wtd dataframe...")
         rasterized_ds_list = []
         for date_idx in range(len(all_dates)):
             
@@ -113,6 +120,7 @@ class DiscreteDataset(Dataset):
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
             rasterized_ds_list.append(rasterized_ds)
+        print("Rasterized wtd dataframe.")
 
         self.wtd_data_raserized = xarray.concat(rasterized_ds_list, dim = "time")
         self.wtd_data_raserized = self.wtd_data_raserized.assign_coords({"time": all_dates})
@@ -124,11 +132,23 @@ class DiscreteDataset(Dataset):
         mask = mask.rename({'wtd':'nan_mask'})
         self.wtd_data_raserized = self.wtd_data_raserized.assign(wtd_mask = mask["nan_mask"])
 
-        self.wtd_numpy_mean = wtd_df["wtd"].mean().astype(np.float32)
-        self.wtd_numpy_std = wtd_df["wtd"].std().astype(np.float32)
+        if self.dict_files["piezo_head"]:
+            print("Creating piezometric head dataset...")
+            self.wtd_data_raserized["wtd"] = - self.wtd_data_raserized["wtd"] + self.dtm_roi_downsampled.values
+            print("Piezometric head dataset created.")
+
+        # saving mean and std before fill na
+        train_split_p = 1 - self.dict_files["test_split_p"]
+        self.train_max_index = int(self.__len__()*train_split_p)
+
+        self.wtd_numpy_mean = self.wtd_data_raserized["wtd"][:self.train_max_index].mean().values.astype(np.float32)
+        self.wtd_numpy_std = self.wtd_data_raserized["wtd"][:self.train_max_index].std().values.astype(np.float32)
+        print(f"shape mean: {self.wtd_numpy_mean}")
+        print(f"shape std: {self.wtd_numpy_std}")
 
         self.wtd_data_raserized = self.wtd_data_raserized.fillna(0)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
+
 
     def normalize_dataset(self):
         self.weather_xr = (self.weather_xr - self.weather_xr_mean) / self.weather_xr_std
