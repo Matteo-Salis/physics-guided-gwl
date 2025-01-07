@@ -126,22 +126,21 @@ def ConvLat(x):
     # out = signal.convolve2d(x, conv, mode='same')
     return out
 
-# def pde_grad_loss(y_hat,y):
-#     # TODO: conversion of wtd into height
-#     print(y_hat.shape)
+def pde_grad_loss(y_hat):
+    # TODO: normalized or de-normalized?
+    print(y_hat.shape)
 
-#     predict = torch.unsqueeze(y[:,0,:,:,:], dim=1).to(device)
-#     # target = y_hat.to(device)
+    y_hat.to(device)
 
-#     lat_grad = ConvLat(predict)
-#     lon_grad = ConvLon(predict)
+    lat_grad = ConvLat(y_hat).to(device)
+    lon_grad = ConvLon(y_hat).to(device)
 
-#     # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
-#     loss = torch.sum(y_hat[0,0,1:-1,:,:] + lat_grad[0,0,0:-2,:,:].to(device) + lon_grad[0,0,0:-2,:,:].to(device) - y_hat[0,0,0:-2,:,:])
+    # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
+    loss = torch.sum(y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:] + lat_grad[0,0,0:-2,:,:] + lon_grad[0,0,0:-2,:,:] )
 
-#     return torch.abs(loss)
+    return torch.abs(loss)
 
-def pde_grad_loss(y_hat,dtm,wtd_mean,wtd_std):
+def pde_grad_loss_wtd(y_hat,dtm,wtd_mean,wtd_std):
     # TODO: normalized or de-normalized?
     print(y_hat.shape)
 
@@ -155,7 +154,7 @@ def pde_grad_loss(y_hat,dtm,wtd_mean,wtd_std):
     # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
     loss = torch.sum(predict[:,0,1:-1,:,:] - predict[:,0,0:-2,:,:] + lat_grad[0,0,0:-2,:,:] + lon_grad[0,0,0:-2,:,:] )
 
-    return torch.pow(loss,2) / torch.numel(loss)
+    return torch.abs(loss)
 
 def loss_masked(y_hat,y):
     predict = torch.unsqueeze(y[:,0,:,:,:], dim=1).to(device)
@@ -190,6 +189,8 @@ dtm = torch.from_numpy(ds.dtm_roi_downsampled.values).to(device)
 wtd_mean = ds.wtd_numpy_mean
 wtd_std = ds.wtd_numpy_std
 
+Y = None
+
 for i in range(max_epochs):
     model.train()
 
@@ -207,10 +208,7 @@ for i in range(max_epochs):
                 # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                 loss_mask = loss_masked(Y,pred_wtds)
-                loss_pde = pde_grad_loss(Y,
-                                     dtm,
-                                     wtd_mean,
-                                     wtd_std)
+                loss_pde = pde_grad_loss(Y)
                 loss = c1_loss * loss_mask + c2_loss * loss_pde
                 print(f"Train loss: {loss}")
 
@@ -234,6 +232,16 @@ for i in range(max_epochs):
 
     torch.save(model.state_dict(), f"{dict_files['save_model_dir']}/{model_name}")
 
+    with torch.no_grad():
+        predict = (Y.cpu() * wtd_std) + wtd_mean
+        plt.figure(figsize = (10,10))
+        plt.imshow(predict[0,0,0,:,:])
+        plt.colorbar()
+        plt.savefig(f"predict_{i}.png", bbox_inches = 'tight')
+        wandb.log({
+            "train_prediction" :  wandb.Image(f"predict_{i}.png", caption="model's prediction")
+        })
+
     print(f"############### Test epoch {i} ###############")
 
     model.eval()
@@ -251,10 +259,7 @@ for i in range(max_epochs):
                     # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                     loss_mask = loss_masked(Y,pred_wtds)
-                    loss_pde = loss_pde = pde_grad_loss(Y,
-                                     dtm,
-                                     wtd_mean,
-                                     wtd_std)
+                    loss_pde = loss_pde = pde_grad_loss(Y)
                     loss = c1_loss * loss_mask + c2_loss * loss_pde
                     print(f"Test loss: {loss}")
 
