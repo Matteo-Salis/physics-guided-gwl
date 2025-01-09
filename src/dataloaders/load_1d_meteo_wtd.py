@@ -231,8 +231,8 @@ class ContinuousDataset(Dataset):
         start_date = self.wtd_df.iloc[idx, :].name[0]
         sample_lat = self.wtd_df["lat"].iloc[idx]
         sample_lon = self.wtd_df["lon"].iloc[idx]
-        sample_dtm = self.dtm_roi.sel(x = sample_lon,
-                                      y = sample_lat,
+        sample_dtm = self.dtm_roi.sel(x = self.wtd_names.loc[self.wtd_names["sensor_id"] == self.wtd_df.iloc[idx, :].name[1]].geometry.x.values[0],
+                                      y = self.wtd_names.loc[self.wtd_names["sensor_id"] == self.wtd_df.iloc[idx, :].name[1]].geometry.y.values[0],
                                       method = "nearest").values  
         
         end_date = start_date + np.timedelta64(self.timesteps, "D")
@@ -246,9 +246,11 @@ class ContinuousDataset(Dataset):
         target_t0_mask = target_t0["nan_mask"].values
         target_t0_lat = target_t0["lat"].values
         target_t0_lon = target_t0["lon"].values
-        target_t0_dtm = np.array([self.dtm_roi.sel(x = target_t0_lon[sensor],
-                                                y = target_t0_lat[sensor],
-                                                method = "nearest") for sensor in range(len(target_t0_lat))]).squeeze()
+        target_t0_sensor_id = target_t0.index.get_level_values(1).values
+        target_t0_dtm = np.array([self.dtm_roi.sel(
+            x = self.wtd_names.loc[self.wtd_names["sensor_id"] == target_t0_sensor_id[sensor]].geometry.x.values[0],
+            y = self.wtd_names.loc[self.wtd_names["sensor_id"] == target_t0_sensor_id[sensor]].geometry.y.values[0],
+            method = "nearest") for sensor in range(len(target_t0_lat))]).squeeze()
         
         #target_t0_mask = 1*~np.isnan(target_t0_values)
         X = [torch.from_numpy(target_t0_lat).to(torch.float32),
