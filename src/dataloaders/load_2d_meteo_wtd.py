@@ -146,7 +146,7 @@ class DiscreteDataset(Dataset):
         print(f"shape mean: {self.wtd_numpy_mean}")
         print(f"shape std: {self.wtd_numpy_std}")
 
-        self.wtd_data_raserized = self.wtd_data_raserized.fillna(0)
+        self.wtd_data_raserized = self.wtd_data_raserized.fillna(self.wtd_numpy_mean)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
 
 
