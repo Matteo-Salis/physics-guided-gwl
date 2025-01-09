@@ -31,6 +31,7 @@ import wandb
 from time import sleep
 
 from models.load_models_2d import *
+from loss.load_losses import *
 from dataloaders.load_2d_meteo_wtd import DiscreteDataset
 
 
@@ -106,90 +107,6 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
 
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-def ConvLon(x):
-    print(x.shape)
-    conv = torch.Tensor([[-1,2,-1],[-1,2,-1],[-1,2,-1]] )
-    out = torch.Tensor(x.shape)
-
-    for b in range(x.shape[0]):
-        for t in range(x.shape[2]):
-            out[b,0,t,:,:] = torch.from_numpy(signal.convolve2d(x[b,0,t,:,:].cpu().detach().numpy(), conv, mode='same'))
-    return out
-
-def ConvLat(x):
-    conv = torch.Tensor([[-1,-1,-1],[2,2,2],[-1,-1,-1]] )
-    out = torch.Tensor(x.shape)
-
-    for b in range(x.shape[0]):
-        for t in range(x.shape[2]):
-            out[b,0,t,:,:] = torch.from_numpy(signal.convolve2d(x[b,0,t,:,:].cpu().detach().numpy(), conv, mode='same'))
-
-    # out = signal.convolve2d(x, conv, mode='same')
-    return out
-
-def pde_grad_loss(y_hat):
-    # already normalized and computed on height
-    print(y_hat.shape)
-
-    y_hat.to(device)
-
-    lat_grad = ConvLat(y_hat).to(device)
-    lon_grad = ConvLon(y_hat).to(device)
-
-    # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
-    loss = torch.sum(y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:] + lat_grad[:,0,0:-2,:,:] + lon_grad[:,0,0:-2,:,:] )
-
-    return torch.abs(loss)
-
-def pde_grad_loss_darcy(y_hat):
-    # normalized and working on height
-    # print(y_hat.shape)
-
-    y_hat.to(device)
-
-    k_x = 1  # TODO: to esimate
-    k_y = 1  # TODO: to esimate
-
-    lat_grad = ConvLat(y_hat).to(device)
-    lon_grad = ConvLon(y_hat).to(device)
-
-    dh_t = y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:]
-    dh_x = lon_grad[:,0,0:-2,:,:]
-    d2_x = ConvLon(torch.unsqueeze(dh_x, dim=1)).to(device)
-    dh_y = lat_grad[:,0,0:-2,:,:]
-    d2_y = ConvLat(torch.unsqueeze(dh_y, dim=1)).to(device)
-
-    G = 0 # TODO: to esimate
-
-    loss = dh_t - (d2_x * (-k_x * dh_x * y_hat[:,0,0:-2,:,:]) ) - (d2_y * (-k_y * dh_y * y_hat[:,0,0:-2,:,:]))
-    loss = torch.sum(loss ** 2) / torch.numel(loss)
-
-    return loss
-
-def pde_grad_loss_wtd(y_hat,dtm,wtd_mean,wtd_std):
-    # TODO: normalized or de-normalized?
-    print(y_hat.shape)
-
-    predict = (y_hat * wtd_std) + wtd_mean # denormalized
-    predict[:,0,:,:,:] = - predict[:,0,:,:,:] + dtm[0,:,:]
-    predict.to(device)
-
-    lat_grad = ConvLat(predict).to(device)
-    lon_grad = ConvLon(predict).to(device)
-
-    # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
-    loss = torch.sum(predict[:,0,1:-1,:,:] - predict[:,0,0:-2,:,:] + lat_grad[:,0,0:-2,:,:] + lon_grad[:,0,0:-2,:,:] )
-
-    return torch.abs(loss)
-
-def loss_masked(y_hat,y):
-    predict = torch.unsqueeze(y[:,0,:,:,:], dim=1).to(device)
-    target = y_hat.to(device)
-    mask = y[:,1,:,:,:].bool().to(device)
-    out = (torch.sum( (predict - target) * mask) ** 2.0 ) / torch.sum(mask)
-    return out
-
-
 wandb.init(
     entity="gsartor-unito",
     project=dict_files["experiment_name"],
@@ -201,7 +118,7 @@ wandb.init(
 # Magic
 wandb.watch(model, log_freq=100)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=dict_files["lr"])
 
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 print(torch.cuda.memory_summary(device=None, abbreviated=False))
@@ -210,6 +127,7 @@ timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 model_name = 'model_{}.pt'.format(timestamp)    
 c1_loss = dict_files["c1_loss"]
 c2_loss = dict_files["c2_loss"]
+c3_loss = dict_files["c3_loss"]
 
 dtm = torch.from_numpy(ds.dtm_roi_downsampled.values).to(device)
 wtd_mean = ds.wtd_numpy_mean
@@ -235,7 +153,8 @@ for i in range(max_epochs):
 
                 loss_mask = loss_masked(Y,pred_wtds)
                 loss_pde = pde_grad_loss_darcy(Y)
-                loss = c1_loss * loss_mask + c2_loss * loss_pde
+                loss_pos = loss_positive_height(Y,wtd_mean,wtd_std)
+                loss = c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
                 print(f"Train loss: {loss}")
 
                 optimizer.zero_grad()
@@ -245,6 +164,7 @@ for i in range(max_epochs):
                 metrics = {
                     "train_loss_mask" : loss_mask,
                     "train_loss_pde" : loss_pde,
+                    "train_loss_pos" : loss_pos,
                     "train_loss" : loss
                 }
                 wandb.log(metrics)
@@ -297,12 +217,14 @@ for i in range(max_epochs):
 
                     loss_mask = loss_masked(Y,pred_wtds)
                     loss_pde = loss_pde = pde_grad_loss_darcy(Y)
-                    loss = c1_loss * loss_mask + c2_loss * loss_pde
+                    loss_pos = loss_positive_height(Y,wtd_mean,wtd_std)
+                    loss = c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
                     print(f"Test loss: {loss}")
 
                     metrics = {
                         "test_loss_mask" : loss_mask,
                         "test_loss_pde" : loss_pde,
+                        "test_loss_pos" : loss_pos,
                         "test_loss" : loss
                     }
 
