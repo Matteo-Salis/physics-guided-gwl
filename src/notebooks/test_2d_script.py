@@ -107,6 +107,7 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
 print('mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
 def ConvLon(x):
+    print(x.shape)
     conv = torch.Tensor([[-1,2,-1],[-1,2,-1],[-1,2,-1]] )
     out = torch.Tensor(x.shape)
 
@@ -127,7 +128,7 @@ def ConvLat(x):
     return out
 
 def pde_grad_loss(y_hat):
-    # TODO: normalized or de-normalized?
+    # already normalized and computed on height
     print(y_hat.shape)
 
     y_hat.to(device)
@@ -136,9 +137,34 @@ def pde_grad_loss(y_hat):
     lon_grad = ConvLon(y_hat).to(device)
 
     # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
-    loss = torch.sum(y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:] + lat_grad[0,0,0:-2,:,:] + lon_grad[0,0,0:-2,:,:] )
+    loss = torch.sum(y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:] + lat_grad[:,0,0:-2,:,:] + lon_grad[:,0,0:-2,:,:] )
 
     return torch.abs(loss)
+
+def pde_grad_loss_darcy(y_hat):
+    # normalized and working on height
+    # print(y_hat.shape)
+
+    y_hat.to(device)
+
+    k_x = 1  # TODO: to esimate
+    k_y = 1  # TODO: to esimate
+
+    lat_grad = ConvLat(y_hat).to(device)
+    lon_grad = ConvLon(y_hat).to(device)
+
+    dh_t = y_hat[:,0,1:-1,:,:] - y_hat[:,0,0:-2,:,:]
+    dh_x = lon_grad[:,0,0:-2,:,:]
+    d2_x = ConvLon(torch.unsqueeze(dh_x, dim=1)).to(device)
+    dh_y = lat_grad[:,0,0:-2,:,:]
+    d2_y = ConvLat(torch.unsqueeze(dh_y, dim=1)).to(device)
+
+    G = 0 # TODO: to esimate
+
+    loss = dh_t - (d2_x * (-k_x * dh_x * y_hat[:,0,0:-2,:,:]) ) - (d2_y * (-k_y * dh_y * y_hat[:,0,0:-2,:,:]))
+    loss = torch.sum(loss ** 2) / torch.numel(loss)
+
+    return loss
 
 def pde_grad_loss_wtd(y_hat,dtm,wtd_mean,wtd_std):
     # TODO: normalized or de-normalized?
@@ -152,7 +178,7 @@ def pde_grad_loss_wtd(y_hat,dtm,wtd_mean,wtd_std):
     lon_grad = ConvLon(predict).to(device)
 
     # y_hat_t_1 - y_hat_t = lat_grad_t + lon_grad_t
-    loss = torch.sum(predict[:,0,1:-1,:,:] - predict[:,0,0:-2,:,:] + lat_grad[0,0,0:-2,:,:] + lon_grad[0,0,0:-2,:,:] )
+    loss = torch.sum(predict[:,0,1:-1,:,:] - predict[:,0,0:-2,:,:] + lat_grad[:,0,0:-2,:,:] + lon_grad[:,0,0:-2,:,:] )
 
     return torch.abs(loss)
 
@@ -208,7 +234,7 @@ for i in range(max_epochs):
                 # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                 loss_mask = loss_masked(Y,pred_wtds)
-                loss_pde = pde_grad_loss(Y)
+                loss_pde = pde_grad_loss_darcy(Y)
                 loss = c1_loss * loss_mask + c2_loss * loss_pde
                 print(f"Train loss: {loss}")
 
@@ -232,14 +258,25 @@ for i in range(max_epochs):
 
     torch.save(model.state_dict(), f"{dict_files['save_model_dir']}/{model_name}")
 
+    # plots on wandb
     with torch.no_grad():
         predict = (Y.cpu() * wtd_std) + wtd_mean
         plt.figure(figsize = (10,10))
         plt.imshow(predict[0,0,0,:,:])
         plt.colorbar()
-        plt.savefig(f"predict_{i}.png", bbox_inches = 'tight')
+        plt.savefig(f"predict_a{i}.png", bbox_inches = 'tight')
         wandb.log({
-            "train_prediction" :  wandb.Image(f"predict_{i}.png", caption="model's prediction")
+            "train_prediction" :  wandb.Image(f"predict_a{i}.png", caption="prediction A on training")
+        })
+
+    with torch.no_grad():
+        predict = (Y.cpu() * wtd_std) + wtd_mean
+        plt.figure(figsize = (10,10))
+        plt.imshow(predict[0,0,100,:,:])
+        plt.colorbar()
+        plt.savefig(f"predict_b{i}.png", bbox_inches = 'tight')
+        wandb.log({
+            "train_prediction" :  wandb.Image(f"predict_b{i}.png", caption="prediction B on training")
         })
 
     print(f"############### Test epoch {i} ###############")
@@ -259,7 +296,7 @@ for i in range(max_epochs):
                     # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                     loss_mask = loss_masked(Y,pred_wtds)
-                    loss_pde = loss_pde = pde_grad_loss(Y)
+                    loss_pde = loss_pde = pde_grad_loss_darcy(Y)
                     loss = c1_loss * loss_mask + c2_loss * loss_pde
                     print(f"Test loss: {loss}")
 
@@ -274,6 +311,27 @@ for i in range(max_epochs):
     end_time = time.time()
     exec_time = end_time-start_time
     wandb.log({"test_epoch_exec_t" : exec_time})
+
+    # plots on wandb
+    with torch.no_grad():
+        predict = (Y.cpu() * wtd_std) + wtd_mean
+        plt.figure(figsize = (10,10))
+        plt.imshow(predict[0,0,0,:,:])
+        plt.colorbar()
+        plt.savefig(f"predict_test_a{i}.png", bbox_inches = 'tight')
+        wandb.log({
+            "test_prediction" :  wandb.Image(f"predict_test_a{i}.png", caption="prediction A on test")
+        })
+
+    with torch.no_grad():
+        predict = (Y.cpu() * wtd_std) + wtd_mean
+        plt.figure(figsize = (10,10))
+        plt.imshow(predict[0,0,100,:,:])
+        plt.colorbar()
+        plt.savefig(f"predict_test_b{i}.png", bbox_inches = 'tight')
+        wandb.log({
+            "test_prediction" :  wandb.Image(f"predict_test_b{i}.png", caption="prediction B on test")
+        })
 
 wandb.finish()
 
