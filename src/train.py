@@ -2,12 +2,14 @@ from tqdm import tqdm
 from loss.load_losses import *
 import wandb
 import matplotlib.pyplot as plt
+from torchview import draw_graph
 
 
-def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, device = "cuda"):
+def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, model_name, device = "cuda"):
     c1_loss = config["c1_loss"]
     c2_loss = config["c2_loss"]
     c3_loss = config["c3_loss"]
+    X = None
     Y = None
     
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -20,7 +22,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, de
             # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
             Y = model(X)
-            # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+            # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)clea
 
             loss_mask = loss_masked(Y,pred_wtds)
             loss_pde = pde_grad_loss_darcy(Y)
@@ -62,6 +64,13 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, de
                 "train_prediction" :  wandb.Image(f"predict_b{i}.png", caption="prediction B on training")
             })
 
+        if i == 0:
+            print("Saving plot of the model...")
+            model_file_path = config['save_model_dir']
+            model_graph = draw_graph(model, input_data=([X]), device=device)
+            model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_file_path}/")
+            model_arch = wandb.Image(f"{model_file_path}/{model_name}.png", caption="model's architecture")
+            wandb.log({"model_arch": model_arch})
 
 if __name__ == "__main__":
     pass
