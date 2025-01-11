@@ -86,7 +86,7 @@ class DiscreteDataset(Dataset):
         wtd_df["y"] = coordinates_y
 
         # downscaling dtm
-        downscale_factor = 0.1
+        downscale_factor = 0.05
         new_width = int(dtm_roi.rio.width * downscale_factor)
         new_height = int(dtm_roi.rio.height * downscale_factor)
 
@@ -105,6 +105,26 @@ class DiscreteDataset(Dataset):
         self.miny = self.dtm_roi_downsampled.y.min()
         self.maxx = self.dtm_roi_downsampled.x.max()
         self.maxy = self.dtm_roi_downsampled.y.max()
+
+        # print("Longitude")
+        # print(self.minx)
+        # print(self.maxx)
+        # print("Latitude")
+        # print(self.miny)
+        # print(self.maxy)
+
+        # print(new_height)
+        # print(new_width)
+
+        # new_resolution = ( (self.maxx-self.minx)/new_width, (self.maxy-self.miny)/new_height )
+
+        # print(new_resolution)
+
+        # old_res = (self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 6))
+
+        # print(old_res)
+
+        # print(self.dtm_roi_downsampled.rio.transform())
         
         print("Rasterizing wtd dataframe...")
         rasterized_ds_list = []
@@ -115,7 +135,8 @@ class DiscreteDataset(Dataset):
             rasterized_ds = make_geocube(vector_data=vector_ds,
                                         measurements=['wtd'],
                                         output_crs="epsg:4326",
-                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 6)),
+                                        # resolution= new_resolution,
+                                        resolution=(self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 4)),
                                         # Global extent in degrees of longitude and latitude
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
