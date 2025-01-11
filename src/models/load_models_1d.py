@@ -8,7 +8,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 
-class Continuous1DNN(nn.Module):
+class Continuous1DNN_idw(nn.Module):
+    
     def __init__(self,
                  timestep = 180,
                  cb_fc_layer = 5,
@@ -28,22 +29,18 @@ class Continuous1DNN(nn.Module):
         self.cb_fc_neurons = cb_fc_neurons
         self.conv_filters = conv_filters
         
-        self.wgamma = nn.Softmax(dim = 1)
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(4, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(5, self.cb_fc_neurons))
         cb_fc.append(nn.ReLU())
         for l in range(self.cb_fc_layer - 2):
             cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
             cb_fc.append(nn.ReLU())
         
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
-        #cb_fc.append(nn.ReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        #self.weather_wgamma = nn.Softmax(dim = -1)
-        
         conv3d_stack=[]
         conv3d_stack.append(nn.Conv3d(14, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
         conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
@@ -76,6 +73,21 @@ class Continuous1DNN(nn.Module):
         fc.append(nn.ReLU())
         fc.append(nn.Linear(8, 1))
         self.fc = nn.Sequential(*fc)
+        
+    def idw(self, dist, values, x_mask, weight_std = True):
+        
+        weights = 1/dist
+        weights = torch.minimum(weights, torch.tensor([1e8]).expand(weights.shape).to(weights.device))
+        weights = weights * x_mask 
+        numerator = torch.sum(weights*values, dim = 1)
+        denominator = torch.sum(weights, dim = 1)
+        output = numerator/denominator
+        weights_cv = torch.std(weights) / torch.mean(weights)
+            
+        if weight_std is True:
+                output = [output, weights_cv]
+            
+        return output
 
 
     def forward(self, x, z, w, x_mask):
@@ -101,20 +113,15 @@ class Continuous1DNN(nn.Module):
             
         # Conditioning block
         
-        # target_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
-        # target_sim = target_sim/torch.sqrt(torch.tensor(z.shape[-1]))
-        target_sim = -torch.cdist(x[:,:,:3], z.unsqueeze(1), p=2.0) # (B×P×M), (B×R×M), OUTPUT: (B×P×R)
-        print(target_sim[:,:5]) 
-        target_sim = self.wgamma(target_sim.squeeze(-1))
-        print(target_sim[:,:5])
-        print("sum", torch.sum(target_sim, dim = 1))
-        target_sim = target_sim * x_mask # masking nan
-        print(target_sim[:,:5])
-        print("sum", torch.sum(target_sim, dim = 1))
-        target_sim_sum = torch.sum(target_sim, dim = 1)
-        target0 = torch.sum(x[:,:,-1] * target_sim, dim = 1)/target_sim_sum
-        target0 = torch.cat([z, target0.unsqueeze(-1)], dim = -1)
-        print(target0)
+        target_dist = torch.cdist(x[:,:,:3], z.unsqueeze(1), p=2.0) # (B×P×M), (B×R×M), OUTPUT: (B×P×R) 
+        target0 = self.idw(dist = target_dist,
+                          values = x[:,:,-1].unsqueeze(-1),
+                          x_mask = x_mask.unsqueeze(-1),
+                          weight_std = True)
+        
+        target0 = torch.cat([z,
+                             target0[0],
+                             target0[1].expand((z.shape[0], 1))], dim = -1)
         
         target0 = self.cb_fc(target0)
         
@@ -122,7 +129,6 @@ class Continuous1DNN(nn.Module):
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
         weather_sim = torch.sum(weather_sim, dim = -1)/torch.sqrt(torch.tensor(weather_sim.shape[-1]))
-        #weather_sim = self.weather_wgamma(weather_sim)
         
         weather_sim = weather_sim[:, None, None, : ,:].expand(-1, -1, w[0].shape[2], -1, -1 )
         
@@ -136,13 +142,9 @@ class Continuous1DNN(nn.Module):
         wb_td3dconv = wb_td3dconv.squeeze((3,4))
         wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
         
-        print(wb_td3dconv.shape)
-        
         # Sequential block
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
         target0_h = nn.Tanh()(torch.movedim(target0_h, 0, 1))
-        
-        print(target0_h.shape) 
         
         target_ts = self.lstm_1(wb_td3dconv,
                                  (target0_h.contiguous(),

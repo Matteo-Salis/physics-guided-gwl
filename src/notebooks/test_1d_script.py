@@ -67,14 +67,17 @@ device = (
     else "cpu"
 )
 
-model = Continuous1DNN(timestep = dict_files["timesteps"],
-                 cb_fc_layer = dict_files["cb_fc_layer"], #5,
-                 cb_fc_neurons = dict_files["cb_fc_neurons"], # 32,
-                 conv_filters = dict_files["conv_filters"], #32,
-                 lstm_layer = dict_files["lstm_layer"], #5,
-                 lstm_input_units = dict_files["lstm_input_units"], #16,
-                 lstm_units = dict_files["lstm_units"] #32
+if dict_files["model"] == "Continuous1DNN_idw":
+    model = Continuous1DNN_idw(timestep = dict_files["timesteps"],
+                 cb_fc_layer = dict_files["cb_fc_layer"],
+                 cb_fc_neurons = dict_files["cb_fc_neurons"],
+                 conv_filters = dict_files["conv_filters"],
+                 lstm_layer = dict_files["lstm_layer"],
+                 lstm_input_units = dict_files["lstm_input_units"],
+                 lstm_units = dict_files["lstm_units"]
                  ).to(device)
+    
+#elif dict_files["model"] == "Continuous1DNN_idw":
 
 # %%
 print("Total number of trainable parameters: " ,sum(p.numel() for p in model.parameters() if p.requires_grad))
