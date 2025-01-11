@@ -150,8 +150,8 @@ class Continuous1DNN_idw(nn.Module):
                                  (target0_h.contiguous(),
                                   torch.zeros_like(target0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
-        target0_skip = target0.unsqueeze(1).expand([-1,self.timestep,-1])
-        target_ts_out = target_ts[0] + target0_skip
+        #target0_skip = target0.unsqueeze(1).expand([-1,self.timestep,-1])
+        target_ts_out = target_ts[0] #+ target0_skip
         
         target_ts_out = self.fc(target_ts_out)
         
