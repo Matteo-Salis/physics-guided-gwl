@@ -32,35 +32,36 @@ class Continuous1DNN_idw(nn.Module):
         # Fully connected
         cb_fc = []
         cb_fc.append(nn.Linear(5, self.cb_fc_neurons))
-        cb_fc.append(nn.ReLU())
+        cb_fc.append(nn.LeakyReLU())
         for l in range(self.cb_fc_layer - 2):
             cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
-            cb_fc.append(nn.ReLU())
+            cb_fc.append(nn.LeakyReLU())
         
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
+        cb_fc.append(nn.Tanh())
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
         conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(14, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
+        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
         conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
+        conv3d_stack.append(nn.LeakyReLU())
         
         for i in range(4):
             conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
             conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.ReLU())
+            conv3d_stack.append(nn.LeakyReLU())
             
         conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.lstm_input_units, (1,2,2)))
+        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters/2), (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
+        conv3d_stack.append(nn.LeakyReLU())
+        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), int(self.conv_filters/4), (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/4)))
+        conv3d_stack.append(nn.LeakyReLU())
+        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/4), self.lstm_input_units, (1,2,2)))
         conv3d_stack.append(nn.BatchNorm3d(self.lstm_input_units))
-        conv3d_stack.append(nn.ReLU())
+        conv3d_stack.append(nn.LeakyReLU())
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
         # Joint sequental block
@@ -70,19 +71,18 @@ class Continuous1DNN_idw(nn.Module):
         
         fc = []
         fc.append(nn.Linear(self.lstm_units, 8))
-        fc.append(nn.ReLU())
+        fc.append(nn.LeakyReLU())
         fc.append(nn.Linear(8, 1))
         self.fc = nn.Sequential(*fc)
         
     def idw(self, dist, values, x_mask, weight_std = True):
         
-        weights = 1/dist
-        weights = torch.minimum(weights, torch.tensor([1e8]).expand(weights.shape).to(weights.device))
-        weights = weights * x_mask 
+        weights = 1/(dist + torch.tensor([1e-8]).to(torch.float32).to(dist.device))
+        weights = weights * x_mask
         numerator = torch.sum(weights*values, dim = 1)
         denominator = torch.sum(weights, dim = 1)
         output = numerator/denominator
-        weights_cv = torch.std(weights) / torch.mean(weights)
+        weights_cv = torch.std(weights, dim = (1,2)) / torch.mean(weights, dim = (1,2))
             
         if weight_std is True:
                 output = [output, weights_cv]
@@ -112,7 +112,6 @@ class Continuous1DNN_idw(nn.Module):
             x_mask = x_mask.unsqueeze(0)
             
         # Conditioning block
-        
         target_dist = torch.cdist(x[:,:,:3], z.unsqueeze(1), p=2.0) # (B×P×M), (B×R×M), OUTPUT: (B×P×R) 
         target0 = self.idw(dist = target_dist,
                           values = x[:,:,-1].unsqueeze(-1),
@@ -121,21 +120,18 @@ class Continuous1DNN_idw(nn.Module):
         
         target0 = torch.cat([z,
                              target0[0],
-                             target0[1].expand((z.shape[0], 1))], dim = -1)
+                             target0[1].unsqueeze(1)], dim = -1)
         
         target0 = self.cb_fc(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
-        weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
-        weather_sim = torch.sum(weather_sim, dim = -1)/torch.sqrt(torch.tensor(weather_sim.shape[-1]))
-        
-        weather_sim = weather_sim[:, None, None, : ,:].expand(-1, -1, w[0].shape[2], -1, -1 )
-        
-        
+        weather_dist = w[1] - z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_dist = weather_dist[:, None, :, : ,:].expand(-1, w[0].shape[2], -1, -1, -1 )
+
         weather = torch.cat([w[0],
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
-                             weather_sim], dim = 1)
+                             torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
         wb_td3dconv = self.conv3d_stack(weather)
         
@@ -144,33 +140,30 @@ class Continuous1DNN_idw(nn.Module):
         
         # Sequential block
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
-        target0_h = nn.Tanh()(torch.movedim(target0_h, 0, 1))
+        target0_h = torch.movedim(target0_h, 0, 1)
         
         target_ts = self.lstm_1(wb_td3dconv,
                                  (target0_h.contiguous(),
-                                  torch.zeros_like(target0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                  target0_h.contiguous())) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
-        #target0_skip = target0.unsqueeze(1).expand([-1,self.timestep,-1])
-        target_ts_out = target_ts[0] #+ target0_skip
-        
-        target_ts_out = self.fc(target_ts_out)
+        target_ts_out = self.fc(target_ts[0])
         
         return target_ts_out.squeeze()
     
 
 ############## MODEL 2 ##############
 
-class Continuous1DNN_dweight(nn.Module):
+class Continuous1DNN_att(nn.Module):
     def __init__(self,
                  timestep = 180,
-                 cb_fc_layer = 5,
+                 cb_emb_dim = 16,
+                 cb_att_h = 4,
+                 cb_fc_layer = 2,
                  cb_fc_neurons = 32,
-                 cb_fc_w0_layer = 3,
-                 cb_fc_w0_neurons = 16,
                  conv_filters = 32,
-                 lstm_layer = 5,
+                 lstm_layer = 1,
                  lstm_input_units = 16,
-                 lstm_units = 32,
+                 lstm_units = 128,
                  ):
         super().__init__()
         
@@ -178,57 +171,59 @@ class Continuous1DNN_dweight(nn.Module):
         self.lstm_layer = lstm_layer
         self.lstm_input_units = lstm_input_units
         self.lstm_units = lstm_units
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_att_h = cb_att_h
         self.cb_fc_layer = cb_fc_layer
         self.cb_fc_neurons = cb_fc_neurons
-        self.cb_fc_w0_layer = cb_fc_w0_layer
-        self.cb_fc_w0_neurons = cb_fc_w0_neurons
         self.conv_filters = conv_filters
         
-        cb_fc_w0 = []
-        cb_fc_w0.appen(nn.Linear(4, self.cb_fc_w0_neurons))
-        for l in range(self.cb_fc_layer - 2):
-            cb_fc_w0.append(nn.Linear(self.cb_fc_w0_neurons, self.cb_fc_w0_neurons))
-            cb_fc_w0.append(nn.ReLU())
-        cb_fc_w0.append(nn.Linear(self.cb_fc_w0_neurons, 1))
-        self.cb_fc_w0 = nn.Sequential(*cb_fc_w0)
+        # Attention block
+        if self.cb_emb_dim is not None:
+            cb_emb = []
+            cb_emb.append(nn.Linear(3, self.cb_emb_dim))
+            cb_emb.append(nn.LeakyReLU())
+            self.cb_emb = nn.Sequential(*cb_emb)
+            edim = self.cb_emb_dim
+            
+        else:
+            edim = 3
         
+        self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
+                                                   batch_first=True, vdim=1)
         
-        self.w0gamma = nn.Softmax(dim = 1)
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(5, self.cb_fc_neurons))
-        cb_fc.append(nn.ReLU())
+        cb_fc.append(nn.Linear(edim + 4, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
         for l in range(self.cb_fc_layer - 2):
             cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
-            cb_fc.append(nn.ReLU())
+            cb_fc.append(nn.LeakyReLU())
         
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
-        #cb_fc.append(nn.ReLU())
+        cb_fc.append(nn.Tanh())
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        #self.weather_wgamma = nn.Softmax(dim = -1)
-        
         conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(14, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
+        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
         conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
+        conv3d_stack.append(nn.LeakyReLU())
         
         for i in range(4):
             conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
             conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.ReLU())
+            conv3d_stack.append(nn.LeakyReLU())
             
         conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.ReLU())
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, self.lstm_input_units, (1,2,2)))
+        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters/2), (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
+        conv3d_stack.append(nn.LeakyReLU())
+        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), int(self.conv_filters/4), (1,2,2)))
+        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/4)))
+        conv3d_stack.append(nn.LeakyReLU())
+        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/4), self.lstm_input_units, (1,2,2)))
         conv3d_stack.append(nn.BatchNorm3d(self.lstm_input_units))
-        conv3d_stack.append(nn.ReLU())
+        conv3d_stack.append(nn.LeakyReLU())
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
         # Joint sequental block
@@ -238,7 +233,7 @@ class Continuous1DNN_dweight(nn.Module):
         
         fc = []
         fc.append(nn.Linear(self.lstm_units, 8))
-        fc.append(nn.ReLU())
+        fc.append(nn.LeakyReLU())
         fc.append(nn.Linear(8, 1))
         self.fc = nn.Sequential(*fc)
 
@@ -266,74 +261,60 @@ class Continuous1DNN_dweight(nn.Module):
             
         # Conditioning block
         
-        # target_sim = torch.matmul(x[:,:,:3], z.unsqueeze(-1))
-        # target_sim = target_sim/torch.sqrt(torch.tensor(z.shape[-1]))
-        target_dist = torch.cdist(x[:,:,:3], z.unsqueeze(1), p=2.0) # (B×P×M), (B×R×M), OUTPUT: (B×P×R)
-        target0_weight = torch.cat([x[:,:,:3], target_dist.unsqueeze(1)], dim = -1)
-        print(target0_weight[:,:5,:]) 
+        if self.cb_emb_dim is not None:
+            coords = torch.cat([x[:,:,:3],
+                                z.unsqueeze(1)], dim = 1)
+            
+            cb_emb = self.cb_emb(coords)
+            query = cb_emb[:,coords.shape[1]-1,:]
+            keys = cb_emb[:,:coords.shape[1]-1,:]
+            
+        else:
+            query = z
+            keys = x[:,:,:3]
         
-        target0_weight = self.cb_fc_w0(target0_weight)
-        target0_weight = target0_weight * x_mask # masking nan
-        print(target0_weight[:,:5]) 
-        target0_weight = self.w0gamma(target0_weight)
-        print(target0_weight[:,:5]) 
+        attn_output, attn_output_weights = self.multihead_att(query = query.unsqueeze(1), #(N,L,E)
+                                                  key = keys,
+                                                  value = x[:,:,-1].unsqueeze(-1),
+                                                  key_padding_mask = ~x_mask, #(N,S)
+                                                   )
         
+        weights_cv = torch.std(attn_output_weights, dim = (1,2)) / torch.mean(attn_output_weights, dim = (1,2))
         
-        #target_sim = self.wgamma(target_sim.squeeze(-1))
-        #print(target_sim[:,:10])
-        #print("sum", torch.sum(target_sim, dim = 1))
+        target0 = torch.cat([z,
+                             attn_output.squeeze(1),
+                             weights_cv.unsqueeze(1)], dim = -1)
         
-        #print(target_sim[:,:10])
-        #print("sum", torch.sum(target_sim, dim = 1))
-        target_sim_sum = torch.sum(target0_weight, dim = 1)
-        print("sum", target_sim_sum)
-        target0 = torch.sum(x[:,:,-1] * target_sim_sum, dim = 1)
-        target0 = torch.cat([z, target0.unsqueeze(-1), target_sim_sum.unsqueeze(-1)], dim = -1)
-        print(target0)
         
         target0 = self.cb_fc(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
-        weather_sim = w[1] * z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
-        weather_sim = torch.sum(weather_sim, dim = -1)/torch.sqrt(torch.tensor(weather_sim.shape[-1]))
-        #weather_sim = self.weather_wgamma(weather_sim)
-        
-        weather_sim = weather_sim[:, None, None, : ,:].expand(-1, -1, w[0].shape[2], -1, -1 )
-        
-        
+        weather_dist = w[1] - z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_dist = weather_dist[:, None, :, : ,:].expand(-1, w[0].shape[2], -1, -1, -1 )
+
         weather = torch.cat([w[0],
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
-                             weather_sim], dim = 1)
+                             torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
         wb_td3dconv = self.conv3d_stack(weather)
         
         wb_td3dconv = wb_td3dconv.squeeze((3,4))
         wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
         
-        print(wb_td3dconv.shape)
-        
         # Sequential block
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
-        target0_h = nn.Tanh()(torch.movedim(target0_h, 0, 1))
-        
-        print(target0_h.shape) 
+        target0_h = torch.movedim(target0_h, 0, 1)
         
         target_ts = self.lstm_1(wb_td3dconv,
                                  (target0_h.contiguous(),
-                                  torch.zeros_like(target0_h))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                  target0_h.contiguous()))  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
-        target0_skip = target0.unsqueeze(1).expand([-1,self.timestep,-1])
-        target_ts_out = target_ts[0] + target0_skip
-        
-        target_ts_out = self.fc(target_ts_out)
+        target_ts_out = self.fc(target_ts[0])
         
         return target_ts_out.squeeze()
-    
-
 
 ###########################################
-
     
 if __name__ == "__main__":
     print("Loading data.json...")
@@ -362,7 +343,7 @@ if __name__ == "__main__":
 
     print("Loading Continuous1DNN...")
     timesteps = dict_files["timesteps"]
-    model = Continuous1DNN(timestep = dict_files["timesteps"],
+    model = Continuous1DNN_idw(timestep = dict_files["timesteps"],
                  cb_fc_layer = dict_files["cb_fc_layer"], #5,
                  cb_fc_neurons = dict_files["cb_fc_neurons"], # 32,
                  conv_filters = dict_files["conv_filters"], #32,

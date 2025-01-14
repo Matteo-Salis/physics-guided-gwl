@@ -66,8 +66,10 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
+print("Device: ", device)
 
 if dict_files["model"] == "Continuous1DNN_idw":
+    print("model idw")
     model = Continuous1DNN_idw(timestep = dict_files["timesteps"],
                  cb_fc_layer = dict_files["cb_fc_layer"],
                  cb_fc_neurons = dict_files["cb_fc_neurons"],
@@ -76,9 +78,20 @@ if dict_files["model"] == "Continuous1DNN_idw":
                  lstm_input_units = dict_files["lstm_input_units"],
                  lstm_units = dict_files["lstm_units"]
                  ).to(device)
-    
-#elif dict_files["model"] == "Continuous1DNN_idw":
 
+elif dict_files["model"] == "Continuous1DNN_att":
+    print("model att")
+    model = Continuous1DNN_att(timestep = dict_files["timesteps"],
+                 cb_emb_dim = dict_files["cb_emb_dim"],
+                 cb_att_h = dict_files["cb_att_h"],
+                 cb_fc_layer = dict_files["cb_fc_layer"],
+                 cb_fc_neurons = dict_files["cb_fc_neurons"],
+                 conv_filters = dict_files["conv_filters"],
+                 lstm_layer = dict_files["lstm_layer"],
+                 lstm_input_units = dict_files["lstm_input_units"],
+                 lstm_units = dict_files["lstm_units"]
+                 ).to(device)
+    
 # %%
 print("Total number of trainable parameters: " ,sum(p.numel() for p in model.parameters() if p.requires_grad))
 
