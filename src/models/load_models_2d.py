@@ -8,61 +8,10 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataloaders.load_2d_meteo_wtd import DiscreteDataset
 
-class Discrete2DNN(nn.Module):
-    def __init__(self, timesteps = 180, num_layers = 1):
-        super().__init__()
-        
-        self.timesteps = timesteps
-
-        # processing initial values
-        # self.conv1_init = nn.Conv2d(1, 1, 3) # ch_in, ch_out, kernel
-
-        # transpose conv (upsampling weather)
-        self.bn_1 = nn.BatchNorm3d(10)
-        self.conv1_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.bn_2 = nn.BatchNorm3d(10)
-        self.conv2_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.bn_3 = nn.BatchNorm3d(10)
-        self.conv3_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.bn_4 = nn.BatchNorm3d(10)
-        self.conv4_w = nn.ConvTranspose3d(10, 10, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.avg_pool_5 = nn.AdaptiveAvgPool3d((None, 114, 168))
-
-        self.conv_6 = nn.Conv3d(12, 1, 1, stride=1, dtype=torch.float32)
-
-
-    def forward(self, x):
-        """
-        return 
-            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
-        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
-        """
-        (x_init, x_weather) = x 
-
-        # processing initial values x
-        # x_init = F.relu(self.conv1_init(x_init))
-
-        # processing weaterh
-        x_weather = F.relu(self.bn_1(self.conv1_w(x_weather)))
-        x_weather = F.relu(self.bn_2(self.conv2_w(x_weather)))
-        x_weather = F.relu(self.bn_3(self.conv3_w(x_weather)))
-        x_weather = F.relu(self.bn_4(self.conv4_w(x_weather)))
-        x_weather = F.relu(self.avg_pool_5(x_weather))
-
-        # concat
-        # print(x_init.shape)
-        x_init = torch.unsqueeze(x_init, dim=2)
-        x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
-        x = torch.concat([x_init, x_weather], dim=1)
-        out = F.relu(self.conv_6(x))
-        
-        return out
-    
-
-############## MODEL 2 ##############
-class ConvTBlock(nn.Module):
+############## MODEL 1 ##############
+class ConvTransposeBlock(nn.Module):
     def __init__(self):
-        super(ConvTBlock, self).__init__()
+        super(ConvTransposeBlock, self).__init__()
         self.block = nn.Sequential(
             nn.ConvTranspose3d(10, 16, (1,3,3), stride=(1,3,3), dtype=torch.float32),
             nn.BatchNorm3d(16),
@@ -83,17 +32,28 @@ class ConvTBlock(nn.Module):
             nn.Conv3d(16, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(16),
             nn.ReLU()
-        )  
+        )
+        self.case_1d_block = nn.Sequential(
+            nn.Conv3d(16, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(8),
+            nn.ReLU(),
+            nn.Conv3d(8, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(1),
+            nn.ReLU(),
+        )
     
-    def forward(self, x):
-        return self.block(x)
+    def forward(self, x, case_1d = False):
+        if case_1d:
+            return self.case_1d_block(self.block(x))
+        else:
+            return self.block(x)
     
 
 class ConvBlock(nn.Module):
     def __init__(self):
         super(ConvBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.Conv3d(2, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.Conv3d(3, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(8),
             nn.ReLU(),
             nn.Conv3d(8, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
@@ -104,34 +64,55 @@ class ConvBlock(nn.Module):
             nn.ReLU(),
             nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(16),
+            nn.ReLU(),                
+        )
+        self.case_1d_block = nn.Sequential(
+            nn.Conv3d(16, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(8),
             nn.ReLU(),
-            nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
-        )  
+            nn.Conv3d(8, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(1),
+            nn.ReLU(),
+        )
     
-    def forward(self, x):
-        return self.block(x)
+    def forward(self, x, case_1d = False):
+        if case_1d:
+            return self.case_1d_block(self.block(x))
+        else:
+            return self.block(x)
     
 
-class ConvBlockF(nn.Module):
+class ConvBlockFinal(nn.Module):
     def __init__(self):
-        super(ConvBlockF, self).__init__()
+        super(ConvBlockFinal, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose3d(32, 32, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.Conv3d(32, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.AdaptiveMaxPool3d((None, 114, 168)),
             nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
             nn.BatchNorm3d(16),
             nn.ReLU(),
             nn.Conv3d(16, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-        )  
+        )
+        self.case_1d_block = nn.Sequential(
+            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(2),
+            nn.ReLU(),
+            nn.Conv3d(2, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(1),
+            nn.ReLU(),
+            nn.Conv3d(1, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+        ) 
     
-    def forward(self, x):
-        return self.block(x)
+    def forward(self, x, case_1d = False):
+        if case_1d:
+            return self.case_1d_block(x)
+        else:
+            return self.block(x)
     
     
 
-class Discrete2DMidConcatNN(nn.Module):
+class Discrete2DConcat16(nn.Module):
     def __init__(self, timesteps = 180, num_layers = 1):
         super().__init__()
         
@@ -139,14 +120,12 @@ class Discrete2DMidConcatNN(nn.Module):
 
         # processing initial values
         self.m_conv_1 = ConvBlock()
-        self.m_avg_pool_2 = nn.AdaptiveMaxPool3d((None, 72, 96))
 
         # transpose conv (upsampling weather)
-        self.m_conv_tr_1 = ConvTBlock()
-        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 72, 96))
+        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
 
-        self.m_conv_f_3 = ConvBlockF()
-
+        self.m_conv_f_3 = ConvBlockFinal()
 
 
     def forward(self, x):
@@ -155,12 +134,14 @@ class Discrete2DMidConcatNN(nn.Module):
             lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
         x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
         """
-        (x_init, x_weather) = x 
+        (x_init, dtm, x_weather) = x 
 
         # processing initial values x
+        dtm = torch.unsqueeze(dtm, dim=0)
+        dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
+        x_init = torch.concat([x_init, dtm], dim=1)
         x_init = torch.unsqueeze(x_init, dim=2)
         x_init = self.m_conv_1(x_init)
-        x_init = self.m_avg_pool_2(x_init)
 
         # processing weaterh
         x_weather = self.m_conv_tr_1(x_weather)
@@ -173,8 +154,198 @@ class Discrete2DMidConcatNN(nn.Module):
         out = self.m_conv_f_3(concat)
         
         return out
-###########################################
+    
+############## MODEL 2 ##############
+class Discrete2DConcat1(nn.Module):
+    def __init__(self, timesteps = 180, num_layers = 1):
+        super().__init__()
+        
+        self.timesteps = timesteps
 
+        # processing initial values
+        self.m_conv_1 = ConvBlock()
+
+        # transpose conv (upsampling weather)
+        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
+
+        self.m_conv_f_3 = ConvBlockFinal()
+
+
+    def forward(self, x):
+        """
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        (x_init, dtm, x_weather) = x 
+
+        # processing initial values x
+        dtm = torch.unsqueeze(dtm, dim=0)
+        dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
+        x_init = torch.concat([x_init, dtm], dim=1)
+        x_init = torch.unsqueeze(x_init, dim=2)
+        x_init = self.m_conv_1(x_init, case_1d = True)
+
+        # processing weaterh
+        x_weather = self.m_conv_tr_1(x_weather, case_1d = True)
+        x_weather = self.m_avg_pool_2b(x_weather)
+
+        # concat
+        x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
+        concat = torch.concat([x_init, x_weather], dim=1)
+
+        out = self.m_conv_f_3(concat, case_1d = True)
+        
+        return out
+
+############## MODEL 3 ##############
+
+class Discrete2DConcat1Sum(nn.Module):
+    def __init__(self, timesteps = 180, num_layers = 1):
+        super().__init__()
+        
+        self.timesteps = timesteps
+
+        # processing initial values
+        self.m_conv_1 = ConvBlock()
+
+        # transpose conv (upsampling weather)
+        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
+
+        self.m_conv_f_3 = ConvBlockFinal()
+
+
+    def forward(self, x):
+        """
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        (x_init, dtm, x_weather) = x 
+
+        # processing initial values x
+        dtm = torch.unsqueeze(dtm, dim=0)
+        dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
+        x_init = torch.concat([x_init, dtm], dim=1)
+        x_init = torch.unsqueeze(x_init, dim=2)
+        x_init = self.m_conv_1(x_init, case_1d = True)
+
+        # processing weaterh
+        x_weather = self.m_conv_tr_1(x_weather, case_1d = True)
+        x_weather = self.m_avg_pool_2b(x_weather)
+
+        # concat
+        x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
+        sum = torch.add(x_init, x_weather)
+
+        # test
+        out = sum
+
+        # TODO: combine the sum with convolutions
+        # out = self.m_conv_f_3(sum, case_1d = True)
+        
+        return out
+
+############## MODEL 4 ##############
+
+class ConvBlockSuperRes(nn.Module):
+    def __init__(self):
+        super(ConvBlockSuperRes, self).__init__()
+        self.block = nn.Sequential(
+            nn.ConvTranspose3d(10, 16, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            nn.Conv3d(16, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.Conv3d(32, 64, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(64),
+            nn.ReLU(),
+
+            nn.ConvTranspose3d(64, 32, (1,3,3), stride=(1,3,3), dtype=torch.float32),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            nn.Conv3d(16, 10, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(10),
+            nn.ReLU()
+        )
+    
+    def forward(self, x):
+        return self.block(x)
+    
+
+class ConvBlockSumFinal(nn.Module):
+    def __init__(self):
+        super(ConvBlockSumFinal, self).__init__()
+        self.block = nn.Sequential(
+            nn.Conv3d(11, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(8),
+            nn.ReLU(),
+            nn.Conv3d(8, 4, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(4),
+            nn.ReLU(),
+            nn.Conv3d(4, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+        )
+    
+    def forward(self, x):
+        return self.block(x)
+
+
+class Discrete2DSumSuperRes(nn.Module):
+    def __init__(self, timesteps = 180, num_layers = 1):
+        super().__init__()
+        
+        self.timesteps = timesteps
+
+        # processing initial values
+        self.m_conv_1 = ConvBlock()
+
+        # transpose conv (upsampling weather)
+        self.m_conv_tr_1 = ConvBlockSuperRes()
+        self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
+
+        self.m_conv_f_3 = ConvBlockSumFinal()
+
+
+    def forward(self, x, training = True):
+        """
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        (x_init, dtm, x_weather) = x 
+
+        # processing initial values x
+        dtm = torch.unsqueeze(dtm, dim=0)
+        dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
+        x_init = torch.concat([x_init, dtm], dim=1)
+        x_init = torch.unsqueeze(x_init, dim=2)
+        x_init = self.m_conv_1(x_init, case_1d = True)
+
+        # processing weaterh
+        x_weather = self.m_conv_tr_1(x_weather)
+        x_weather = self.m_avg_pool_2b(x_weather)
+
+        # concat
+        x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
+
+        concat = torch.concat([x_init, x_weather], dim=1)
+
+        out = self.m_conv_f_3(concat)
+
+        out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,4,:,:,:] # adding prain
+        out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,9,:,:,:] # adding snowmelt
+        out[:,0,:,:,:] = out[:,0,:,:,:] - x_weather[:,6,:,:,:] # substracting et
+  
+        if training:
+            return out, x_weather
+        
+        return out
 
 ###########################################
 
