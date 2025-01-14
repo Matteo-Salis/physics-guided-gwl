@@ -28,7 +28,7 @@ def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "
                     Y = Y[0]
 
                     if c0_superres_loss:
-                        loss_super_res = loss_super_res(weather_hd, weather.to(device))
+                        loss_super_res = super_res_loss(weather_hd, weather.to(device))
                         wandb.log({"test_loss_super_res" : loss_super_res})
                         loss = loss + c0_superres_loss * loss_super_res
 

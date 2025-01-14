@@ -95,7 +95,7 @@ def loss_positive_height(y, mean, std, device = "cuda"):
     loss = torch.sum( errors ** 2.0 ) / torch.numel(errors)
     return loss
 
-def loss_super_res(y_super_res, weather, device = "cuda"):
+def super_res_loss(y_super_res, weather, device = "cuda"):
     f = nn.AdaptiveMaxPool3d((None, weather.shape[-2], weather.shape[-1]))
     errors = f(y_super_res) - weather
     return torch.sum( errors ** 2.0 ) / torch.numel(errors)

@@ -31,7 +31,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
                 weather_hd = Y[1]
                 Y = Y[0]
                 if c0_superres_loss:
-                    loss_super_res = loss_super_res(weather_hd, weather.to(device))
+                    loss_super_res = super_res_loss(weather_hd, weather.to(device))
                     wandb.log({"train_loss_super_res" : loss_super_res})
                     loss = loss + c0_superres_loss * loss_super_res
 
