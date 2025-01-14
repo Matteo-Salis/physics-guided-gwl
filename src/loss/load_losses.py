@@ -1,11 +1,15 @@
 import torch
+import torch.nn as nn
 from scipy import signal
 
 
-def ConvLon(x, centered = False):
+def ConvLon(x, conv_type = "simple_gradient"):
+    # horizontal contribution
     conv = torch.Tensor([[-1,2,-1],[-1,2,-1],[-1,2,-1]] )
-    if centered:
+    if conv_type == "centered_contribution":
         conv = torch.Tensor([[-1,0,-1],[-1,6,-1],[-1,0,-1]] )
+    if conv_type == "simple_gradient":
+        conv = torch.Tensor([[0,0,0],[0,-1,1],[0,0,0]] )
 
     out = torch.Tensor(x.shape)
 
@@ -14,10 +18,13 @@ def ConvLon(x, centered = False):
             out[b,0,t,:,:] = torch.from_numpy(signal.convolve2d(x[b,0,t,:,:].cpu().detach().numpy(), conv, mode='same'))
     return out
 
-def ConvLat(x, centered = False):
+def ConvLat(x, conv_type = "simple_gradient"):
+    # vertical contribution
     conv = torch.Tensor([[-1,-1,-1],[2,2,2],[-1,-1,-1]] )
-    if centered:
+    if conv_type == "centered_contribution":
         conv = torch.Tensor([[-1,-1,-1],[0,6,0],[-1,-1,-1]] )
+    if conv_type == "simple_gradient":
+        conv = torch.Tensor([[0,1,0],[0,-1,0],[0,0,0]] )
 
     out = torch.Tensor(x.shape)
 
@@ -87,6 +94,11 @@ def loss_positive_height(y, mean, std, device = "cuda"):
 
     loss = torch.sum( errors ** 2.0 ) / torch.numel(errors)
     return loss
+
+def loss_super_res(y_super_res, weather, device = "cuda"):
+    f = nn.AdaptiveMaxPool3d((None, weather.shape[-2], weather.shape[-1]))
+    errors = f(y_super_res) - weather
+    return torch.sum( errors ** 2.0 ) / torch.numel(errors)
 
 def loss_masked(y_hat, y, device = "cuda"):
     predict = torch.unsqueeze(y[:,0,:,:,:], dim=1).to(device)
