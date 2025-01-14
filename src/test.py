@@ -3,7 +3,7 @@ from loss.load_losses import *
 import wandb
 import matplotlib.pyplot as plt
 
-def test_model(i, model, test_loader, wtd_mean, wtd_std, config, device = "cuda"):
+def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "cuda"):
     c1_loss = config["c1_loss"]
     c2_loss = config["c2_loss"]
     c3_loss = config["c3_loss"]
@@ -14,16 +14,28 @@ def test_model(i, model, test_loader, wtd_mean, wtd_std, config, device = "cuda"
             for batch_idx, (init_wtd, weather, pred_wtds) in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {i}")
 
-                X = (init_wtd.to(device), weather.to(device))
+                X = (init_wtd.to(device), dtm.to(device), weather.to(device))
                 # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                 Y = model(X)
-                # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                weather_hd = None
+
+                loss = 0
+
+                if type(Y) is tuple:
+                    weather_hd = Y[1]
+                    Y = Y[0]
+                    loss = loss + loss_super_res(weather_hd, weather.to(device))
+                    wandb.log({
+                        "loss_super_res" : loss
+                    })
+
+                # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)clea
 
                 loss_mask = loss_masked(Y,pred_wtds)
-                loss_pde = loss_pde = pde_grad_loss_darcy(Y)
-                loss_pos = loss_positive_height(Y,wtd_mean,wtd_std)
-                loss = c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
+                loss_pde = pde_grad_loss_darcy(Y)
+                loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
+                loss = loss + c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
                 print(f"Test loss: {loss}")
 
                 metrics = {

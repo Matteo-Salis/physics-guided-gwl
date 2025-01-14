@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from torchview import draw_graph
 
 
-def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, model_name, device = "cuda"):
+def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, config, model_name, device = "cuda"):
     c1_loss = config["c1_loss"]
     c2_loss = config["c2_loss"]
     c3_loss = config["c3_loss"]
@@ -18,16 +18,28 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, mo
 
             tepoch.set_description(f"Epoch {i}")
 
-            X = (init_wtd.to(device), weather.to(device))
+            X = (init_wtd.to(device), dtm.to(device), weather.to(device))
             # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
             Y = model(X)
+            weather_hd = None
+
+            loss = 0
+
+            if type(Y) is tuple:
+                weather_hd = Y[1]
+                Y = Y[0]
+                loss = loss + loss_super_res(weather_hd, weather.to(device))
+                wandb.log({
+                    "loss_super_res" : loss
+                })
+
             # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)clea
 
             loss_mask = loss_masked(Y,pred_wtds)
             loss_pde = pde_grad_loss_darcy(Y)
             loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
-            loss = c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
+            loss = loss + c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
             print(f"Train loss: {loss}")
 
             optimizer.zero_grad()
