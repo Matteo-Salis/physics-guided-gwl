@@ -80,7 +80,7 @@ def main(config):
         model.train()
         start_time = time.time()
 
-        train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, config, model_name, device)
+        train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, config, model_name, device)
 
         end_time = time.time()
         exec_time = end_time-start_time
@@ -93,7 +93,7 @@ def main(config):
         model.eval()
         start_time = time.time()
 
-        test_model(i, model, test_loader, wtd_mean, wtd_std, config, device)
+        test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device)
 
         end_time = time.time()
         exec_time = end_time-start_time
