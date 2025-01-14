@@ -61,7 +61,8 @@ class ContinuousDataset(Dataset):
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
         
         subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
-                                                       :]]
+                                                       :]] #
+        subset_wtd_df = subset_wtd_df.loc[subset_wtd_df["nan_mask"] == True, :] #compute only for not nan values
         subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
         
         target_mean = subset_wtd_df[self.target].mean()
@@ -110,6 +111,7 @@ class ContinuousDataset(Dataset):
         self.wtd_df["lon"] = (self.wtd_df["lon"] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
             
         self.dtm_roi = (self.dtm_roi - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
+        self.wtd_df["height"] = (self.wtd_df["height"] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         self.weather_dtm = (self.weather_dtm - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
@@ -156,30 +158,42 @@ class ContinuousDataset(Dataset):
         self.dates = self.wtd_df["date"].unique()
         self.sensor_id_list = self.wtd_df["sensor_id"].unique()
         
+        # Find sensors' heights 
+        dtm_values = [self.dtm_roi.sel(x = self.wtd_names.geometry.x.values[i],
+                             y = self.wtd_names.geometry.y.values[i],
+                             method = "nearest").values.squeeze() for i in range(len(self.sensor_id_list))]
+                                
+        self.wtd_names["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
         
         ### Merge csv and shp into a joint spatio temporal representation
         sensor_coord_x_list = []
         sensor_coord_y_list = []
+        sensor_height = []
 
         # Retrieve coordinates from id codes
         for sensor in self.sensor_id_list:
             coord_x = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.x.values[0]
             coord_y = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.y.values[0]
+            height = self.wtd_names["height"].loc[self.wtd_names["sensor_id"] == sensor].values[0]
             sensor_coord_x_list.append(coord_x)
             sensor_coord_y_list.append(coord_y)
-
+            sensor_height.append(height)
+            
         # Buil a dictionary of coordinates and id codes
         from_id_to_coord_x_dict = {self.sensor_id_list[i]: sensor_coord_x_list[i] for i in range(len(sensor_coord_x_list))}
         from_id_to_coord_y_dict = {self.sensor_id_list[i]: sensor_coord_y_list[i] for i in range(len(sensor_coord_y_list))}
+        from_id_height_dict = {self.sensor_id_list[i]: sensor_height[i] for i in range(len(sensor_height))}
 
         # Map id codes to coordinates for all rows in the original ds
         queries = list(self.wtd_df["sensor_id"].values)
         coordinates_x = itemgetter(*queries)(from_id_to_coord_x_dict)
         coordinates_y = itemgetter(*queries)(from_id_to_coord_y_dict)
+        heights = itemgetter(*queries)(from_id_height_dict)
 
         # insert new columns containing coordinates
         self.wtd_df["lon"] = coordinates_x
         self.wtd_df["lat"] = coordinates_y
+        self.wtd_df["height"] = heights
         
         self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
         
@@ -191,27 +205,13 @@ class ContinuousDataset(Dataset):
         self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
         
         if fill_value:
-            self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
+            #self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
             self.fill_value = fill_value
         else:
             self.fill_value = 0
         
     def compute_piezo_head(self):
-        heights = []
-        self.wtd_df["h"] = np.nan
-
-        for station_idx in range(len(self.sensor_id_list)):
-    
-                altitude_idx = self.dtm_roi.sel(x = self.wtd_names.geometry.x[station_idx],
-                y = self.wtd_names.geometry.y[station_idx],
-                method = "nearest").values
-    
-                self.wtd_df.loc[self.wtd_df.index.get_level_values(1) == self.sensor_id_list[station_idx], "h"] = altitude_idx - self.wtd_df.loc[self.wtd_df.index.get_level_values(1) == self.sensor_id_list[station_idx], "wtd"] 
-    
-                heights.append(altitude_idx)
-    
-    
-        self.wtd_names["height"] = np.array(heights)
+        self.wtd_df["h"] = self.wtd_df["height"] - self.wtd_df["wtd"]
         
     def get_iloc_from_date(self, date_max):
         row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) < date_max].iloc[-1].name)
@@ -231,28 +231,18 @@ class ContinuousDataset(Dataset):
         start_date = self.wtd_df.iloc[idx, :].name[0]
         sample_lat = self.wtd_df["lat"].iloc[idx]
         sample_lon = self.wtd_df["lon"].iloc[idx]
-        sample_dtm = self.dtm_roi.sel(x = self.wtd_names.loc[self.wtd_names["sensor_id"] == self.wtd_df.iloc[idx, :].name[1]].geometry.x.values[0],
-                                      y = self.wtd_names.loc[self.wtd_names["sensor_id"] == self.wtd_df.iloc[idx, :].name[1]].geometry.y.values[0],
-                                      method = "nearest").values  
+        sample_dtm = self.wtd_df["height"].iloc[idx]  
         
         end_date = start_date + np.timedelta64(self.timesteps, "D")
         
-        # print("start date: ", str(start_date))
-        # print("end date: ", str(end_date))
-        
         # Initial state WTD (t0) data
-        target_t0 = self.wtd_df[[self.target, "nan_mask", "lat", "lon"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
+        target_t0 = self.wtd_df[[self.target, "nan_mask", "lat", "lon", "height"]].loc[self.wtd_df.index.get_level_values(0) == start_date]
         target_t0_values = target_t0[self.target].values
         target_t0_mask = target_t0["nan_mask"].values
         target_t0_lat = target_t0["lat"].values
         target_t0_lon = target_t0["lon"].values
-        target_t0_sensor_id = target_t0.index.get_level_values(1).values
-        target_t0_dtm = np.array([self.dtm_roi.sel(
-            x = self.wtd_names.loc[self.wtd_names["sensor_id"] == target_t0_sensor_id[sensor]].geometry.x.values[0],
-            y = self.wtd_names.loc[self.wtd_names["sensor_id"] == target_t0_sensor_id[sensor]].geometry.y.values[0],
-            method = "nearest") for sensor in range(len(target_t0_lat))]).squeeze()
+        target_t0_dtm = target_t0["height"].values
         
-        #target_t0_mask = 1*~np.isnan(target_t0_values)
         X = [torch.from_numpy(target_t0_lat).to(torch.float32),
              torch.from_numpy(target_t0_lon).to(torch.float32),
              torch.from_numpy(target_t0_dtm).to(torch.float32),
