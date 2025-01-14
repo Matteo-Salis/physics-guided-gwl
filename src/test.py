@@ -4,9 +4,10 @@ import wandb
 import matplotlib.pyplot as plt
 
 def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "cuda"):
-    c1_loss = config["c1_loss"]
-    c2_loss = config["c2_loss"]
-    c3_loss = config["c3_loss"]
+    c0_superres_loss = config["c0_superres_loss"]
+    c1_masked_loss = config["c1_masked_loss"]
+    c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
+    c3_positive_loss = config["c3_positive_loss"]
     Y = None
     
     with torch.no_grad():
@@ -25,27 +26,29 @@ def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "
                 if type(Y) is tuple:
                     weather_hd = Y[1]
                     Y = Y[0]
-                    loss = loss + loss_super_res(weather_hd, weather.to(device))
-                    wandb.log({
-                        "loss_super_res" : loss
-                    })
 
-                # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)clea
+                    if c0_superres_loss:
+                        loss_super_res = loss_super_res(weather_hd, weather.to(device))
+                        wandb.log({"test_loss_super_res" : loss_super_res})
+                        loss = loss + c0_superres_loss * loss_super_res
 
-                loss_mask = loss_masked(Y,pred_wtds)
-                loss_pde = pde_grad_loss_darcy(Y)
-                loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
-                loss = loss + c1_loss * loss_mask + c2_loss * loss_pde + c3_loss * loss_pos
+                if c1_masked_loss:
+                    loss_mask = loss_masked(Y,pred_wtds)
+                    wandb.log({"test_loss_mask" : loss_mask})
+                    loss = loss + c1_masked_loss * loss_mask
+
+                if c2_pde_darcy_loss:
+                    loss_pde = pde_grad_loss_darcy(Y)
+                    wandb.log({"test_loss_pde" : loss_pde})
+                    loss = loss + c2_pde_darcy_loss * loss_pde
+
+                if c3_positive_loss:
+                    loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
+                    wandb.log({"test_loss_pos" : loss_pos})
+                    loss = loss + c3_positive_loss * loss_pos
+
+                wandb.log({"test_loss" : loss})
                 print(f"Test loss: {loss}")
-
-                metrics = {
-                    "test_loss_mask" : loss_mask,
-                    "test_loss_pde" : loss_pde,
-                    "test_loss_pos" : loss_pos,
-                    "test_loss" : loss
-                }
-
-                wandb.log(metrics)
                 
         with torch.no_grad():
             predict = (Y.cpu() * wtd_std) + wtd_mean
