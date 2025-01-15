@@ -10,6 +10,12 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
     c1_masked_loss = config["c1_masked_loss"]
     c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
     c3_positive_loss = config["c3_positive_loss"]
+
+    h_timesteps = int(config["timesteps"]/2)
+    timesteps = int(config["timesteps"])
+
+    plots_dir = config["wandb_dir_plots"]
+
     X = None
     Y = None
     
@@ -31,22 +37,22 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
                 weather_hd = Y[1]
                 Y = Y[0]
                 if c0_superres_loss:
-                    loss_super_res = super_res_loss(weather_hd, weather.to(device))
+                    loss_super_res = super_res_loss(weather_hd, weather.to(device), device)
                     wandb.log({"train_loss_super_res" : loss_super_res})
                     loss = loss + c0_superres_loss * loss_super_res
 
             if c1_masked_loss:
-                loss_mask = loss_masked(Y,pred_wtds)
+                loss_mask = loss_masked(Y, pred_wtds, device)
                 wandb.log({"train_loss_mask" : loss_mask})
                 loss = loss + c1_masked_loss * loss_mask
 
             if c2_pde_darcy_loss:
-                loss_pde = pde_grad_loss_darcy(Y)
+                loss_pde = pde_grad_loss_darcy(Y, device)
                 wandb.log({"train_loss_pde" : loss_pde})
                 loss = loss + c2_pde_darcy_loss * loss_pde
 
             if c3_positive_loss:
-                loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
+                loss_pos = loss_positive_height(Y, wtd_mean, wtd_std, device)
                 wandb.log({"train_loss_pos" : loss_pos})
                 loss = loss + c3_positive_loss * loss_pos
 
@@ -63,19 +69,29 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
             plt.figure(figsize = (10,10))
             plt.imshow(predict[0,0,0,:,:])
             plt.colorbar()
-            plt.savefig(f"predict_a{i}.png", bbox_inches = 'tight')
+            plt.savefig(f"{plots_dir}/predict_t0_{i}_{model_name}.png", bbox_inches = 'tight')
             wandb.log({
-                "train_prediction" :  wandb.Image(f"predict_a{i}.png", caption="prediction A on training")
+                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t0_{i}_{model_name}.png", caption="Prediction t0 training")
             })
 
         with torch.no_grad():
             predict = (Y.cpu() * wtd_std) + wtd_mean
             plt.figure(figsize = (10,10))
-            plt.imshow(predict[0,0,100,:,:])
+            plt.imshow(predict[0,0,h_timesteps,:,:])
             plt.colorbar()
-            plt.savefig(f"predict_b{i}.png", bbox_inches = 'tight')
+            plt.savefig(f"{plots_dir}/predict_t{h_timesteps}_{i}_{model_name}.png", bbox_inches = 'tight')
             wandb.log({
-                "train_prediction" :  wandb.Image(f"predict_b{i}.png", caption="prediction B on training")
+                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t{h_timesteps}_{i}_{model_name}.png", caption=f"Prediction t{h_timesteps} training")
+            })
+
+        with torch.no_grad():
+            predict = (Y.cpu() * wtd_std) + wtd_mean
+            plt.figure(figsize = (10,10))
+            plt.imshow(predict[0,0,-1,:,:])
+            plt.colorbar()
+            plt.savefig(f"{plots_dir}/predict_t{timesteps-1}_{i}_{model_name}.png", bbox_inches = 'tight')
+            wandb.log({
+                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t{timesteps-1}_{i}_{model_name}.png", caption=f"Prediction t{timesteps-1} training")
             })
 
         if i == 0:

@@ -52,7 +52,7 @@ def main(config):
 
     # load model
     device = (
-        "cuda"
+        config["cuda_device"]
         if torch.cuda.is_available()
         else "mps"
         if torch.backends.mps.is_available()
@@ -93,7 +93,7 @@ def main(config):
         model.eval()
         start_time = time.time()
 
-        test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device)
+        test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, model_name, device)
 
         end_time = time.time()
         exec_time = end_time-start_time
