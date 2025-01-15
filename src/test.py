@@ -3,11 +3,18 @@ from loss.load_losses import *
 import wandb
 import matplotlib.pyplot as plt
 
-def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "cuda"):
+def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, model_name, device = "cuda"):
     c0_superres_loss = config["c0_superres_loss"]
     c1_masked_loss = config["c1_masked_loss"]
     c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
     c3_positive_loss = config["c3_positive_loss"]
+
+    h_timesteps = int(config["timesteps"]/2)
+    timesteps = int(config["timesteps"])
+
+    plots_dir = config["wandb_dir_plots"]
+
+    X = None
     Y = None
     
     with torch.no_grad():
@@ -28,46 +35,57 @@ def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, device = "
                     Y = Y[0]
 
                     if c0_superres_loss:
-                        loss_super_res = super_res_loss(weather_hd, weather.to(device))
+                        loss_super_res = super_res_loss(weather_hd, weather.to(device), device)
                         wandb.log({"test_loss_super_res" : loss_super_res})
                         loss = loss + c0_superres_loss * loss_super_res
 
                 if c1_masked_loss:
-                    loss_mask = loss_masked(Y,pred_wtds)
+                    loss_mask = loss_masked(Y, pred_wtds, device)
                     wandb.log({"test_loss_mask" : loss_mask})
                     loss = loss + c1_masked_loss * loss_mask
 
                 if c2_pde_darcy_loss:
-                    loss_pde = pde_grad_loss_darcy(Y)
+                    loss_pde = pde_grad_loss_darcy(Y, device)
                     wandb.log({"test_loss_pde" : loss_pde})
                     loss = loss + c2_pde_darcy_loss * loss_pde
 
                 if c3_positive_loss:
-                    loss_pos = loss_positive_height(Y, wtd_mean, wtd_std)
+                    loss_pos = loss_positive_height(Y, wtd_mean, wtd_std, device)
                     wandb.log({"test_loss_pos" : loss_pos})
                     loss = loss + c3_positive_loss * loss_pos
 
                 wandb.log({"test_loss" : loss})
                 print(f"Test loss: {loss}")
                 
+        # plots on wandb
         with torch.no_grad():
             predict = (Y.cpu() * wtd_std) + wtd_mean
             plt.figure(figsize = (10,10))
             plt.imshow(predict[0,0,0,:,:])
             plt.colorbar()
-            plt.savefig(f"predict_test_a{i}.png", bbox_inches = 'tight')
+            plt.savefig(f"{plots_dir}/predict_test_t0_{i}_{model_name}.png", bbox_inches = 'tight')
             wandb.log({
-                "test_prediction" :  wandb.Image(f"predict_test_a{i}.png", caption="prediction A on test")
+                "test_prediction" :  wandb.Image(f"{plots_dir}/predict_test_t0_{i}_{model_name}.png", caption="Prediction t0 test")
             })
 
         with torch.no_grad():
             predict = (Y.cpu() * wtd_std) + wtd_mean
             plt.figure(figsize = (10,10))
-            plt.imshow(predict[0,0,100,:,:])
+            plt.imshow(predict[0,0,h_timesteps,:,:])
             plt.colorbar()
-            plt.savefig(f"predict_test_b{i}.png", bbox_inches = 'tight')
+            plt.savefig(f"{plots_dir}/predict_test_t{h_timesteps}_{i}_{model_name}.png", bbox_inches = 'tight')
             wandb.log({
-                "test_prediction" :  wandb.Image(f"predict_test_b{i}.png", caption="prediction B on test")
+                "test_prediction" :  wandb.Image(f"{plots_dir}/predict_test_t{h_timesteps}_{i}_{model_name}.png", caption=f"Prediction t{h_timesteps} test")
+            })
+
+        with torch.no_grad():
+            predict = (Y.cpu() * wtd_std) + wtd_mean
+            plt.figure(figsize = (10,10))
+            plt.imshow(predict[0,0,-1,:,:])
+            plt.colorbar()
+            plt.savefig(f"{plots_dir}/predict_test_t{timesteps-1}_{i}_{model_name}.png", bbox_inches = 'tight')
+            wandb.log({
+                "test_prediction" :  wandb.Image(f"{plots_dir}/predict_test_t{timesteps-1}_{i}_{model_name}.png", caption=f"Prediction t{timesteps-1} test")
             })
 
             
