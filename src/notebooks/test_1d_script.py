@@ -34,12 +34,13 @@ from torchview import draw_graph
 
 from models.load_models_1d import *
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
+from plot.prediction_plot_1d import *
 
 # %% [markdown]
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_att_light_2.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -60,7 +61,7 @@ print(f"Length of the dataset: {ds.__len__()}")
 
 # %%
 device = (
-    "cuda:" + str(dict_files["gpu_idx"])
+    str(dict_files["cuda_device"])
     if torch.cuda.is_available()
     else "mps"
     if torch.backends.mps.is_available()
@@ -140,20 +141,7 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
                                             sampler=test_sampler)
 
 # %%
-def plot_predictions(x, y, y_hat, save_dir = None, title = None):
-    fig, ax = plt.subplots()
-    fig.suptitle("Loss vs iterations")
-    ax.plot(x, y_hat, label = "predicted")
-    ax.plot(x, y, label = "true")
-    ax.legend()
-    
-    if title is not None:
-        ax.set_title(title)
-        
-    if save_dir:
-        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
-    
-    return fig
+
 
 # %%
 def masked_mse(y_hat, y, mask):
@@ -233,10 +221,34 @@ for i in range(max_epochs):
     lat_plot = round(float(z[3,0].detach().cpu()), 4)
     lon_plot = round(float(z[3,1].detach().cpu()), 4)
     dtm_plot = round(float(z[3,2].detach().cpu()))
-    wandb.log({"training_pred":wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
-                                                 y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
-                                        title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
-               }, )
+    wandb.log({"training_pred - R":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2008-01-01"),
+                                                             sensor_number = 6,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"training_pred - V":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2008-01-01"),
+                                                             sensor_number = 15,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"training_pred - R":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2012-06-01"),
+                                                             sensor_number = 6,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"training_pred - V":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2012-06-01"),
+                                                             sensor_number = 15,
+                                                             model = model,
+                                                             device = device))})
+    
+    # wandb.log({"training_pred":wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
+    #                                              y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
+    #                                     title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
+    #            })
 
     model_name = 'model_{}'.format(timestamp)    
     model_dir = dict_files["save_model_dir"]
@@ -283,10 +295,29 @@ for i in range(max_epochs):
     lat_plot = round(float(z[3,0].detach().cpu()), 4)
     lon_plot = round(float(z[3,1].detach().cpu()), 4)
     dtm_plot = round(float(z[3,2].detach().cpu()))
-    wandb.log({"test_pred": wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
-                                                         y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
-                                        title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
-               })
+    wandb.log({"test_pred - R":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2018-06-01"),
+                                                             sensor_number = 6,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"test_pred - V":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2018-06-01"),
+                                                             sensor_number = 15,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"test_pred - R":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2020-01-01"),
+                                                             sensor_number = 6,
+                                                             model = model,
+                                                             device = device))})
+    
+    wandb.log({"test_pred - V":wandb.Image(plot_one_instance(ds = ds,
+                                                             date_t0 = np.datetime64("2020-01-01"),
+                                                             sensor_number = 15,
+                                                             model = model,
+                                                             device = device))})
 
 model_graph = draw_graph(model, input_data=(x, z, w, x_mask), device=device)
 model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_dir}/")
