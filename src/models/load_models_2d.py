@@ -82,26 +82,60 @@ class ConvBlock(nn.Module):
             return self.block(x)
     
 
+# class ConvBlockFinal(nn.Module):
+#     def __init__(self):
+#         super(ConvBlockFinal, self).__init__()
+#         self.block = nn.Sequential(
+#             nn.Conv3d(32, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#             nn.BatchNorm3d(32),
+#             nn.ReLU(),
+#             nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#             nn.BatchNorm3d(16),
+#             nn.ReLU(),
+#             nn.Conv3d(16, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#         )
+#         self.case_1d_block = nn.Sequential(
+#             nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#             nn.BatchNorm3d(2),
+#             nn.ReLU(),
+#             nn.Conv3d(2, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#             nn.BatchNorm3d(1),
+#             nn.ReLU(),
+#             nn.Conv3d(1, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+#         ) 
+    
+#     def forward(self, x, case_1d = False):
+#         if case_1d:
+#             return self.case_1d_block(x)
+#         else:
+#             return self.block(x)
+        
 class ConvBlockFinal(nn.Module):
     def __init__(self):
         super(ConvBlockFinal, self).__init__()
         self.block = nn.Sequential(
-            nn.Conv3d(32, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(32, 32, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
             nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(32, 16, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
             nn.BatchNorm3d(16),
             nn.ReLU(),
-            nn.Conv3d(16, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(16, 1, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
         )
         self.case_1d_block = nn.Sequential(
-            nn.Conv3d(2, 2, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(2, 2, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
             nn.BatchNorm3d(2),
             nn.ReLU(),
-            nn.Conv3d(2, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(2, 1, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
             nn.BatchNorm3d(1),
             nn.ReLU(),
-            nn.Conv3d(1, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.ZeroPad3d((0,0,0,0,2,0)),
+            nn.Conv3d(1, 1, (3,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
         ) 
     
     def forward(self, x, case_1d = False):
@@ -338,9 +372,9 @@ class Discrete2DSumSuperRes(nn.Module):
 
         out = self.m_conv_f_3(concat)
 
-        out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,4,:,:,:] # adding prain
-        out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,9,:,:,:] # adding snowmelt
-        out[:,0,:,:,:] = out[:,0,:,:,:] - x_weather[:,6,:,:,:] # substracting et
+        # out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,4,:,:,:] # adding prain
+        # out[:,0,:,:,:] = out[:,0,:,:,:] + x_weather[:,9,:,:,:] # adding snowmelt
+        # out[:,0,:,:,:] = out[:,0,:,:,:] - x_weather[:,6,:,:,:] # substracting et
   
         if training:
             return out, x_weather
