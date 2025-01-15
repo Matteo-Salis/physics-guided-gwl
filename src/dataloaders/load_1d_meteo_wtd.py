@@ -157,6 +157,10 @@ class ContinuousDataset(Dataset):
         # Define attributes about dates and coordinates
         self.dates = self.wtd_df["date"].unique()
         self.sensor_id_list = self.wtd_df["sensor_id"].unique()
+        # use same sensors order
+        self.wtd_names["sensor_id"] = pd.Categorical(self.wtd_names["sensor_id"], ordered=True, categories=self.sensor_id_list)
+        self.wtd_names = self.wtd_names.sort_values('sensor_id')
+        self.wtd_names = self.wtd_names.reset_index(drop=True)
         
         # Find sensors' heights 
         dtm_values = [self.dtm_roi.sel(x = self.wtd_names.geometry.x.values[i],
@@ -214,6 +218,9 @@ class ContinuousDataset(Dataset):
         self.wtd_df["h"] = self.wtd_df["height"] - self.wtd_df["wtd"]
         
     def get_iloc_from_date(self, date_max):
+        """
+        return iloc of last sensor before date_max
+        """
         row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) < date_max].iloc[-1].name)
         return row_num
         

@@ -144,7 +144,7 @@ class Continuous1DNN_idw(nn.Module):
         
         target_ts = self.lstm_1(wb_td3dconv,
                                  (target0_h.contiguous(),
-                                  target0_h.contiguous())) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                  torch.zeros_like(target0_h).to(target0_h.device))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
         target_ts_out = self.fc(target_ts[0])
         
@@ -308,7 +308,7 @@ class Continuous1DNN_att(nn.Module):
         
         target_ts = self.lstm_1(wb_td3dconv,
                                  (target0_h.contiguous(),
-                                  target0_h.contiguous()))  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                  torch.zeros_like(target0_h).to(target0_h.device)))  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
         target_ts_out = self.fc(target_ts[0])
         
