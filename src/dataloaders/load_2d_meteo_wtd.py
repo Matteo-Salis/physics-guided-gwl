@@ -173,7 +173,7 @@ class DiscreteDataset(Dataset):
 
     def normalize_dataset(self):
         self.weather_xr = (self.weather_xr - self.weather_xr_mean) / self.weather_xr_std
-        self.wtd_numpy = (self.wtd_numpy - self.wtd_numpy_mean) / self.wtd_numpy_std
+        self.wtd_numpy[0] = (self.wtd_numpy[0] - self.wtd_numpy_mean) / self.wtd_numpy_std
         self.wtd_numpy = self.wtd_numpy.astype(np.float32)
 
     def __len__(self):
