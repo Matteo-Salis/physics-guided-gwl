@@ -40,7 +40,7 @@ from plot.prediction_plot_1d import *
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_att_light_2.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_att_3.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -217,39 +217,7 @@ for i in range(max_epochs):
     exec_time = end_time-start_time
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
-    # Log the plot
-    lat_plot = round(float(z[3,0].detach().cpu()), 4)
-    lon_plot = round(float(z[3,1].detach().cpu()), 4)
-    dtm_plot = round(float(z[3,2].detach().cpu()))
-    wandb.log({"training_pred - R":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2008-01-01"),
-                                                             sensor_number = 6,
-                                                             model = model,
-                                                             device = device))})
     
-    wandb.log({"training_pred - V":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2008-01-01"),
-                                                             sensor_number = 15,
-                                                             model = model,
-                                                             device = device))})
-    
-    wandb.log({"training_pred - R":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2012-06-01"),
-                                                             sensor_number = 6,
-                                                             model = model,
-                                                             device = device))})
-    
-    wandb.log({"training_pred - V":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2012-06-01"),
-                                                             sensor_number = 15,
-                                                             model = model,
-                                                             device = device))})
-    
-    # wandb.log({"training_pred":wandb.Image(plot_predictions(np.arange(0,dict_files["timesteps"]),
-    #                                              y[3,:].detach().cpu(), y_hat[3,:].detach().cpu(),
-    #                                     title = f"lat: {lat_plot} lon:{lon_plot} dtm:{dtm_plot}"))
-    #            })
-
     model_name = 'model_{}'.format(timestamp)    
     model_dir = dict_files["save_model_dir"]
     torch.save(model.state_dict(), f"{model_dir}/{model_name}.pt") 
@@ -291,33 +259,35 @@ for i in range(max_epochs):
     end_time = time.time()
     exec_time = end_time-start_time
     wandb.log({"test_epoch_exec_t" : exec_time})
-    # Log the plot
-    lat_plot = round(float(z[3,0].detach().cpu()), 4)
-    lon_plot = round(float(z[3,1].detach().cpu()), 4)
-    dtm_plot = round(float(z[3,2].detach().cpu()))
-    wandb.log({"test_pred - R":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2018-06-01"),
-                                                             sensor_number = 6,
+
+    # Plots
+    for date in dict_files["plot_dates"]:
+                # Time Series  
+                wandb.log({"training_pred - R":wandb.Image(plot_one_series(ds = ds,
+                                                             date_t0 = np.datetime64(date),
+                                                             sensor = 6,
                                                              model = model,
-                                                             device = device))})
+                                                             device = device,
+                                                             print_plot = False))})
     
-    wandb.log({"test_pred - V":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2018-06-01"),
-                                                             sensor_number = 15,
+                wandb.log({"training_pred - V":wandb.Image(plot_one_series(ds = ds,
+                                                             date_t0 = np.datetime64(date),
+                                                             sensor = 15,
                                                              model = model,
-                                                             device = device))})
+                                                             device = device,
+                                                             print_plot = False))})
+                
+                # Maps
+                sample_h, sample_wtd, dtm_denorm_downsampled = predict_map_points(ds, lon_point = 40, 
+                            sample_date = date,
+                            model = model, device = device)
+                
+                for tstep in dict_files["plot_tstep_map"]:
     
-    wandb.log({"test_pred - R":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2020-01-01"),
-                                                             sensor_number = 6,
-                                                             model = model,
-                                                             device = device))})
-    
-    wandb.log({"test_pred - V":wandb.Image(plot_one_instance(ds = ds,
-                                                             date_t0 = np.datetime64("2020-01-01"),
-                                                             sensor_number = 15,
-                                                             model = model,
-                                                             device = device))})
+                        wandb.log({f"train_pred_map_{date}-t{tstep}":wandb.Image(plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled, 
+                                    date, pred_timestep = tstep,
+                                    save_dir = None, 
+                                    print_plot = False))})
 
 model_graph = draw_graph(model, input_data=(x, z, w, x_mask), device=device)
 model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_dir}/")
