@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from loss.load_losses import *
+from utils.plots_2d import *
 import wandb
 import matplotlib.pyplot as plt
 from torchview import draw_graph
@@ -15,9 +16,12 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
     timesteps = int(config["timesteps"])
 
     plots_dir = config["wandb_dir_plots"]
+    model_name_short = model_name.split(".")[0]
 
-    X = None
-    Y = None
+    X = None # input
+    Y = None # ground truth
+    Y_hat = None # prediction
+
     
     with tqdm(train_loader, unit="batch") as tepoch:
             
@@ -28,31 +32,32 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
             X = (init_wtd.to(device), dtm.to(device), weather.to(device))
             # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-            Y = model(X)
+            Y = pred_wtds
+            Y_hat = model(X)
             weather_hd = None
 
             loss = 0
 
-            if type(Y) is tuple:
-                weather_hd = Y[1]
-                Y = Y[0]
+            if type(Y_hat) is tuple:
+                weather_hd = Y_hat[1]
+                Y_hat = Y_hat[0]
                 if c0_superres_loss:
                     loss_super_res = super_res_loss(weather_hd, weather.to(device), device)
                     wandb.log({"train_loss_super_res" : loss_super_res})
                     loss = loss + c0_superres_loss * loss_super_res
 
             if c1_masked_loss:
-                loss_mask = loss_masked(Y, pred_wtds, device)
+                loss_mask = loss_masked(Y_hat, Y, device)
                 wandb.log({"train_loss_mask" : loss_mask})
                 loss = loss + c1_masked_loss * loss_mask
 
             if c2_pde_darcy_loss:
-                loss_pde = pde_grad_loss_darcy(Y, device)
+                loss_pde = pde_grad_loss_darcy(Y_hat, device)
                 wandb.log({"train_loss_pde" : loss_pde})
                 loss = loss + c2_pde_darcy_loss * loss_pde
 
             if c3_positive_loss:
-                loss_pos = loss_positive_height(Y, wtd_mean, wtd_std, device)
+                loss_pos = loss_positive_height(Y_hat, wtd_mean, wtd_std, device)
                 wandb.log({"train_loss_pos" : loss_pos})
                 loss = loss + c3_positive_loss * loss_pos
 
@@ -62,44 +67,27 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
         
         # plots on wandb
         with torch.no_grad():
-            predict = (Y.cpu() * wtd_std) + wtd_mean
-            plt.figure(figsize = (10,10))
-            plt.imshow(predict[0,0,0,:,:])
-            plt.colorbar()
-            plt.savefig(f"{plots_dir}/predict_t0_{i}_{model_name}.png", bbox_inches = 'tight')
-            wandb.log({
-                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t0_{i}_{model_name}.png", caption="Prediction t0 training")
-            })
+            Y = (Y * wtd_std) + wtd_mean
+            Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
 
-        with torch.no_grad():
-            predict = (Y.cpu() * wtd_std) + wtd_mean
-            plt.figure(figsize = (10,10))
-            plt.imshow(predict[0,0,h_timesteps,:,:])
-            plt.colorbar()
-            plt.savefig(f"{plots_dir}/predict_t{h_timesteps}_{i}_{model_name}.png", bbox_inches = 'tight')
-            wandb.log({
-                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t{h_timesteps}_{i}_{model_name}.png", caption=f"Prediction t{h_timesteps} training")
-            })
+            plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Training random time series ep:{i}")
 
-        with torch.no_grad():
-            predict = (Y.cpu() * wtd_std) + wtd_mean
-            plt.figure(figsize = (10,10))
-            plt.imshow(predict[0,0,-1,:,:])
-            plt.colorbar()
-            plt.savefig(f"{plots_dir}/predict_t{timesteps-1}_{i}_{model_name}.png", bbox_inches = 'tight')
-            wandb.log({
-                "train_prediction" :  wandb.Image(f"{plots_dir}/predict_t{timesteps-1}_{i}_{model_name}.png", caption=f"Prediction t{timesteps-1} training")
-            })
+            plot_2d_prediction(Y_hat, i, plots_dir, 0, model_name_short, mode = "training")
+
+            plot_2d_prediction(Y_hat, i, plots_dir, h_timesteps, model_name_short, mode = "training")
+
+            plot_2d_prediction(Y_hat, i, plots_dir, timesteps-1, model_name_short, mode = "training")
 
         if i == 0:
             print("Saving plot of the model...")
             model_file_path = config['save_model_dir']
             model_graph = draw_graph(model, input_data=([X]), device=device)
-            model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_file_path}/")
-            model_arch = wandb.Image(f"{model_file_path}/{model_name}.png", caption="model's architecture")
+            model_graph.visual_graph.render(format='png', filename = model_name_short, directory= f"{model_file_path}/")
+            model_arch = wandb.Image(f"{model_file_path}/{model_name_short}.png", caption="model's architecture")
             wandb.log({"model_arch": model_arch})
 
 if __name__ == "__main__":

@@ -164,8 +164,8 @@ class DiscreteDataset(Dataset):
 
         self.wtd_numpy_mean = self.wtd_data_raserized["wtd"][:self.train_max_index].mean().values.astype(np.float32)
         self.wtd_numpy_std = self.wtd_data_raserized["wtd"][:self.train_max_index].std().values.astype(np.float32)
-        print(f"shape mean: {self.wtd_numpy_mean}")
-        print(f"shape std: {self.wtd_numpy_std}")
+        print(f"Value mean: {self.wtd_numpy_mean}")
+        print(f"Value std: {self.wtd_numpy_std}")
 
         self.wtd_data_raserized = self.wtd_data_raserized.fillna(self.wtd_numpy_mean)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
