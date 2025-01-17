@@ -40,7 +40,7 @@ from plot.prediction_plot_1d import *
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_att_3.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_att_light.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -69,9 +69,9 @@ device = (
 )
 print("Device: ", device)
 
-if dict_files["model"] == "Continuous1DNN_idw":
-    print("model idw")
-    model = Continuous1DNN_idw(timestep = dict_files["timesteps"],
+if dict_files["model"] == "SC_LSTM_idw":
+    print("model lstm idw")
+    model = SC_LSTM_idw(timestep = dict_files["timesteps"],
                  cb_fc_layer = dict_files["cb_fc_layer"],
                  cb_fc_neurons = dict_files["cb_fc_neurons"],
                  conv_filters = dict_files["conv_filters"],
@@ -80,9 +80,9 @@ if dict_files["model"] == "Continuous1DNN_idw":
                  lstm_units = dict_files["lstm_units"]
                  ).to(device)
 
-elif dict_files["model"] == "Continuous1DNN_att":
-    print("model att")
-    model = Continuous1DNN_att(timestep = dict_files["timesteps"],
+elif dict_files["model"] == "SC_LSTM_att":
+    print("model lstm att")
+    model = SC_LSTM_att(timestep = dict_files["timesteps"],
                  cb_emb_dim = dict_files["cb_emb_dim"],
                  cb_att_h = dict_files["cb_att_h"],
                  cb_fc_layer = dict_files["cb_fc_layer"],
@@ -91,6 +91,20 @@ elif dict_files["model"] == "Continuous1DNN_att":
                  lstm_layer = dict_files["lstm_layer"],
                  lstm_input_units = dict_files["lstm_input_units"],
                  lstm_units = dict_files["lstm_units"]
+                 ).to(device)
+    
+elif dict_files["model"] == "SC_CCNN_att":
+    print("model causal cnn att")
+    model = SC_CCNN_att(timestep = dict_files["timesteps"],
+                 cb_emb_dim = dict_files["cb_emb_dim"],
+                 cb_att_h = dict_files["cb_att_h"],
+                 cb_fc_layer = dict_files["cb_fc_layer"],
+                 cb_fc_neurons = dict_files["cb_fc_neurons"],
+                 conv_filters = dict_files["conv_filters"],
+                 ccnn_input_filters =  dict_files["ccnn_input_filters"],
+                 ccnn_kernel_size =  dict_files["ccnn_kernel_size"],
+                 ccnn_n_filters =  dict_files["ccnn_n_filters"],
+                 ccnn_n_layers =  dict_files["ccnn_n_layers"],
                  ).to(device)
     
 # %%
@@ -263,14 +277,14 @@ for i in range(max_epochs):
     # Plots
     for date in dict_files["plot_dates"]:
                 # Time Series  
-                wandb.log({"training_pred - R":wandb.Image(plot_one_series(ds = ds,
+                wandb.log({f"pred_series_{date} - R":wandb.Image(plot_one_series(ds = ds,
                                                              date_t0 = np.datetime64(date),
                                                              sensor = 6,
                                                              model = model,
                                                              device = device,
                                                              print_plot = False))})
     
-                wandb.log({"training_pred - V":wandb.Image(plot_one_series(ds = ds,
+                wandb.log({f"pred_series_{date} - V":wandb.Image(plot_one_series(ds = ds,
                                                              date_t0 = np.datetime64(date),
                                                              sensor = 15,
                                                              model = model,
@@ -284,7 +298,7 @@ for i in range(max_epochs):
                 
                 for tstep in dict_files["plot_tstep_map"]:
     
-                        wandb.log({f"train_pred_map_{date}-t{tstep}":wandb.Image(plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled, 
+                        wandb.log({f"pred_map_{date}-t{tstep}":wandb.Image(plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled, 
                                     date, pred_timestep = tstep,
                                     save_dir = None, 
                                     print_plot = False))})
