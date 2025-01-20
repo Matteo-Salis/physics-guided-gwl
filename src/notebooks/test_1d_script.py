@@ -37,14 +37,25 @@ from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 from plot.prediction_plot_1d import *
 
 # %% [markdown]
+
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_att_light.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_idw_light.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
     print(f"Read data.json: {dict_files}")
+
+# %%
+wandb.init(
+    entity="gsartor-unito",
+    project=dict_files["experiment_name"],
+    dir =dict_files["wandb_dir"],
+    config=dict_files,
+    mode="offline",
+    name=dict_files["run_name"]
+)
 
 # %% [markdown]
 # # Dataset class
@@ -107,6 +118,23 @@ elif dict_files["model"] == "SC_CCNN_att":
                  ccnn_n_layers =  dict_files["ccnn_n_layers"],
                  ).to(device)
     
+elif dict_files["model"] == "SC_CCNN_idw":
+    print("model causal cnn idw")
+    model = SC_CCNN_idw(timestep = dict_files["timesteps"],
+                 cb_emb_dim = dict_files["cb_emb_dim"],
+                 cb_att_h = dict_files["cb_att_h"],
+                 cb_fc_layer = dict_files["cb_fc_layer"],
+                 cb_fc_neurons = dict_files["cb_fc_neurons"],
+                 conv_filters = dict_files["conv_filters"],
+                 ccnn_input_filters =  dict_files["ccnn_input_filters"],
+                 ccnn_kernel_size =  dict_files["ccnn_kernel_size"],
+                 ccnn_n_filters =  dict_files["ccnn_n_filters"],
+                 ccnn_n_layers =  dict_files["ccnn_n_layers"],
+                 ).to(device)
+
+# Magic
+wandb.watch(model, log_freq=100)
+
 # %%
 print("Total number of trainable parameters: " ,sum(p.numel() for p in model.parameters() if p.requires_grad))
 
@@ -166,19 +194,6 @@ def masked_mse(y_hat, y, mask):
 
 # %%
 optimizer = torch.optim.Adam(model.parameters(), lr=dict_files["lr"])
-
-# %%
-wandb.init(
-    entity="gsartor-unito",
-    project=dict_files["experiment_name"],
-    dir =dict_files["wandb_dir"],
-    config=dict_files,
-    mode="offline",
-    name=dict_files["run_name"]
-)
-
-# Magic
-wandb.watch(model, log_freq=100)
 
 # %%
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
