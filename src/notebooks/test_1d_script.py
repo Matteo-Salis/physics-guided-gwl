@@ -7,6 +7,7 @@ from tqdm import tqdm
 import time
 from datetime import datetime
 import json
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -35,6 +36,7 @@ from torchview import draw_graph
 from models.load_models_1d import *
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 from loss.losses_1d import *
+from utils.feedforward import *
 from plot.prediction_plot_1d import *
 
 # %% [markdown]
@@ -42,7 +44,7 @@ from plot.prediction_plot_1d import *
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_att_light_3.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_PINNS_ccnn_att.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -194,70 +196,38 @@ model_name = 'model_{}'.format(timestamp)
 # Loss
 
 if dict_files["loss"] == "data":
-    def forward_and_loss(model, input, pred_true):
-        
-        pred_hat = model(x = input[0],
-                      z = input[1],
-                      w = input[2],
-                      x_mask = input[3])
-        
-        loss = masked_mse(pred_hat, pred_true)
-        loss_dict = {"loss_data": loss}
-        return loss_dict
+    forward_and_loss = feedforward_dloss
     
 elif dict_files["loss"] == "data+pde":
     
+    ## DA CAMBIARE VANNO NEL MODELLO!!!
     g = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_g"][0]]),
-                                            requires_grad=dict_files["pde_g"][1])
+                                            requires_grad=dict_files["pde_g"][1]).to(device)
     
     k_lat = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lat"][0]]),
-                                            requires_grad=dict_files["pde_k_lat"][1])
+                                            requires_grad=dict_files["pde_k_lat"][1]).to(device)
     
     k_lon = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lon"][0]]),
-                                            requires_grad=dict_files["pde_k_lon"][1])
+                                            requires_grad=dict_files["pde_k_lon"][1]).to(device)
     
     S_y = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_Sy"][0]]),
-                                            requires_grad=dict_files["pde_Sy"][1])
+                                            requires_grad=dict_files["pde_Sy"][1]).to(device)
     
-    def forward_and_loss(model, input, pred_true,
-            
-                g = g,
-                k_lat = k_lat,
-                k_lon = k_lon,
-                S_y = S_y):
-        
-        pred_hat = model(x = input[0],
-                      z = input[1],
-                      w = input[2],
-                      x_mask = input[3])
-        
-        loss_data = masked_mse(pred_hat, pred_true)
-        
-        # control point generation
-        
-        # take one point at random in the batch
-        sample_idx = torch.randint(0,input[0].shape[0],
-                                                 (1,))
-        
-        x = input[0][sample_idx,:,:].unsqueeze(0)
-        x_mask = input[4][sample_idx,:,:].unsqueeze(0)
-        
-        ### DA QUA
-        weather_coords = ds.get_weather_coords()
-        weather_dtm = ds.get_weather_dtm()
-        weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
-        weather_coords_batch = weather_coords.unsqueeze(0)
-
-        w = [ds[sample_idx][2].unsqueeze(0).to(device),
-           weather_coords_batch.to(device)]
+    lon_cpoints = dict_files["lon_cpoints"]
     
-        ################
-        loss_dict = {"loss_data": loss_data,
-                     "loss_pde": loss_pde}
-        return loss_dict
-        
-        
-        
+    coeff_loss_data = dict_files["coeff_loss_data"]
+    coeff_loss_pde = dict_files["coeff_loss_pde"]
+    
+    forward_and_loss = partial(feedforward_dloss_pdeloss, 
+                                        g = g,
+                                        k_lat = k_lat,
+                                        k_lon = k_lon,
+                                        S_y = S_y,
+                                        lon_cpoints = lon_cpoints,
+                                        ds = ds,
+                                        device = device,
+                                        coeff_loss_data = coeff_loss_data,
+                                        coeff_loss_pde = coeff_loss_pde)
 
 
 weather_coords = ds.get_weather_coords()
@@ -288,21 +258,24 @@ for i in range(max_epochs):
                 
                 optimizer.zero_grad()
                 
-                y_hat = model(x, z, w, x_mask)
+                #y_hat = model(x, z, w, x_mask)
+                loss_dict = forward_and_loss(model = model,
+                                             input = (x, z, w, x_mask),
+                                             groundtruth = (y, y_mask),
+                                             loss_prefix_name = "Train")
                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                loss = masked_mse(y_hat,
-                                  y,
-                                  y_mask)
+                # loss = masked_mse(y_hat,
+                #                   y,
+                #                   y_mask)
+                print({key:loss_dict[key].item() for key in list(loss_dict)})
                 
-                print(f"Train loss: {loss}")
-                
-                loss.backward()
+                loss_dict[list(loss_dict)[-1]].backward()
                 optimizer.step()
                 
-                metrics = {
-                    "train_loss" : loss
-                }
-                wandb.log(metrics)              
+                # metrics = {
+                #     "train_loss" : loss
+                # }
+                wandb.log({key:loss_dict[key].item() for key in list(loss_dict)})              
                 
     end_time = time.time()
     exec_time = end_time-start_time
@@ -332,19 +305,23 @@ for i in range(max_epochs):
                     y_mask = y_mask.to(device)
                     # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                    y_hat = model(x, z, w, x_mask)
+                    #y_hat = model(x, z, w, x_mask)
+                    loss_dict = forward_and_loss(model = model,
+                                             input = (x, z, w, x_mask),
+                                             groundtruth = (y, y_mask),
+                                             loss_prefix_name = "Test")
                     # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                    loss = masked_mse(y_hat,
-                                  y,
-                                  y_mask)
-                    print(f"Test loss: {loss}")
+                    # loss = masked_mse(y_hat,
+                    #               y,
+                    #               y_mask)
+                    print({key:loss_dict[key].item() for key in list(loss_dict)})
 
-                    metrics = {
-                        "test_loss" : loss
-                    }
+                    # metrics = {
+                    #     "test_loss" : loss
+                    # }
 
-                    wandb.log(metrics)
+                    wandb.log({key:loss_dict[key].item() for key in list(loss_dict)})
         
     end_time = time.time()
     exec_time = end_time-start_time
