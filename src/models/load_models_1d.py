@@ -322,6 +322,7 @@ class SC_LSTM_att(nn.Module):
 ############## MODEL 3 ############## 
 
 class CausalConv1d(torch.nn.Conv1d):
+    # inspired by https://github.com/pytorch/pytorch/issues/1333
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -437,55 +438,22 @@ class SC_CCNN_att(nn.Module):
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
         # Joint sequental block
-        #convolution_1d = []
-        #for c_layer in range(self.ccnn_n_layers):
-        self.convolution_1d_1 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_1 = nn.LeakyReLU()
-        conv1x1_1 = []
-        conv1x1_1.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_1.append(nn.LeakyReLU())
-        self.conv1x1_1 = nn.Sequential(*conv1x1_1)
         
-        self.convolution_1d_2 = CausalConv1d(self.ccnn_input_filters,
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"convolution_1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_2  = nn.LeakyReLU()
-        conv1x1_2 = []
-        conv1x1_2.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_2.append(nn.LeakyReLU())
-        self.conv1x1_2 = nn.Sequential(*conv1x1_2)
-        
-        self.convolution_1d_3 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_3 = nn.LeakyReLU()
-        conv1x1_3 = []
-        conv1x1_3.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_3.append(nn.LeakyReLU())
-        self.conv1x1_3 = nn.Sequential(*conv1x1_3)
-        
-        self.convolution_1d_4 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_4 = nn.LeakyReLU()
-        conv1x1_4 = []
-        conv1x1_4.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_4.append(nn.LeakyReLU())
-        self.conv1x1_4 = nn.Sequential(*conv1x1_4)
+                                               self.ccnn_kernel_size))
+            setattr(self, f"convolution_1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                              self.ccnn_input_filters,
+                                              1,
+                                              padding="valid"),
+                                    nn.LeakyReLU())
+                    )
         
         fc = []
         fc.append(nn.Linear(self.ccnn_input_filters, 8))
@@ -554,26 +522,13 @@ class SC_CCNN_att(nn.Module):
         
         wb_td3dconv = self.conv3d_stack(weather)
         
-        wb_td3dconv = wb_td3dconv.squeeze((3,4))
-        #wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
+        target_ts = wb_td3dconv.squeeze((3,4))
         
         # Sequential block
-        
-        target_ts = self.convolution_1d_1([wb_td3dconv, target0])
-        target_ts = self.convolution_1d_lrelu_1(target_ts)
-        target_ts = self.conv1x1_1(target_ts)
-        
-        target_ts = self.convolution_1d_2([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_2(target_ts)
-        target_ts = self.conv1x1_2(target_ts)
-        
-        target_ts = self.convolution_1d_3([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_3(target_ts)
-        target_ts = self.conv1x1_3(target_ts)
-        
-        target_ts = self.convolution_1d_4([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_4(target_ts)
-        target_ts = self.conv1x1_4(target_ts)
+        for cl in range(self.ccnn_n_layers):
+            target_ts = getattr(self, f"convolution_1d_{cl}")([target_ts, target0])
+            target_ts = getattr(self, f"convolution_1d_lrelu_{cl}")(target_ts)
+            target_ts = getattr(self, f"conv1x1_{cl}")(target_ts)
         
         target_ts = torch.moveaxis(target_ts, -1, 1)
         target_ts_out = self.fc(target_ts)
@@ -685,55 +640,21 @@ class SC_CCNN_idw(nn.Module):
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
         # Joint sequental block
-        #convolution_1d = []
-        #for c_layer in range(self.ccnn_n_layers):
-        self.convolution_1d_1 = CausalConv1d(self.ccnn_input_filters,
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"convolution_1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_1 = nn.LeakyReLU()
-        conv1x1_1 = []
-        conv1x1_1.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_1.append(nn.LeakyReLU())
-        self.conv1x1_1 = nn.Sequential(*conv1x1_1)
-        
-        self.convolution_1d_2 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_2  = nn.LeakyReLU()
-        conv1x1_2 = []
-        conv1x1_2.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_2.append(nn.LeakyReLU())
-        self.conv1x1_2 = nn.Sequential(*conv1x1_2)
-        
-        self.convolution_1d_3 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_3 = nn.LeakyReLU()
-        conv1x1_3 = []
-        conv1x1_3.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_3.append(nn.LeakyReLU())
-        self.conv1x1_3 = nn.Sequential(*conv1x1_3)
-        
-        self.convolution_1d_4 = CausalConv1d(self.ccnn_input_filters,
-                                               self.ccnn_n_filters,
-                                               self.ccnn_kernel_size)
-        self.convolution_1d_lrelu_4 = nn.LeakyReLU()
-        conv1x1_4 = []
-        conv1x1_4.append(nn.Conv1d(self.ccnn_n_filters,
-                                   self.ccnn_input_filters,
-                                   1,
-                                   padding="valid"))
-        conv1x1_4.append(nn.LeakyReLU())
-        self.conv1x1_4 = nn.Sequential(*conv1x1_4)
+                                               self.ccnn_kernel_size))
+            setattr(self, f"convolution_1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                              self.ccnn_input_filters,
+                                              1,
+                                              padding="valid"),
+                                    nn.LeakyReLU())
+                    )
         
         fc = []
         fc.append(nn.Linear(self.ccnn_input_filters, 8))
@@ -802,26 +723,13 @@ class SC_CCNN_idw(nn.Module):
         
         wb_td3dconv = self.conv3d_stack(weather)
         
-        wb_td3dconv = wb_td3dconv.squeeze((3,4))
-        #wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
+        target_ts = wb_td3dconv.squeeze((3,4))
         
         # Sequential block
-        
-        target_ts = self.convolution_1d_1([wb_td3dconv, target0])
-        target_ts = self.convolution_1d_lrelu_1(target_ts)
-        target_ts = self.conv1x1_1(target_ts)
-        
-        target_ts = self.convolution_1d_2([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_2(target_ts)
-        target_ts = self.conv1x1_2(target_ts)
-        
-        target_ts = self.convolution_1d_3([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_3(target_ts)
-        target_ts = self.conv1x1_3(target_ts)
-        
-        target_ts = self.convolution_1d_4([target_ts, target0])
-        target_ts = self.convolution_1d_lrelu_4(target_ts)
-        target_ts = self.conv1x1_4(target_ts)
+        for cl in range(self.ccnn_n_layers):
+            target_ts = getattr(self, f"convolution_1d_{cl}")([target_ts, target0])
+            target_ts = getattr(self, f"convolution_1d_lrelu_{cl}")(target_ts)
+            target_ts = getattr(self, f"conv1x1_{cl}")(target_ts)
         
         target_ts = torch.moveaxis(target_ts, -1, 1)
         target_ts_out = self.fc(target_ts)

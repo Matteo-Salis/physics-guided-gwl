@@ -34,6 +34,7 @@ from torchview import draw_graph
 
 from models.load_models_1d import *
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
+from loss.losses_1d import *
 from plot.prediction_plot_1d import *
 
 # %% [markdown]
@@ -41,7 +42,7 @@ from plot.prediction_plot_1d import *
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_idw_light.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_ccnn_att_light_3.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -182,21 +183,82 @@ test_loader = torch.utils.data.DataLoader(dataset=ds,
                                             batch_size=batch_size,
                                             sampler=test_sampler)
 
-# %%
-
-
-# %%
-def masked_mse(y_hat, y, mask):
-    # y_hat = y_hat.to(device)
-    # y = y.to(device)
-    # mask = mask.to(device)
-    return torch.sum(((y_hat[mask]-y[mask]))**2.0)  / torch.sum(mask)
 
 # %%
 optimizer = torch.optim.Adam(model.parameters(), lr=dict_files["lr"])
 
 # %%
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+model_name = 'model_{}'.format(timestamp) 
+
+# Loss
+
+if dict_files["loss"] == "data":
+    def forward_and_loss(model, input, pred_true):
+        
+        pred_hat = model(x = input[0],
+                      z = input[1],
+                      w = input[2],
+                      x_mask = input[3])
+        
+        loss = masked_mse(pred_hat, pred_true)
+        loss_dict = {"loss_data": loss}
+        return loss_dict
+    
+elif dict_files["loss"] == "data+pde":
+    
+    g = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_g"][0]]),
+                                            requires_grad=dict_files["pde_g"][1])
+    
+    k_lat = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lat"][0]]),
+                                            requires_grad=dict_files["pde_k_lat"][1])
+    
+    k_lon = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lon"][0]]),
+                                            requires_grad=dict_files["pde_k_lon"][1])
+    
+    S_y = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_Sy"][0]]),
+                                            requires_grad=dict_files["pde_Sy"][1])
+    
+    def forward_and_loss(model, input, pred_true,
+            
+                g = g,
+                k_lat = k_lat,
+                k_lon = k_lon,
+                S_y = S_y):
+        
+        pred_hat = model(x = input[0],
+                      z = input[1],
+                      w = input[2],
+                      x_mask = input[3])
+        
+        loss_data = masked_mse(pred_hat, pred_true)
+        
+        # control point generation
+        
+        # take one point at random in the batch
+        sample_idx = torch.randint(0,input[0].shape[0],
+                                                 (1,))
+        
+        x = input[0][sample_idx,:,:].unsqueeze(0)
+        x_mask = input[4][sample_idx,:,:].unsqueeze(0)
+        
+        ### DA QUA
+        weather_coords = ds.get_weather_coords()
+        weather_dtm = ds.get_weather_dtm()
+        weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
+        weather_coords_batch = weather_coords.unsqueeze(0)
+
+        w = [ds[sample_idx][2].unsqueeze(0).to(device),
+           weather_coords_batch.to(device)]
+    
+        ################
+        loss_dict = {"loss_data": loss_data,
+                     "loss_pde": loss_pde}
+        return loss_dict
+        
+        
+        
+
 
 weather_coords = ds.get_weather_coords()
 weather_dtm = ds.get_weather_dtm()
@@ -247,7 +309,6 @@ for i in range(max_epochs):
 
     wandb.log({"tr_epoch_exec_t" : exec_time})
     
-    model_name = 'model_{}'.format(timestamp)    
     model_dir = dict_files["save_model_dir"]
     torch.save(model.state_dict(), f"{model_dir}/{model_name}.pt") 
 
