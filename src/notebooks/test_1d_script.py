@@ -37,6 +37,7 @@ from models.load_models_1d import *
 from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 from loss.losses_1d import *
 from utils.feedforward import *
+from utils.pde_utils import *
 from plot.prediction_plot_1d import *
 
 # %% [markdown]
@@ -213,7 +214,7 @@ elif dict_files["loss"] == "data+pde":
     S_y = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_Sy"][0]]),
                                             requires_grad=dict_files["pde_Sy"][1]).to(device)
     
-    lon_cpoints = dict_files["lon_cpoints"]
+    num_cpoints = dict_files["num_cpoints"]
     
     coeff_loss_data = dict_files["coeff_loss_data"]
     coeff_loss_pde = dict_files["coeff_loss_pde"]
@@ -223,7 +224,7 @@ elif dict_files["loss"] == "data+pde":
                                         k_lat = k_lat,
                                         k_lon = k_lon,
                                         S_y = S_y,
-                                        lon_cpoints = lon_cpoints,
+                                        num_cpoints = num_cpoints,
                                         ds = ds,
                                         device = device,
                                         coeff_loss_data = coeff_loss_data,

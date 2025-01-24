@@ -24,7 +24,7 @@ def feedforward_dloss_pdeloss(model, input, groundtruth,
                         k_lat,
                         k_lon,
                         S_y,
-                        lon_cpoints,
+                        num_cpoints,
                         ds,
                         device,
                         coeff_loss_data,
@@ -49,16 +49,16 @@ def feedforward_dloss_pdeloss(model, input, groundtruth,
         w = [input[2][0][sample_idx,:,:,:,:],#.unsqueeze(0).to(device),
         input[2][1][sample_idx,:,:,:]]#.unsqueeze(0).to(device)]
         
-        lat_cpoints = int(lon_cpoints * 0.75) if lon_cpoints > 1 else 1
-        total_cpoint = lat_cpoints * lon_cpoints
+        total_cpoint = num_cpoints
         x_cpoint = x.expand(total_cpoint,-1,-1).to(device)
         x_mask_cpoint = x_mask.expand(total_cpoint,-1).to(device)
         
         z_cpoint = cpoint_generation(minX = ds.dtm_roi.x.min().values, maxX = ds.dtm_roi.x.max().values,
                                                 minY = ds.dtm_roi.y.min().values, maxY = ds.dtm_roi.y.max().values,
                                                 dtm = (ds.dtm_roi *ds.norm_factors["dtm_std"]) + ds.norm_factors["dtm_mean"],
-                                                num_lon_point = lon_cpoints,
-                                                num_lat_point = lat_cpoints)
+                                                mode="urandom",
+                                                num_lon_point = num_cpoints,
+                                                num_lat_point = num_cpoints)
         
         # normalization 
         z_cpoint[:,0] = (z_cpoint[:,0] - ds.norm_factors["lat_mean"])/ds.norm_factors["lat_std"]
