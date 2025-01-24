@@ -291,8 +291,8 @@ for i in range(max_epochs):
     model.eval()
     start_time = time.time()
     # Disable gradient computation and reduce memory consumption.
-    with torch.no_grad():
-        with tqdm(test_loader, unit="batch") as tepoch:
+    #with torch.no_grad():
+    with tqdm(test_loader, unit="batch") as tepoch:
                 for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
                     tepoch.set_description(f"Epoch {i}")
 
@@ -303,14 +303,14 @@ for i in range(max_epochs):
                     w = [w_values.to(device), weather_coords_batch.to(device)]
                     y = y.to(device)
                     y_mask = y_mask.to(device)
-                    # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                    #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                     #y_hat = model(x, z, w, x_mask)
                     loss_dict = forward_and_loss(model = model,
                                              input = (x, z, w, x_mask),
                                              groundtruth = (y, y_mask),
                                              loss_prefix_name = "Test")
-                    # print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                    #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
                     # loss = masked_mse(y_hat,
                     #               y,

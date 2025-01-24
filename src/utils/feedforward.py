@@ -4,15 +4,16 @@ import torch
 from loss.losses_1d import *
 from plot.prediction_plot_1d import *
 
-def feedforward_dloss(model, input, groundtruth):
+def feedforward_dloss(model, input, groundtruth, loss_prefix_name, require_grad = True):
         
+        torch.set_grad_enabled(require_grad)
         pred_hat = model(x = input[0],
                       z = input[1],
                       w = input[2],
                       x_mask = input[3])
         
         loss = masked_mse(pred_hat, groundtruth[0], groundtruth[1])
-        loss_dict = {"loss_data": loss}
+        loss_dict = {f"{loss_prefix_name}_loss_data": loss}
         return loss_dict
     
     
@@ -28,14 +29,13 @@ def feedforward_dloss_pdeloss(model, input, groundtruth,
                         device,
                         coeff_loss_data,
                         coeff_loss_pde,
-                        loss_prefix_name):
+                        loss_prefix_name,
+                        require_grad = True):
         
-        pred_hat_data = model(x = input[0],
-                      z = input[1],
-                      w = input[2],
-                      x_mask = input[3])
         
-        loss_data = masked_mse(pred_hat_data, groundtruth[0], groundtruth[1])
+        loss_dict = feedforward_dloss(model, input, groundtruth, loss_prefix_name, require_grad)
+        if require_grad is False:
+                torch.set_grad_enabled(True)
         
         # control point generation
         
@@ -68,7 +68,7 @@ def feedforward_dloss_pdeloss(model, input, groundtruth,
         z_cpoint = torch.tensor(z_cpoint, requires_grad=True).to(torch.float32).to(device)
         w_cpoint = [w[0].expand(total_cpoint,-1,-1,-1,-1),
                 w[1].expand(total_cpoint,-1,-1,-1)]
-                    
+        
         pred_hat_cpoints = model(x_cpoint, z_cpoint, w_cpoint, x_mask_cpoint)
         
         loss_pde = physics_loss(pred_hat_cpoints, z_cpoint,
@@ -77,11 +77,10 @@ def feedforward_dloss_pdeloss(model, input, groundtruth,
                     k_lon = k_lon,
                     S_y = S_y)
         
-        total_loss = coeff_loss_data * loss_data  + coeff_loss_pde * loss_pde
+        total_loss = coeff_loss_data * loss_dict[f"{loss_prefix_name}_loss_data"]  + coeff_loss_pde * loss_pde
     
-        ################
-        loss_dict = {f"{loss_prefix_name}_loss_data": loss_data,
-                     f"{loss_prefix_name}_loss_pde": loss_pde,
-                     f"{loss_prefix_name}_tot_loss": total_loss}
+        ################ 
+        loss_dict[f"{loss_prefix_name}_loss_pde"] = loss_pde
+        loss_dict[f"{loss_prefix_name}_tot_loss"] = total_loss
         
         return loss_dict
