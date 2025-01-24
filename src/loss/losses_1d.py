@@ -15,7 +15,7 @@ def jacobian_batches(output, input):
     grad_outputs = torch.eye(output.shape[-1])[:,None,:].expand(-1, output.shape[0], -1).to(output.device)
     return torch.autograd.grad(output, input, grad_outputs = grad_outputs,
                                create_graph  = False,
-                               retain_graph=True,
+                               retain_graph = True,
                                is_grads_batched=True)
 
 def physics_loss(y_hat, coord_input, g = torch.tensor([0]),
