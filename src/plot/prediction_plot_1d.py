@@ -8,6 +8,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from rasterio.enums import Resampling
+from utils.pde_utils import * 
 
 # def plot_predictions(x, y, y_hat, save_dir = None, title = None):
 #     fig, ax = plt.subplots()
@@ -90,29 +91,6 @@ def plot_one_series(ds, date_t0, df_prediction = None, sensor = None,
 
 ############## MAP ##############
 
-def cpoint_generation(minX, maxX, minY, maxY, dtm,
-                      mode = "even",
-                      num_lon_point = 100,
-                      num_lat_point = 100):
-    
-    if mode == "even":
-        
-        # create one-dimensional arrays for x and y
-        x = np.linspace(minX, maxX, num_lon_point)
-        y = np.linspace(minY, maxY, num_lat_point)[::-1]
-        # create the mesh based on these arrays
-        X, Y = np.meshgrid(x, y)
-        coords = np.stack([Y, X], axis = -1)
-        
-        
-    dtm_xy = dtm.sel(x = x, y = y,
-                     method = "nearest").values
-    
-    coords = np.concat([coords, np.moveaxis(dtm_xy, 0, -1)], axis=-1)
-    coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
-        
-    return coords
-
 def predict_map_points(ds, lon_point, 
                  sample_date,
                  model, device):
@@ -137,6 +115,7 @@ def predict_map_points(ds, lon_point,
     z_cpoint = cpoint_generation(minX = ds.dtm_roi.x.min().values, maxX = ds.dtm_roi.x.max().values,
                                                 minY = ds.dtm_roi.y.min().values, maxY = ds.dtm_roi.y.max().values,
                                                 dtm = (ds.dtm_roi *ds.norm_factors["dtm_std"]) + ds.norm_factors["dtm_mean"],
+                                                mode = "even",
                                                 num_lon_point = lon_point,
                                                 num_lat_point = lat_point)
 
