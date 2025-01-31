@@ -38,14 +38,14 @@ from dataloaders.load_1d_meteo_wtd import ContinuousDataset
 from loss.losses_1d import *
 from utils.feedforward import *
 from utils.pde_utils import *
-from plot.prediction_plot_1d import *
+from utils.prediction_plot_1d import *
 
 # %% [markdown]
 
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_PINNS_ccnn_att.json"
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D_PINNS_ccnn_att_only_pde.json"
 dict_files = {}
 with open(json_file) as f:
     dict_files = json.load(f)
@@ -135,6 +135,25 @@ elif dict_files["model"] == "SC_CCNN_idw":
                  ccnn_n_filters =  dict_files["ccnn_n_filters"],
                  ccnn_n_layers =  dict_files["ccnn_n_layers"],
                  ).to(device)
+    
+elif dict_files["model"] == "SC_PICCNN_att":
+    print("model physics informed causal cnn att")
+    ph_params = {"hyd_cond": [dict_files["pde_hyd_cond"][0],
+                              dict_files["pde_hyd_cond"][1],
+                              dict_files["pde_hyd_cond"][2]]}
+    
+    model = SC_PICCNN_att(timestep = dict_files["timesteps"],
+                 cb_emb_dim = dict_files["cb_emb_dim"],
+                 cb_att_h = dict_files["cb_att_h"],
+                 cb_fc_layer = dict_files["cb_fc_layer"],
+                 cb_fc_neurons = dict_files["cb_fc_neurons"],
+                 conv_filters = dict_files["conv_filters"],
+                 ccnn_input_filters =  dict_files["ccnn_input_filters"],
+                 ccnn_kernel_size =  dict_files["ccnn_kernel_size"],
+                 ccnn_n_filters =  dict_files["ccnn_n_filters"],
+                 ccnn_n_layers =  dict_files["ccnn_n_layers"],
+                 ph_params = ph_params
+                 ).to(device)
 
 # Magic
 wandb.watch(model, log_freq=100)
@@ -197,38 +216,45 @@ model_name = 'model_{}'.format(timestamp)
 # Loss
 
 if dict_files["loss"] == "data":
+    print("Pure DL approach")
     forward_and_loss = feedforward_dloss
     
-elif dict_files["loss"] == "data+pde":
+elif "pde" in dict_files["loss"]:
     
-    ## DA CAMBIARE VANNO NEL MODELLO!!!
     g = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_g"][0]]),
                                             requires_grad=dict_files["pde_g"][1]).to(device)
-    
-    k_lat = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lat"][0]]),
-                                            requires_grad=dict_files["pde_k_lat"][1]).to(device)
-    
-    k_lon = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_k_lon"][0]]),
-                                            requires_grad=dict_files["pde_k_lon"][1]).to(device)
     
     S_y = torch.nn.Parameter(torch.FloatTensor([dict_files["pde_Sy"][0]]),
                                             requires_grad=dict_files["pde_Sy"][1]).to(device)
     
     num_cpoints = dict_files["num_cpoints"]
+    num_ctsteps = dict_files["num_ctsteps"]
     
-    coeff_loss_data = dict_files["coeff_loss_data"]
-    coeff_loss_pde = dict_files["coeff_loss_pde"]
-    
-    forward_and_loss = partial(feedforward_dloss_pdeloss, 
-                                        g = g,
-                                        k_lat = k_lat,
-                                        k_lon = k_lon,
-                                        S_y = S_y,
-                                        num_cpoints = num_cpoints,
-                                        ds = ds,
-                                        device = device,
-                                        coeff_loss_data = coeff_loss_data,
-                                        coeff_loss_pde = coeff_loss_pde)
+    if dict_files["loss"] == "data+pde":
+        print("PIDL approach")
+        
+        coeff_loss_pde = dict_files["coeff_loss_pde"]
+        coeff_loss_data = dict_files["coeff_loss_data"]
+        
+        forward_and_loss = partial(feedforward_dloss_pdeloss, 
+                                            g = g,
+                                            S_y = S_y,
+                                            num_cpoints = num_cpoints,
+                                            num_ctsteps = num_ctsteps,
+                                            ds = ds,
+                                            device = device,
+                                            coeff_loss_data = coeff_loss_data,
+                                            coeff_loss_pde = coeff_loss_pde)
+        
+    elif dict_files["loss"] == "pde":
+        print("Only Physics approach")
+        forward_and_loss = partial(feedforward_pdeloss, 
+                                            g = g,
+                                            S_y = S_y,
+                                            num_cpoints = num_cpoints,
+                                            num_ctsteps = num_ctsteps,
+                                            ds = ds,
+                                            device = device)
 
 
 weather_coords = ds.get_weather_coords()
@@ -260,7 +286,13 @@ for i in range(max_epochs):
                 optimizer.zero_grad()
                 
                 #y_hat = model(x, z, w, x_mask)
-                loss_dict = forward_and_loss(model = model,
+                
+                if dict_files["loss"] == "pde":
+                    loss_dict = forward_and_loss(model = model,
+                                             input = (x, z, w, x_mask),
+                                             loss_prefix_name = "Train")
+                else:
+                    loss_dict = forward_and_loss(model = model,
                                              input = (x, z, w, x_mask),
                                              groundtruth = (y, y_mask),
                                              loss_prefix_name = "Train")
@@ -306,10 +338,23 @@ for i in range(max_epochs):
                     y_mask = y_mask.to(device)
                     #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                    #y_hat = model(x, z, w, x_mask)
-                    loss_dict = forward_and_loss(model = model,
+                    # #y_hat = model(x, z, w, x_mask)
+                    # loss_dict = forward_and_loss(model = model,
+                    #                          input = (x, z, w, x_mask),
+                    #                          groundtruth = (y, y_mask),
+                    #                          require_grad = False,
+                    #                          loss_prefix_name = "Test")
+                    
+                    if dict_files["loss"] == "pde":
+                        loss_dict = forward_and_loss(model = model,
+                                             input = (x, z, w, x_mask),
+                                             require_grad = False,
+                                             loss_prefix_name = "Test")
+                    else:
+                        loss_dict = forward_and_loss(model = model,
                                              input = (x, z, w, x_mask),
                                              groundtruth = (y, y_mask),
+                                             require_grad = False,
                                              loss_prefix_name = "Test")
                     #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
