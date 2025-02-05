@@ -71,7 +71,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
         
         # plots on wandb
         with torch.no_grad():
-            Y = (Y * wtd_std) + wtd_mean
+            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * wtd_std) + wtd_mean
             Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
 
             plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Training random time series ep:{i}")
@@ -82,7 +82,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
 
             plot_2d_prediction(Y_hat, i, plots_dir, timesteps-1, model_name_short, mode = "training")
 
-        if i == 0:
+        if i == 0 and config["plot_model"]:
             print("Saving plot of the model...")
             model_file_path = config['save_model_dir']
             model_graph = draw_graph(model, input_data=([X]), device=device)
