@@ -65,10 +65,10 @@ def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, model_name
                 
         # plots on wandb
         with torch.no_grad():
-            Y = (Y * wtd_std) + wtd_mean
+            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * wtd_std) + wtd_mean
             Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
 
-            plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Training random time series ep:{i}", mode = "test")
+            plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Testing random time series ep:{i}", mode = "test")
 
             plot_2d_prediction(Y_hat, i, plots_dir, 0, model_name_short, mode = "test")
 

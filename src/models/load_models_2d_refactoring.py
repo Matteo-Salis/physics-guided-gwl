@@ -1,4 +1,5 @@
 import json
+import math
 
 import torch
 from torch.utils.data import Dataset
@@ -9,180 +10,113 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from dataloaders.load_2d_meteo_wtd import DiscreteDataset
 
 class ConvTransposeBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, filters_in = 10, filters_out = 16, conv_num = 2):
         super(ConvTransposeBlock, self).__init__()
-        self.block = nn.Sequential(
-            nn.ConvTranspose3d(10, 16, (1,3,3), stride=(1,3,3), dtype=torch.float32),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),
-            nn.Conv3d(16, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.Conv3d(32, 64, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(64),
-            nn.LeakyReLU(),
+        
+        self.layers = []
+        self.layers.append(nn.ConvTranspose3d(filters_in, 16, (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(16))
+        self.layers.append(nn.LeakyReLU())
+        # expanding filters
+        for i in range(conv_num):
+            self.layers.append(nn.Conv3d(16*(2**(i)), 16*(2**(i+1)), (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+            self.layers.append(nn.BatchNorm3d(16*(2**(i+1))))
+            self.layers.append(nn.LeakyReLU())
 
-            nn.ConvTranspose3d(64, 32, (1,3,3), stride=(1,3,3), dtype=torch.float32),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),
-            nn.Conv3d(16, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU()
-        )
-        self.case_1d_block = nn.Sequential(
-            nn.Conv3d(16, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(8),
-            nn.LeakyReLU(),
-            nn.Conv3d(8, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(1),
-            nn.LeakyReLU(),
-        )
+        self.layers.append(nn.ConvTranspose3d(16*(2**conv_num), 16*(2**conv_num), (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(16*(2**conv_num)))
+        self.layers.append(nn.LeakyReLU())
+        # reducing filters
+        for i in range(conv_num):
+            self.layers.append(nn.Conv3d(16*(2**(conv_num-i)), 16*(2**(conv_num-i-1)), (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+            self.layers.append(nn.BatchNorm3d(16*(2**(conv_num-i-1))))
+            self.layers.append(nn.LeakyReLU())
+
+        self.layers.append(nn.Conv3d(16, filters_out, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+        self.layers.append(nn.BatchNorm3d(filters_out))
+        self.layers.append(nn.LeakyReLU())
+        
+        self.block = nn.Sequential(*self.layers)
+        
     
-    def forward(self, x, case_1d = False):
-        if case_1d:
-            return self.case_1d_block(self.block(x))
-        else:
-            return self.block(x)
+    def forward(self, x):
+        return self.block(x)
     
 
 class ConvBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, filters_in = 3, filters_out = 16, conv_num = 5):
         super(ConvBlock, self).__init__()
-        self.block = nn.Sequential(
-            nn.Conv3d(3, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(8),
-            nn.LeakyReLU(),
-            nn.Conv3d(8, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),
-            nn.Conv3d(16, 32, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.Conv3d(32, 16, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),                
-        )
-        self.case_1d_block = nn.Sequential(
-            nn.Conv3d(16, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(8),
-            nn.LeakyReLU(),
-            nn.Conv3d(8, 1, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
-            nn.BatchNorm3d(1),
-            nn.LeakyReLU(),
-        )
-    
-    def forward(self, x, case_1d = False):
-        if case_1d:
-            return self.case_1d_block(self.block(x))
-        else:
-            return self.block(x)
+
+        self.layers = []
+        self.layers.append(nn.Conv3d(filters_in, 8, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+        self.layers.append(nn.BatchNorm3d(8))
+        self.layers.append(nn.LeakyReLU())
+        # expanding filters
+        for i in range(conv_num):
+            self.layers.append(nn.Conv3d(8*(2**(i)), 8*(2**(i+1)), (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+            self.layers.append(nn.BatchNorm3d(8*(2**(i+1))))
+            self.layers.append(nn.LeakyReLU())
+        # reducing filters
+        for i in range(conv_num):
+            self.layers.append(nn.Conv3d(8*(2**(conv_num-i)), 8*(2**(conv_num-i-1)), (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+            self.layers.append(nn.BatchNorm3d(8*(2**(conv_num-i-1))))
+            self.layers.append(nn.LeakyReLU())
+            if 8*(2**(conv_num-i-1)) == filters_out:
+                self.block = nn.Sequential(*self.layers)
+                return None
+
+        self.layers.append(nn.Conv3d(8, filters_out, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'))
+        self.layers.append(nn.BatchNorm3d(filters_out))
+        self.layers.append(nn.LeakyReLU())
+        
+        self.block = nn.Sequential(*self.layers)
+  
+    def forward(self, x):
+        return self.block(x)
     
         
 class ConvBlockFinal(nn.Module):
-    def __init__(self, input_ch = 19, k = 3):
+    def __init__(self, input_ch = 19, k = 3, conv_num = 5, del_time_block = False):
         super(ConvBlockFinal, self).__init__()
 
-        self.preproc_block = nn.Sequential(
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(input_ch, 32, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(32, 32, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(32, 64, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(64),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(64, 64, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(64),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(64, 32, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-        )
-        self.block = nn.Sequential(
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(32, 32, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(32, 32, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(32),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(32, 16, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(16, 16, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(16),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(16, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-        )
-        self.case_1d_block = nn.Sequential(
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(2, 4, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(4),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(4, 8, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(8),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(8, 4, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(4),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(4, 2, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(2),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(2, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(1),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(1, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-        ) 
-        self.case_1d_time_block = nn.Sequential(
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(1, 4, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(4),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(4, 8, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(8),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(8, 4, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(4),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(4, 2, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(2),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-1,0)),
-            nn.Conv3d(2, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-            nn.BatchNorm3d(1),
-            nn.LeakyReLU(),
-            nn.ZeroPad3d((0,0,0,0,k-2,0)),
-            nn.Conv3d(1, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32, padding=(0,1,1)),
-        ) 
-    
-    def forward(self, x, case_1d = False, case_preproc = False):
-        if case_preproc:
-            x = self.preproc_block(x)
-        if case_1d:
-            return self.case_1d_block(x)
+        self.layers = []
+
+        pow_2 = int(math.log2(input_ch))
+        filters_pow = 2**(pow_2+1)
+        if filters_pow < 4:
+            filters_pow = 4
+
+        self.layers.append(nn.ReplicationPad3d((1,1,1,1,k-1,0)))
+        self.layers.append(nn.Conv3d(input_ch, filters_pow, (k,3,3), stride=(1,1,1), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(filters_pow))
+        self.layers.append(nn.LeakyReLU())
+
+        # expanding filters
+        for i in range(conv_num):
+            if filters_pow <= 4*(2**(i)):
+                self.layers.append(nn.ReplicationPad3d((1,1,1,1,k-1,0)))
+                self.layers.append(nn.Conv3d(4*(2**(i)), 4*(2**(i+1)), (k,3,3), stride=(1,1,1), dtype=torch.float32))
+                self.layers.append(nn.BatchNorm3d(4*(2**(i+1))))
+                self.layers.append(nn.LeakyReLU())
+
+        for i in range(conv_num):
+            self.layers.append(nn.ReplicationPad3d((1,1,1,1,k-1,0)))
+            self.layers.append(nn.Conv3d(4*(2**(conv_num-i)), 4*(2**(conv_num-i-1)), (k,3,3), stride=(1,1,1), dtype=torch.float32))
+            self.layers.append(nn.BatchNorm3d(4*(2**(conv_num-i-1))))
+            self.layers.append(nn.LeakyReLU())
+        
+        if del_time_block:
+            self.layers.append(nn.ReplicationPad3d((1,1,1,1,k-2,0)))
         else:
-            return self.block(x)
+            self.layers.append(nn.ReplicationPad3d((1,1,1,1,k-1,0)))
+        self.layers.append(nn.Conv3d(4, 1, (k,3,3), stride=(1,1,1), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(1))
+        self.layers.append(nn.LeakyReLU())
+
+        self.block = nn.Sequential(*self.layers)
+    
+    def forward(self, x):
+        return self.block(x)
     
     
 ############## MODEL 1 ##############
@@ -193,13 +127,13 @@ class Discrete2DConcat16(nn.Module):
         self.timesteps = timesteps
 
         # processing initial values
-        self.m_conv_1 = ConvBlock()
+        self.m_conv_1 = ConvBlock(conv_num=3, filters_out = 16)
 
         # transpose conv (upsampling weather)
-        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_conv_tr_1 = ConvTransposeBlock(filters_out = 16)
         self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
 
-        self.m_conv_f_3 = ConvBlockFinal()
+        self.m_conv_f_3 = ConvBlockFinal(input_ch=32, k=3)
 
 
     def forward(self, x):
@@ -237,13 +171,13 @@ class Discrete2DConcat1(nn.Module):
         self.timesteps = timesteps
 
         # processing initial values
-        self.m_conv_1 = ConvBlock()
+        self.m_conv_1 = ConvBlock(conv_num=3, filters_out = 1)
 
         # transpose conv (upsampling weather)
-        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_conv_tr_1 = ConvTransposeBlock(filters_out = 1)
         self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
 
-        self.m_conv_f_3 = ConvBlockFinal(k=4)
+        self.m_conv_f_3 = ConvBlockFinal(input_ch=2, k=3, conv_num=5)
 
 
     def forward(self, x):
@@ -259,17 +193,17 @@ class Discrete2DConcat1(nn.Module):
         dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
         x_init = torch.concat([x_init, dtm], dim=1)
         x_init = torch.unsqueeze(x_init, dim=2)
-        x_init = self.m_conv_1(x_init, case_1d = True)
+        x_init = self.m_conv_1(x_init)
 
         # processing weaterh
-        x_weather = self.m_conv_tr_1(x_weather, case_1d = True)
+        x_weather = self.m_conv_tr_1(x_weather)
         x_weather = self.m_avg_pool_2b(x_weather)
 
         # concat
         x_init = x_init.expand(-1,-1,self.timesteps,-1,-1)
         concat = torch.concat([x_init, x_weather], dim=1)
 
-        out = self.m_conv_f_3(concat, case_1d = True)
+        out = self.m_conv_f_3(concat)
         
         return out
     
@@ -281,13 +215,13 @@ class Discrete2DConcat1_Time(nn.Module):
         self.timesteps = timesteps
 
         # processing initial values
-        self.m_conv_1 = ConvBlock()
+        self.m_conv_1 = ConvBlock(conv_num=2, filters_out = 1)
 
         # transpose conv (upsampling weather)
-        self.m_conv_tr_1 = ConvTransposeBlock()
+        self.m_conv_tr_1 = ConvTransposeBlock(conv_num = 2, filters_out = 1)
         self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
 
-        self.m_conv_f_3 = ConvBlockFinal(k=4)
+        self.m_conv_f_3 = ConvBlockFinal(input_ch=1, k=3, conv_num=2, del_time_block = True)
 
 
     def forward(self, x):
@@ -303,16 +237,16 @@ class Discrete2DConcat1_Time(nn.Module):
         dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
         x_init = torch.concat([x_init, dtm], dim=1)
         x_init = torch.unsqueeze(x_init, dim=2)
-        x_init = self.m_conv_1(x_init, case_1d = True)
+        x_init = self.m_conv_1(x_init)
 
         # processing weaterh
-        x_weather = self.m_conv_tr_1(x_weather, case_1d = True)
+        x_weather = self.m_conv_tr_1(x_weather)
         x_weather = self.m_avg_pool_2b(x_weather)
 
         # concat
         concat = torch.concat([x_init, x_weather], dim=2)
 
-        out = self.m_conv_f_3(concat, case_1d = True)
+        out = self.m_conv_f_3(concat)
         
         return out
 
