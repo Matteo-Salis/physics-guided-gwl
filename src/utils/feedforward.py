@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from loss.losses_1d import *
-from utils.prediction_plot_1d import *
+from utils.plot_1d import *
 
 def feedforward_dloss(model, input, groundtruth, loss_prefix_name, require_grad = True):
         
