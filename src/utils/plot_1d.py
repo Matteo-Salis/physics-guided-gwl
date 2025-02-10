@@ -113,12 +113,9 @@ def predict_map_points(ds, lon_point,
     x_cpoint = x.expand(total_cpoint,-1,-1).to(device)
     x_mask_cpoint = x_mask.expand(total_cpoint,-1).to(device)
                     
-    z_cpoint = cpoint_generation(minX = ds.dtm_roi.x.min().values, maxX = ds.dtm_roi.x.max().values,
-                                                minY = ds.dtm_roi.y.min().values, maxY = ds.dtm_roi.y.max().values,
-                                                dtm = (ds.dtm_roi *ds.norm_factors["dtm_std"]) + ds.norm_factors["dtm_mean"],
-                                                mode = "even",
-                                                num_lon_point = lon_point,
-                                                num_lat_point = lat_point)
+    z_cpoint = ds.cpoint_generation(mode = "even",
+                                    num_lon_point = lon_point,
+                                    num_lat_point = lat_point)
 
     # normalization 
     z_cpoint[:,0] = (z_cpoint[:,0] - ds.norm_factors["lat_mean"])/ds.norm_factors["lat_std"]
@@ -210,7 +207,7 @@ def plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled,
         return fig 
     
     
-def train_test_plots(ds, model, device, dates_list, tsteps_list):
+def plot_series_maps(ds, model, device, dates_list, tsteps_list):
 
         for date in dates_list:
                     # Time Series  
