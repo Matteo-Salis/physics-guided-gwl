@@ -4,7 +4,12 @@ from utils.plots_2d import *
 import wandb
 import matplotlib.pyplot as plt
 
-def test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, model_name, device = "cuda"):
+def test_model(i, model, test_loader, dataset, dtm, config, model_name, device = "cuda"):
+    
+    dtm = torch.from_numpy(dataset.dtm_roi_downsampled.values).to(device)
+    wtd_mean = dataset.wtd_numpy_mean
+    wtd_std = dataset.wtd_numpy_std
+    
     c0_superres_loss = config["c0_superres_loss"]
     c1_masked_loss = config["c1_masked_loss"]
     c2_pde_darcy_loss = config["c2_pde_darcy_loss"]

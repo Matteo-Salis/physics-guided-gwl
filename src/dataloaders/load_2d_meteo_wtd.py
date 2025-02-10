@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import xarray
+from scipy import interpolate
 
 import rioxarray
 import fiona
@@ -105,26 +106,6 @@ class DiscreteDataset(Dataset):
         self.miny = self.dtm_roi_downsampled.y.min()
         self.maxx = self.dtm_roi_downsampled.x.max()
         self.maxy = self.dtm_roi_downsampled.y.max()
-
-        # print("Longitude")
-        # print(self.minx)
-        # print(self.maxx)
-        # print("Latitude")
-        # print(self.miny)
-        # print(self.maxy)
-
-        # print(new_height)
-        # print(new_width)
-
-        # new_resolution = ( (self.maxx-self.minx)/new_width, (self.maxy-self.miny)/new_height )
-
-        # print(new_resolution)
-
-        # old_res = (self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 6))
-
-        # print(old_res)
-
-        # print(self.dtm_roi_downsampled.rio.transform())
         
         print("Rasterizing wtd dataframe...")
         rasterized_ds_list = []
@@ -167,8 +148,27 @@ class DiscreteDataset(Dataset):
         print(f"Value mean: {self.wtd_numpy_mean}")
         print(f"Value std: {self.wtd_numpy_std}")
 
-        self.wtd_data_raserized = self.wtd_data_raserized.fillna(self.wtd_numpy_mean)
+        # self.wtd_data_raserized = self.wtd_data_raserized.fillna(self.wtd_numpy_mean)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
+
+        # BETA #
+        for i in range(self.wtd_numpy.shape[1]):
+            data = self.wtd_numpy[0,i]
+            x = np.arange(0, data.shape[1])
+            y = np.arange(0, data.shape[0])
+            #mask invalid values
+            array = np.ma.masked_invalid(data)
+            xx, yy = np.meshgrid(x, y)
+            #get only the valid values
+            x1 = xx[~array.mask]
+            y1 = yy[~array.mask]
+            newarr = array[~array.mask]
+
+            GD1 = interpolate.griddata((x1, y1), newarr.ravel(),
+                                    (xx, yy),
+                                        method='nearest')
+   
+            self.wtd_numpy[0,i] = GD1
 
 
     def normalize_dataset(self):

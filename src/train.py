@@ -6,7 +6,12 @@ import matplotlib.pyplot as plt
 from torchview import draw_graph
 
 
-def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, config, model_name, device = "cuda"):
+def train_model(epoch, dataset, model, train_loader, optimizer, config, model_dir, model_name, device = "cuda"):
+    
+    dtm = torch.from_numpy(dataset.dtm_roi_downsampled.values).to(device)
+    wtd_mean = dataset.wtd_numpy_mean
+    wtd_std = dataset.wtd_numpy_std
+    
     c0_superres_loss = config["c0_superres_loss"]
     c1_masked_loss = config["c1_masked_loss"]
     c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
@@ -16,7 +21,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
     timesteps = int(config["timesteps"])
 
     plots_dir = config["wandb_dir_plots"]
-    model_name_short = model_name.split(".")[0]
+    #model_name_short = model_name.split(".")[0]
 
     X = None # input
     Y = None # ground truth
@@ -27,7 +32,7 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
             
         for batch_idx, (init_wtd, weather, pred_wtds) in enumerate(tepoch):
 
-            tepoch.set_description(f"Epoch {i}")
+            tepoch.set_description(f"Epoch {epoch}")
 
             X = (init_wtd.to(device), dtm.to(device), weather.to(device))
             # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
@@ -74,20 +79,20 @@ def train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, confi
             Y[:,0,:,:,:] = (Y[:,0,:,:,:] * wtd_std) + wtd_mean
             Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
 
-            plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Training random time series ep:{i}")
+            plot_random_station_time_series(Y, Y_hat, epoch, plots_dir, model_name, f"Training random time series ep:{epoch}")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, 0, model_name_short, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, plots_dir, 0, model_name, mode = "training")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, h_timesteps, model_name_short, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, plots_dir, h_timesteps, model_name, mode = "training")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, timesteps-1, model_name_short, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, plots_dir, timesteps-1, model_name, mode = "training")
 
-        if i == 0 and config["plot_model"]:
+        if epoch == 0 and config["plot_model"]:
             print("Saving plot of the model...")
-            model_file_path = config['save_model_dir']
+            #model_file_path = config['save_model_dir']
             model_graph = draw_graph(model, input_data=([X]), device=device)
-            model_graph.visual_graph.render(format='png', filename = model_name_short, directory= f"{model_file_path}/")
-            model_arch = wandb.Image(f"{model_file_path}/{model_name_short}.png", caption="model's architecture")
+            model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_dir}/")
+            model_arch = wandb.Image(f"{model_dir}/{model_name}.png", caption="model's architecture")
             wandb.log({"model_arch": model_arch})
 
 if __name__ == "__main__":
