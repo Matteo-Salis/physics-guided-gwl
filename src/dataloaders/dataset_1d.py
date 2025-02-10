@@ -250,10 +250,10 @@ class Dataset_1D(Dataset):
         Z = torch.stack(Z, dim = -1).squeeze()
         
         # Initial state WTD (t0) data        
-        X, X_mask = self.get_avail_target_data(self, start_date)
+        X, X_mask = self.get_avail_target_data(start_date)
         
         # Retrieve weather data
-        W = self.get_weather_video(self, start_date, end_date)
+        W = self.get_weather_video(start_date, end_date)
         
         # Retrieve wtd values from t0+1 to T for the idx instance sensor
         Y, Y_mask = self.get_target_series(start_date, end_date, sample_lat, sample_lon)
@@ -309,7 +309,7 @@ class Dataset_1D(Dataset):
         output = torch.from_numpy(self.weather_coords).to(torch.float32)
         
         if dtm is True:
-            dtm = self.ds.get_weather_dtm()
+            dtm = self.get_weather_dtm()
             output = torch.cat([output, dtm], dim = -1)
 
         return output
@@ -455,7 +455,7 @@ if __name__ == "__main__":
         dict_files = json.load(f)
     print(f"Read data.json: {dict_files}")
 
-    ds = ContinuousDataset(dict_files)
+    ds = Dataset_1D(dict_files)
     print("Dataset created.")
     print(f"Length of the dataset: {ds.__len__()}")
     print(f"Item -1: {ds[-1]}")

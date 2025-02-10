@@ -30,7 +30,7 @@ def wandb_config(config):
     wandb.init(
         entity = config["entity"],
         project = config["experiment_name"],
-        name=config["run_name"],
+        name = config["run_name"],
         dir = config["wandb_dir"],
         config = config,
         mode = "offline",
@@ -59,42 +59,45 @@ def main(config):
         if torch.backends.mps.is_available()
         else "cpu"
     )
-
+    print("Device: ", device)
+    
     print("Loading model...")
-    model = load_model(config).to(device)
+    model, model_id = load_model(config).to(device)
     print("Total number of trainable parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    model_name = 'model_{}.pt'.format(timestamp) 
+    model_name = 'model_{}_{}'.format(model_id, timestamp)
+    model_dir = config['save_model_dir']
     
     wandb.watch(model, log_freq=100)
 
+    print(f"Start time: {timestamp}")
     # optimization parameters
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
     
-    dtm = torch.from_numpy(dataset.dtm_roi_downsampled.values).to(device)
-    wtd_mean = dataset.wtd_numpy_mean
-    wtd_std = dataset.wtd_numpy_std
+    
 
     # loop training and test
-    for i in range(config["epochs"]):
-        print(f"############### Training epoch {i} ###############")
+    for epoch in range(config["epochs"]):
+        print(f"############### Training epoch {epoch} ###############")
         model.train()
         start_time = time.time()
 
-        train_model(i, model, train_loader, optimizer, wtd_mean, wtd_std, dtm, config, model_name, device)
+        train_model(epoch, model, dataset, train_loader, optimizer,
+                    model_dir, model_name,
+                    device)
 
         end_time = time.time()
         exec_time = end_time-start_time
         wandb.log({"tr_epoch_exec_t" : exec_time})
 
         # saving model
-        torch.save(model.state_dict(), f"{config['save_model_dir']}/{model_name}")
+        torch.save(model.state_dict(), f"{model_dir}/{model_name}.pt")
 
-        print(f"############### Test epoch {i} ###############")
+        print(f"############### Test epoch {epoch} ###############")
         model.eval()
         start_time = time.time()
 
-        test_model(i, model, test_loader, wtd_mean, wtd_std, dtm, config, model_name, device)
+        test_model(epoch, model, dataset, test_loader, config, model_name, device)
 
         end_time = time.time()
         exec_time = end_time-start_time

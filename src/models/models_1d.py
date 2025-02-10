@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from dataloaders.dataset_1d import ContinuousDataset
+from dataloaders.dataset_1d import Dataset_1D
 
 class SC_LSTM_idw(nn.Module):
     

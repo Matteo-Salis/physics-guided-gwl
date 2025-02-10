@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from rasterio.enums import Resampling
 from utils.pde_utils import * 
 
+from torchview import draw_graph
+
 # def plot_predictions(x, y, y_hat, save_dir = None, title = None):
 #     fig, ax = plt.subplots()
 #     fig.suptitle("Loss vs iterations")
@@ -236,3 +238,14 @@ def plot_series_maps(ds, model, device, dates_list, tsteps_list):
                                         date, pred_timestep = tstep,
                                         save_dir = None, 
                                         print_plot = False))})
+                            
+                            
+                            
+def plot_model_graph(file_path, file_name, model, sample_input, device):
+    
+    model_graph = draw_graph(model, input_data=sample_input, device=device, depth = 1)
+    model_graph.visual_graph.render(format='png', filename = file_name, directory= f"{file_path}/")
+    model_arch = wandb.Image(f"{file_path}/{file_name}.png", caption="model's architecture")
+    
+    return model_arch
+            

@@ -16,11 +16,19 @@ from utils.plot_1d import *
 from loss.losses_1d import *
 
 
-def train_dl_model_1d(epoch, ds, model, train_loader, optimizer, device = "cuda"):
+def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir, model_name, device = "cuda"):
     
     with tqdm(train_loader, unit="batch") as tepoch:
                     
-                    weather_coords = ds.get_weather_coords(dtm = True).unsqueeze(0)
+                    weather_coords = dataset.get_weather_coords(dtm = True).unsqueeze(0)
+                    
+                    plot_model_graph(file_path = model_dir,
+                                     file_name = model_name,
+                                     model = model,
+                                     sample_input = (dataset[0][0], dataset[0][1],
+                                                     [dataset[0][2], dataset.get_weather_coords(dtm = True)],
+                                                     dataset[0][4]),
+                                     device = device)
                     
                     for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")
@@ -55,12 +63,12 @@ def train_dl_model_1d(epoch, ds, model, train_loader, optimizer, device = "cuda"
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(ds, model, device, 
+                        plot_series_maps(dataset, model, device, 
                         dates_list = dict_files["train_plot_dates"],
                         tsteps_list= dict_files["train_plot_tstep_map"])
                         
                         
-def train_dl_pde_model_1d(epoch, ds, model, train_loader, optimizer,
+def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                           num_cpoint_batch,
                           num_cpoint_instance,
                           g =  torch.tensor([0]), S_y =  torch.tensor([1]),
@@ -71,7 +79,7 @@ def train_dl_pde_model_1d(epoch, ds, model, train_loader, optimizer,
     
     with tqdm(train_loader, unit="batch") as tepoch:
         
-                    weather_coords = ds.get_weather_coords(dtm = True).unsqueeze(0)
+                    weather_coords = dataset.get_weather_coords(dtm = True).unsqueeze(0)
                     
                     for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")
@@ -112,7 +120,7 @@ def train_dl_pde_model_1d(epoch, ds, model, train_loader, optimizer,
                                      torch.repeat_interleave(w_cpoints[1], num_cpoint_instance, dim=0).to(device)]
                         
                         
-                        z_cpoints = np.stack([ds.control_points_generator(
+                        z_cpoints = np.stack([dataset.control_points_generator(
                                  mode = "urandom+nb",
                                  num_lon_point = num_cpoint_instance,
                                  num_lat_point = num_cpoint_instance,
@@ -157,7 +165,7 @@ def train_dl_pde_model_1d(epoch, ds, model, train_loader, optimizer,
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(ds, model, device, 
+                        plot_series_maps(dataset, model, device, 
                         dates_list = dict_files["train_plot_dates"],
                         tsteps_list= dict_files["train_plot_tstep_map"])     
 
