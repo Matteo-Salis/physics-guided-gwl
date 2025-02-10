@@ -22,7 +22,7 @@ import torch.nn as nn
 import warnings
 
 
-class ContinuousDataset(Dataset):
+class Dataset_1D(Dataset):
     """Weather and WTD Dataset for the continuous case model"""
 
     def __init__(self, dict_files):
@@ -318,13 +318,14 @@ class ContinuousDataset(Dataset):
                                  bbox = None,
                                  mode = "even",
                                  num_lon_point = 100,
-                                 num_lat_point = 100):
+                                 num_lat_point = 100,
+                                 step = None):
 
         if bbox is None:
-            bbox = [ds.dtm_roi.x.min().values,
-                    ds.dtm_roi.x.max().values,
-                    ds.dtm_roi.y.min().values,
-                    ds.dtm_roi.y.max().values]
+            bbox = [self.dtm_roi.x.min().values,
+                    self.dtm_roi.x.max().values,
+                    self.dtm_roi.y.min().values,
+                    self.dtm_roi.y.max().values]
             
         if mode == "even":
             
@@ -356,7 +357,95 @@ class ContinuousDataset(Dataset):
             
             coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
             
-        return coords
+        elif mode == "urandom+nb":
+            
+            if(num_lon_point != num_lat_point):
+                warnings.warn("number of lat cpoints not equal to lon cpoints... the min is considered in the following")
+            num_cpoints = min(num_lon_point, num_lat_point)
+            
+            margin = 1.2 * step
+            x = np.random.uniform(low=bbox[0]+margin, high=bbox[1]-margin, size=num_cpoints)
+            y = np.random.uniform(low=bbox[2]+margin, high=bbox[3]-margin, size=num_cpoints)
+            
+            x_right = x + step
+            x_two_right = x + 2*step
+            
+            x_left = x - step
+            x_two_left = x - 2*step
+            
+            y_up = y + step
+            y_two_up = y + 2*step
+            
+            y_down = y - step
+            y_two_down = y - 2*step
+            
+            dtm_xy = []
+            dtm_xy_right = []
+            dtm_xy_two_right = []
+            dtm_xy_left = []
+            dtm_xy_two_left = []
+            dtm_xy_up = []
+            dtm_xy_two_up = []
+            dtm_xy_down = []
+            dtm_xy_two_down = []
+            
+            for i in range(num_cpoints):
+                dtm_xy.append(self.dtm_roi.sel(x = x[i], y = y[i],
+                                method = "nearest").values)
+                
+                dtm_xy_right.append(self.dtm_roi.sel(x = x_right[i], y = y[i],
+                                method = "nearest").values)
+                dtm_xy_two_right.append(self.dtm_roi.sel(x = x_two_right[i], y = y[i],
+                                method = "nearest").values)
+                
+                dtm_xy_left.append(self.dtm_roi.sel(x = x_left[i], y = y[i],
+                                method = "nearest").values)
+                dtm_xy_two_left.append(self.dtm_roi.sel(x = x_two_left[i], y = y[i],
+                                method = "nearest").values)
+                
+                dtm_xy_up.append(self.dtm_roi.sel(x = x[i], y = y_up[i],
+                                method = "nearest").values)
+                dtm_xy_two_up.append(self.dtm_roi.sel(x = x[i], y = y_two_up[i],
+                                method = "nearest").values)
+                
+                dtm_xy_down.append(self.dtm_roi.sel(x = x[i], y = y_down[i],
+                                method = "nearest").values)
+                dtm_xy_two_down.append(self.dtm_roi.sel(x = x[i], y = y_two_down[i],
+                                method = "nearest").values)
+            
+                
+            dtm_xy = np.array(dtm_xy)
+            
+            dtm_xy_right = np.array(dtm_xy_right)
+            dtm_xy_two_right = np.array(dtm_xy_two_right)
+            
+            dtm_xy_left = np.array(dtm_xy_left)
+            dtm_xy_two_left = np.array(dtm_xy_two_left)
+            
+            dtm_xy_up = np.array(dtm_xy_up)
+            dtm_xy_two_up = np.array(dtm_xy_two_up)
+            
+            dtm_xy_down = np.array(dtm_xy_down)
+            dtm_xy_two_down = np.array(dtm_xy_two_down)
+            
+            coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
+            
+            coords_right = np.concat([np.expand_dims(y, 1), np.expand_dims(x_right, 1), dtm_xy_right], axis=-1)
+            coords_two_right = np.concat([np.expand_dims(y, 1), np.expand_dims(x_two_right, 1), dtm_xy_two_right], axis=-1)
+            
+            coords_left = np.concat([np.expand_dims(y, 1), np.expand_dims(x_left, 1), dtm_xy_left], axis=-1)
+            coords_two_left = np.concat([np.expand_dims(y, 1), np.expand_dims(x_two_left, 1), dtm_xy_two_left], axis=-1)
+            
+            coords_up = np.concat([np.expand_dims(y_up, 1), np.expand_dims(x, 1), dtm_xy_up], axis=-1)
+            coords_two_up = np.concat([np.expand_dims(y_two_up, 1), np.expand_dims(x, 1), dtm_xy_two_up], axis=-1)
+            
+            coords_down = np.concat([np.expand_dims(y_down, 1), np.expand_dims(x, 1), dtm_xy_down], axis=-1)
+            coords_two_down = np.concat([np.expand_dims(y_two_down, 1), np.expand_dims(x, 1), dtm_xy_two_down], axis=-1)
+            
+            all_coords = np.stack([coords, coords_right, coords_left, coords_up, coords_down,
+                coords_two_right, coords_two_left, coords_two_up, coords_two_down], axis=-1)
+            
+        return all_coords
     
      
     

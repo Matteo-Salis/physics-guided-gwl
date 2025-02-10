@@ -30,6 +30,7 @@ def wandb_config(config):
     wandb.init(
         entity = config["entity"],
         project = config["experiment_name"],
+        name=config["run_name"],
         dir = config["wandb_dir"],
         config = config,
         mode = "offline",

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 
-# from dataloaders.load_1d_meteo_wtd import ContinuousDataset
+from dataloaders.dataset_1d import Dataset_1D
 from dataloaders.load_2d_meteo_wtd import DiscreteDataset
 
 
@@ -10,8 +10,8 @@ def load_dataset(config):
     
     if config["dataset_type"] == "discrete":
         return DiscreteDataset(config)
-    # elif config["dataset_type"] == "continuous":
-    #     return ContinuousDataset(config)
+    elif config["dataset_type"] == "1d":
+        return Dataset_1D(config)
     else:
         raise Exception("Model name unknown.")
     

@@ -51,3 +51,36 @@ def physics_loss(y_hat, coord_input, g = torch.tensor([0]),
     loss_pde = torch.sum(pde_res**2)
     
     return loss_pde
+
+def fdiff_fprime_soa(f_ahead, f_behind, delta):
+    fprime = (f_ahead - f_behind)/(2*delta)
+    return fprime
+
+def fdiff_fsecond_soa(f, f_ahead, f_behind, delta):
+    fsecond = (f_ahead + f_behind -2*f)/(delta**2)
+    return fsecond
+
+def disc_physics_loss(y_hat,
+                      y_hat_two_right, y_hat_two_left, y_hat_two_up, y_hat_two_down,
+                      k_lat_up, k_lat_down,
+                      k_lon_right, k_lon_left,
+                      step = torch.tensor([1]),
+                      g =  torch.tensor([0]), S_y =  torch.tensor([1])):
+    
+    
+    #first_lon_diff = - k_lon * fdiff_fprime_soa(y_hat_right, y_hat_left, delta = step)
+    first_lon_diff_right = - k_lon_right * fdiff_fprime_soa(y_hat_two_right, y_hat, delta = step)
+    first_lon_diff_left = - k_lon_left * fdiff_fprime_soa(y_hat, y_hat_two_left, delta = step)
+    
+    #first_lat_diff = - k_lat * fdiff_fprime_soa(y_hat_up, y_hat_down, delta = step)
+    first_lat_diff_up = - k_lat_up * fdiff_fprime_soa(y_hat_two_up, y_hat, delta = step)
+    first_lat_diff_down = - k_lat_down * fdiff_fprime_soa(y_hat, y_hat_two_down, delta = step)
+
+    second_lon_diff = fdiff_fprime_soa(first_lon_diff_right, first_lon_diff_left, delta = step)
+    second_lat_diff = fdiff_fprime_soa(first_lat_diff_up, first_lat_diff_down, delta = step)
+
+    first_time_diff = S_y * (y_hat[:,1:] - y_hat[:,:-1])
+    
+    residuals = first_time_diff + second_lon_diff + second_lat_diff + g
+    loss_physics = torch.sum(residuals**2)
+    return loss_physics

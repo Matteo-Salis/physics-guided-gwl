@@ -1,3 +1,5 @@
+from functools import partial
+
 from utils.training_1d import *
 
 def train_model(config):
@@ -7,17 +9,18 @@ def train_model(config):
         print("Pure DL approach")
         return train_dl_model_1d
     
-    if config["loss"] == "data+pde":
+    elif config["loss"] == "data+pde":
         
         print("PIDL approach")
-        coeff_loss_pde = config["coeff_loss_pde"]
-        coeff_loss_data = config["coeff_loss_data"]
         
-        forward_and_loss = partial(train_dl_pde_model_1d, 
-                                            g = g,
-                                            S_y = S_y,
-                                            num_cpoints = num_cpoints,
-                                            num_ctsteps = num_ctsteps,
-                                            device = device,
-                                            coeff_loss_data = coeff_loss_data,
-                                            coeff_loss_pde = coeff_loss_pde)
+        num_cpoint_batch = config["num_cpoint_batch"]
+        num_cpoint_instance = config["num_cpoint_instance"]
+        coeff_loss_data = config["coeff_loss_data"]
+        coeff_loss_pde = config["coeff_loss_pde"]
+        
+        return partial(train_dl_pde_model_1d, 
+                        num_cpoint_batch = num_cpoint_batch,
+                        num_cpoint_instance = num_cpoint_instance,
+                        fdif_step = 0.0009,
+                        coeff_loss_data = coeff_loss_data,
+                        coeff_loss_pde = coeff_loss_pde)

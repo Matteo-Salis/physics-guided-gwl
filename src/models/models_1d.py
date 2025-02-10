@@ -740,10 +740,11 @@ class SC_CCNN_idw(nn.Module):
         
         return target_ts_out.squeeze()
 
-######### Model 5 PI ################
+######### Model 5 PI ################ 
 
 class SC_PICCNN_att(nn.Module):
     def __init__(self,
+                 ph_params,
                  timestep = 180,
                  cb_emb_dim = 16,
                  cb_att_h = 4,
@@ -754,7 +755,6 @@ class SC_PICCNN_att(nn.Module):
                  ccnn_kernel_size = 7,
                  ccnn_n_filters = 16,
                  ccnn_n_layers = 4,
-                 ph_params = None,
                  ph_params_neurons = 16,
                  ):
         super().__init__()
@@ -858,7 +858,7 @@ class SC_PICCNN_att(nn.Module):
         fc.append(nn.Linear(8, 1))
         self.fc = nn.Sequential(*fc)
 
-    def forward(self, x, z_lat, z_lon, z_dtm, w, x_mask):
+    def forward(self, x, z, w, x_mask, hc_out = False):
         """
         input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
         return 
@@ -941,8 +941,11 @@ class SC_PICCNN_att(nn.Module):
         
         hyd_cond = hyd_cond + torch.ones_like(hyd_cond)*self.ph_params["hyd_cond"][0]
             
-            
-        return target_ts_out, hyd_cond
+        if hc_out is True:    
+            return target_ts_out, hyd_cond
+        
+        else: 
+            return target_ts_out
         
 
 ###########################################
