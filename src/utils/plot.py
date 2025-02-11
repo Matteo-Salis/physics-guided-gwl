@@ -4,29 +4,18 @@ import geopandas as gpd
 import xarray
 import torch
 import wandb
-
+import random
 
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from rasterio.enums import Resampling
-from utils.pde_utils import * 
 
 from torchview import draw_graph
 
-# def plot_predictions(x, y, y_hat, save_dir = None, title = None):
-#     fig, ax = plt.subplots()
-#     fig.suptitle("Loss vs iterations")
-#     ax.plot(x, y_hat, label = "predicted")
-#     ax.plot(x, y, label = "true")
-#     ax.legend()
-    
-#     if title is not None:
-#         ax.set_title(title)
-        
-#     if save_dir:
-#         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
-    
-#     return fig
+################
+##### 1-D ######
+################
 
 def predict_series_points(ds, date_t0, sensor_number, model, device):
     
@@ -238,12 +227,75 @@ def plot_series_maps(ds, model, device, dates_list, tsteps_list):
                                         date, pred_timestep = tstep,
                                         save_dir = None, 
                                         print_plot = False))})
-                            
-                            
-                            
-def plot_model_graph(file_path, file_name, model, sample_input, device):
+
+
+################
+##### 2-D ######
+################
+
+def plot_random_station_time_series(y, y_hat, i, save_dir = None, model_name = None, title = None, mode = "training",
+                                    print_plot = False, wandb_log = True):
+
+    pz_h_mask = y[0,1,0,:,:]
+    avail_idxs = np.argwhere(pz_h_mask)
+    idx_stat = random.randint(0, avail_idxs.shape[1]-1)
+    coords_station = avail_idxs[:,idx_stat]
+
+    x_y_plot = np.argwhere(y[0,1,:,coords_station[0],coords_station[1]])[0]
+    y_plot = y[0,0,x_y_plot,coords_station[0],coords_station[1]]
+    y_hat_plot = y_hat[0,0,:,coords_station[0],coords_station[1]]
+
+    fig, ax = plt.subplots()
+    fig.suptitle("Loss vs iterations")
+    ax.plot(y_hat_plot, label = "predicted")
+    ax.plot(x_y_plot, y_plot, label = "true", marker = "o")
+    ax.legend()
+
+    if title is not None:
+        ax.set_title(title)
+        
+    if save_dir and model_name:
+        plt.savefig(f"{save_dir}/timeseries_{model_name}_ep{i}_{mode}_{coords_station[0]}_{coords_station[1]}.png", bbox_inches = 'tight') # dpi = 400, transparent = True
     
-    model_graph = draw_graph(model, input_data=sample_input, device=device, depth = 1)
+    if print_plot is True:
+        plt.tight_layout()
+        
+    if wandb_log is True:
+        wandb.log({
+                    f"{mode}_timeseries_prediction" :  wandb.Image(fig,
+                                                                caption=f"Prediction series ({coords_station[0]},{coords_station[1]}) ep{i} {mode}")
+                })
+        
+
+def plot_2d_prediction(Y_hat, i, save_dir, timestep, model_name, mode = "training",
+                       print_plot = False, wandb_log = True):
+    
+    fig, ax = plt.subplots(figsize = (10,10))
+    image = ax.imshow(Y_hat[0,0,timestep,:,:])
+    
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(image, cax = cax)
+    
+    if save_dir and model_name:
+        plt.savefig(f"{save_dir}/image_t{timestep}_{i}_{model_name}_{mode}.png", bbox_inches = 'tight') #d pi = 400, transparent = True
+    
+    if print_plot is True:
+        plt.tight_layout()
+    
+    if wandb_log is True:
+        wandb.log({
+            f"{mode}_image_prediction" :  wandb.Image(fig, caption=f"Prediction image ep{i} t{timestep} {mode}")
+        })    
+
+################
+#### COMMON ####
+################
+
+                            
+def plot_model_graph(file_path, file_name, model, sample_input, device, depth = 1):
+    
+    model_graph = draw_graph(model, input_data=sample_input, device=device, depth = depth)
     model_graph.visual_graph.render(format='png', filename = file_name, directory= f"{file_path}/")
     model_arch = wandb.Image(f"{file_path}/{file_name}.png", caption="model's architecture")
     

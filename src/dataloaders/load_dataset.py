@@ -3,12 +3,12 @@ import torch
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 
 from dataloaders.dataset_1d import Dataset_1D
-from dataloaders.load_2d_meteo_wtd import DiscreteDataset
+from dataloaders.dataset_2d import DiscreteDataset
 
 
 def load_dataset(config):
     
-    if config["dataset_type"] == "discrete":
+    if config["dataset_type"] == "2d":
         return DiscreteDataset(config)
     elif config["dataset_type"] == "1d":
         return Dataset_1D(config)
@@ -37,7 +37,7 @@ def get_dataloader(dataset, config):
                                                             train_idx + test_idx)
 
     # Print info 
-    if config["dataset_type"] == "discrete":
+    if config["dataset_type"] == "2d":
         print(f"Traing size: {train_idx}, Test size: {test_idx}")
     elif config["dataset_type"] == "1d":
         print(f"Traing size: {train_idx} - {dataset.wtd_df.index.get_level_values(0)[train_idxs[-1]]}, Test size: {test_idx} - {dataset.wtd_df.index.get_level_values(0)[test_idxs[-1]]}")

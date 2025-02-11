@@ -958,7 +958,7 @@ if __name__ == "__main__":
     print(f"Read data.json: {dict_files}")
 
     print("Loading ContinuousDataset...")
-    ds = ContinuousDataset(dict_files)
+    ds = Dataset_1D(dict_files)
     x, z, w_values, y, x_mask, y_mask  = ds[0]
     
     weather_coords = ds.get_weather_coords()

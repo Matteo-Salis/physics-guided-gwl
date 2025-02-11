@@ -1,25 +1,19 @@
 from tqdm import tqdm
-from loss.load_losses import *
-from utils.plots_2d import *
+from loss.losses_2d import *
+from utils.plot import *
 import wandb
 import matplotlib.pyplot as plt
 
-def test_model(i, model, test_loader, dataset, dtm, config, model_name, device = "cuda"):
+def test_model_2d(epoch, dataset, model, test_loader,
+                   c0_superres_loss,
+                   c1_masked_loss,
+                   c2_pde_darcy_loss,
+                   c3_positive_loss,
+                   h_timesteps,
+                   timesteps,
+                   device = "cuda"):
     
     dtm = torch.from_numpy(dataset.dtm_roi_downsampled.values).to(device)
-    wtd_mean = dataset.wtd_numpy_mean
-    wtd_std = dataset.wtd_numpy_std
-    
-    c0_superres_loss = config["c0_superres_loss"]
-    c1_masked_loss = config["c1_masked_loss"]
-    c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
-    c3_positive_loss = config["c3_positive_loss"]
-
-    h_timesteps = int(config["timesteps"]/2)
-    timesteps = int(config["timesteps"])
-
-    plots_dir = config["wandb_dir_plots"]
-    model_name_short = model_name.split(".")[0]
 
     X = None # input
     Y = None # ground truth
@@ -28,7 +22,7 @@ def test_model(i, model, test_loader, dataset, dtm, config, model_name, device =
     with torch.no_grad():
         with tqdm(test_loader, unit="batch") as tepoch:
             for batch_idx, (init_wtd, weather, pred_wtds) in enumerate(tepoch):
-                tepoch.set_description(f"Epoch {i}")
+                tepoch.set_description(f"Epoch {epoch}")
 
                 X = (init_wtd.to(device), dtm.to(device), weather.to(device))
                 # print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
@@ -59,7 +53,7 @@ def test_model(i, model, test_loader, dataset, dtm, config, model_name, device =
                     loss = loss + c2_pde_darcy_loss * loss_pde
 
                 if c3_positive_loss:
-                    loss_pos = loss_positive_height(Y_hat, wtd_mean, wtd_std, device)
+                    loss_pos = loss_positive_height(Y_hat, dataset.wtd_numpy_mean, dataset.wtd_numpy_std, device)
                     wandb.log({"test_loss_pos" : loss_pos})
                     loss = loss + c3_positive_loss * loss_pos
 
@@ -70,16 +64,19 @@ def test_model(i, model, test_loader, dataset, dtm, config, model_name, device =
                 
         # plots on wandb
         with torch.no_grad():
-            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * wtd_std) + wtd_mean
-            Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
+            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * dataset.wtd_numpy_std) + dataset.wtd_numpy_mean
+            Y_hat = (Y_hat.cpu() * dataset.wtd_numpy_std) + dataset.wtd_numpy_mean
 
-            plot_random_station_time_series(Y, Y_hat, i, plots_dir, model_name_short, f"Testing random time series ep:{i}", mode = "test")
+            plot_random_station_time_series(Y, Y_hat, epoch, f"Testing random time series ep:{epoch}", mode = "test")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, 0, model_name_short, mode = "test")
+            plot_2d_prediction(Y_hat, epoch, 0, mode = "test")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, h_timesteps, model_name_short, mode = "test")
+            plot_2d_prediction(Y_hat, epoch, h_timesteps, mode = "test")
 
-            plot_2d_prediction(Y_hat, i, plots_dir, timesteps-1, model_name_short, mode = "test")
+            plot_2d_prediction(Y_hat, epoch, timesteps-1, mode = "test")
 
+
+if __name__ == "__main__":
+    pass
 
             

@@ -1,5 +1,5 @@
 from models.models_1d import *
-from models.load_models_2d_refactoring import *
+from models.models_2d import *
 
 def load_model(config):
     timesteps = config["timesteps"]
