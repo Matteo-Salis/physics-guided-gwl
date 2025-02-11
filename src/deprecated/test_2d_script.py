@@ -65,8 +65,8 @@ device = (
 
 model = None
 
-if dict_files["model"] == "Discrete2DMidConcatNN":
-    model = Discrete2DMidConcatNN(timesteps).to(device)
+if dict_files["model"] == "Discrete2DConcat16":
+    model = Discrete2DConcat16(timesteps).to(device)
 elif dict_files["model"] == "Discrete2DNN":
     model = Discrete2DNN(timesteps).to(device)
 else:

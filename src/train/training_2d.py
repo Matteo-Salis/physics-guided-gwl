@@ -1,28 +1,23 @@
 from tqdm import tqdm
-from loss.load_losses import *
-from utils.plots_2d import *
+from loss.losses_2d import *
+from utils.plot import *
+from utils.plot import *
 import wandb
 import matplotlib.pyplot as plt
 from torchview import draw_graph
 
 
-def train_model(epoch, dataset, model, train_loader, optimizer, config, model_dir, model_name, device = "cuda"):
+def train_model_2d(epoch, dataset, model, train_loader, optimizer, model_dir, model_name,
+                   c0_superres_loss,
+                   c1_masked_loss,
+                   c2_pde_darcy_loss,
+                   c3_positive_loss,
+                   h_timesteps,
+                   timesteps,
+                   device = "cuda"):
     
     dtm = torch.from_numpy(dataset.dtm_roi_downsampled.values).to(device)
-    wtd_mean = dataset.wtd_numpy_mean
-    wtd_std = dataset.wtd_numpy_std
     
-    c0_superres_loss = config["c0_superres_loss"]
-    c1_masked_loss = config["c1_masked_loss"]
-    c2_pde_darcy_loss = config["c2_pde_darcy_loss"]
-    c3_positive_loss = config["c3_positive_loss"]
-
-    h_timesteps = int(config["timesteps"]/2)
-    timesteps = int(config["timesteps"])
-
-    plots_dir = config["wandb_dir_plots"]
-    #model_name_short = model_name.split(".")[0]
-
     X = None # input
     Y = None # ground truth
     Y_hat = None # prediction
@@ -62,7 +57,7 @@ def train_model(epoch, dataset, model, train_loader, optimizer, config, model_di
                 loss = loss + c2_pde_darcy_loss * loss_pde
 
             if c3_positive_loss:
-                loss_pos = loss_positive_height(Y_hat, wtd_mean, wtd_std, device)
+                loss_pos = loss_positive_height(Y_hat, dataset.wtd_numpy_mean, dataset.wtd_numpy_std, device)
                 wandb.log({"train_loss_pos" : loss_pos})
                 loss = loss + c3_positive_loss * loss_pos
 
@@ -76,24 +71,22 @@ def train_model(epoch, dataset, model, train_loader, optimizer, config, model_di
         
         # plots on wandb
         with torch.no_grad():
-            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * wtd_std) + wtd_mean
-            Y_hat = (Y_hat.cpu() * wtd_std) + wtd_mean
+            Y[:,0,:,:,:] = (Y[:,0,:,:,:] * dataset.wtd_numpy_std) + dataset.wtd_numpy_mean
+            Y_hat = (Y_hat.cpu() * dataset.wtd_numpy_std) + dataset.wtd_numpy_mean
 
-            plot_random_station_time_series(Y, Y_hat, epoch, plots_dir, model_name, f"Training random time series ep:{epoch}")
+            plot_random_station_time_series(Y, Y_hat, epoch, f"Training random time series ep:{epoch}")
 
-            plot_2d_prediction(Y_hat, epoch, plots_dir, 0, model_name, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, 0, mode = "training")
 
-            plot_2d_prediction(Y_hat, epoch, plots_dir, h_timesteps, model_name, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, h_timesteps, mode = "training")
 
-            plot_2d_prediction(Y_hat, epoch, plots_dir, timesteps-1, model_name, mode = "training")
+            plot_2d_prediction(Y_hat, epoch, timesteps-1, mode = "training")
 
-        if epoch == 0 and config["plot_model"]:
-            print("Saving plot of the model...")
-            #model_file_path = config['save_model_dir']
-            model_graph = draw_graph(model, input_data=([X]), device=device)
-            model_graph.visual_graph.render(format='png', filename = model_name, directory= f"{model_dir}/")
-            model_arch = wandb.Image(f"{model_dir}/{model_name}.png", caption="model's architecture")
-            wandb.log({"model_arch": model_arch})
+            if epoch == 0:
+                print("Saving plot of the model...")
+                wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model, 
+                                                          input_data = [X],
+                                                          device = device)})
 
 if __name__ == "__main__":
     pass

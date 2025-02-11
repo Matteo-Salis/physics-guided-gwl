@@ -14,8 +14,8 @@ from tqdm import tqdm
 
 from dataloaders.load_dataset import load_dataset, get_dataloader
 from models.load_model import load_model
-from train import train_model
-from test import test_model
+from train.load_train import training_model
+from test.load_test import test_model
 
 wandb.login()
 
@@ -68,6 +68,9 @@ def main(config):
     model_name = 'model_{}_{}'.format(model_id, timestamp)
     model_dir = config['save_model_dir']
     
+    train = training_model(config)
+    test = test_model(config)
+    
     wandb.watch(model, log_freq=100)
 
     print(f"Start time: {timestamp}")
@@ -82,7 +85,7 @@ def main(config):
         model.train()
         start_time = time.time()
 
-        train_model(epoch, model, dataset, train_loader, optimizer,
+        train(epoch, dataset, model, train_loader, optimizer,
                     model_dir, model_name,
                     device)
 
@@ -97,7 +100,7 @@ def main(config):
         model.eval()
         start_time = time.time()
 
-        test_model(epoch, model, dataset, test_loader, config, model_name, device)
+        test(epoch, dataset, model, test_loader, device)
 
         end_time = time.time()
         exec_time = end_time-start_time

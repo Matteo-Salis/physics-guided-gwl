@@ -12,63 +12,44 @@ import wandb
 from torchview import draw_graph
 
 from dataloaders.dataset_1d import *
-from utils.plot_1d import *
+from utils.plot import *
 from loss.losses_1d import *
-
-
-def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir, model_name, device = "cuda"):
     
-    with tqdm(train_loader, unit="batch") as tepoch:
-                    
-                    weather_coords = dataset.get_weather_coords(dtm = True).unsqueeze(0)
-                    
-                    plot_model_graph(file_path = model_dir,
-                                     file_name = model_name,
-                                     model = model,
-                                     sample_input = (dataset[0][0], dataset[0][1],
-                                                     [dataset[0][2], dataset.get_weather_coords(dtm = True)],
-                                                     dataset[0][4]),
-                                     device = device)
-                    
-                    for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
-                        tepoch.set_description(f"Epoch {epoch}")
-                        
-                        x = x.to(device)
-                        x_mask = x_mask.to(device)
-                        z = z.to(device)
-                        weather_coords_batch = weather_coords.expand(w_values.shape[0], -1, -1, -1)
-                        w = [w_values.to(device), weather_coords_batch.to(device)]
-                        y = y.to(device)
-                        y_mask = y_mask.to(device)
-                        #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        
-                        optimizer.zero_grad()
-                        
-                        y_hat = model(x, z, w, x_mask)
-                        
-                        #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        loss = masked_mse(y_hat,
-                                          y,
-                                          y_mask)
-                        
-                        print("Training_loss: ", loss.item())
-                        
-                        loss.backward()
-                        optimizer.step()
-                        
-                        # metrics = {
-                        #     "train_loss" : loss
-                        # }
-                        wandb.log({"Training_loss":loss.item()})   
-                        
-                    # Plots
-                    with torch.no_grad():
-                        plot_series_maps(dataset, model, device, 
-                        dates_list = dict_files["train_plot_dates"],
-                        tsteps_list= dict_files["train_plot_tstep_map"])
-                        
-                        
-def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
+    
+def test_dl_model_1d(epoch, dataset, model, test_loader, device = "cuda"):
+    
+    with torch.no_grad():
+                with tqdm(test_loader, unit="batch") as tepoch:
+                            
+                            for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
+                                tepoch.set_description(f"Epoch {epoch}")
+
+                                x = x.to(device)
+                                x_mask = x_mask.to(device)
+                                z = z.to(device)
+                                weather_coords_batch = dataset.weather_coords_dtm.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
+                                w = [w_values.to(device), weather_coords_batch.to(device)]
+                                y = y.to(device)
+                                y_mask = y_mask.to(device)
+                                #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+
+                                y_hat = model(x, z, w, x_mask)
+                                
+                                #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+
+                                loss = masked_mse(y_hat,
+                                              y,
+                                              y_mask)
+                                
+                                print("Test_loss: ", loss.item())
+                                wandb.log({"Test_loss":loss.item()})
+                                
+                            plot_series_maps(ds, model, device, 
+                                    dates_list = dict_files["test_plot_dates"],
+                                    tsteps_list= dict_files["test_plot_tstep_map"])
+                            
+                            
+def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                           num_cpoint_batch,
                           num_cpoint_instance,
                           g =  torch.tensor([0]), S_y =  torch.tensor([1]),
@@ -77,23 +58,22 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                           coeff_data_loss = 1,
                           coeff_pde_loss = 1):
     
-    with tqdm(train_loader, unit="batch") as tepoch:
-        
-                    weather_coords = dataset.get_weather_coords(dtm = True).unsqueeze(0)
+                with tqdm(test_loader, unit="batch") as tepoch:
                     
                     for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
+                        
+                        torch.set_grad_enabled(False)
+                        
                         tepoch.set_description(f"Epoch {epoch}")
                         
                         x = x.to(device)
                         x_mask = x_mask.to(device)
                         z = z.to(device)
-                        weather_coords_batch = weather_coords.expand(w_values.shape[0], -1, -1, -1)
+                        weather_coords_batch = dataset.weather_coords_dtm.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
                         w = [w_values.to(device), weather_coords_batch.to(device)]
                         y = y.to(device)
                         y_mask = y_mask.to(device)
                         #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        
-                        optimizer.zero_grad()
                         
                         y_hat = model(x, z, w, x_mask)
                         
@@ -102,7 +82,9 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                                           y,
                                           y_mask)
                         
-                        print("Training_data_loss: ", loss_data.item(), end = " --- ")
+                        print("Test_data_loss: ", loss_data.item(), end = " --- ")
+                        
+                        torch.set_grad_enabled(False)
                         
                         ## Control Points Generation
                         sample_idx = torch.randint(0,x.shape[0],
@@ -120,7 +102,7 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                                      torch.repeat_interleave(w_cpoints[1], num_cpoint_instance, dim=0).to(device)]
                         
                         
-                        z_cpoints = np.stack([dataset.control_points_generator(
+                        z_cpoints = np.stack([ds.control_points_generator(
                                  mode = "urandom+nb",
                                  num_lon_point = num_cpoint_instance,
                                  num_lat_point = num_cpoint_instance,
@@ -150,24 +132,27 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                         #coords_two_right, coords_two_left, coords_two_up, coords_two_down
                         
                         ### Print and Backward
-                        print("Training_pde_loss: ", loss_pde.item(), end = " --- ")
+                        print("Test_pde_loss: ", loss_pde.item(), end = " --- ")
                         
                         tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
-                        print("Training_Total_loss: ", tot_loss.item())
+                        print("Test_Total_loss: ", tot_loss.item())
                         
-                        tot_loss.backward()
-                        optimizer.step()
-                        
-                        wandb.log({"Training_data_loss": loss_data.item(),
-                                   "Training_pde_loss": loss_pde.item(),
-                                   "Training_Total_loss": tot_loss.item()})   
-
+                        wandb.log({"Test_data_loss": loss_data.item(),
+                                   "Test_pde_loss": loss_pde.item(),
+                                   "Test_Total_loss": tot_loss.item()})   
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(dataset, model, device, 
-                        dates_list = dict_files["train_plot_dates"],
-                        tsteps_list= dict_files["train_plot_tstep_map"])     
+                        plot_series_maps(ds, model, device, 
+                        dates_list = dict_files["test_plot_dates"],
+                        tsteps_list= dict_files["test_plot_tstep_map"])       
+                                
+                    
+if __name__ == "__main__":
+    pass
+
+
+            
 
 
 # def train_dl_model(ds, model, train_loader, test_loader,

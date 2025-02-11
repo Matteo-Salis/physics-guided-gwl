@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
 from models.unet_blocks import *
-from dataloaders.load_2d_meteo_wtd import DiscreteDataset
+from dataloaders.dataset_2d import DiscreteDataset
 
 class ConvTransposeBlock(nn.Module):
     def __init__(self, filters_in = 10, filters_out = 16, conv_num = 2):
@@ -449,10 +449,10 @@ if __name__ == "__main__":
         else "cpu"
     )
 
-    print("Loading Discrete2DNN...")
+    print("Loading Discrete2DConvLSTM...")
     timesteps = dict_files["timesteps"]
-    model = Discrete2DNN(timesteps).to(device)
-    print("Discrete2DNN prediction...")
+    model = Discrete2DConvLSTM(timesteps).to(device)
+    print("Discrete2DConvLSTM prediction...")
     y = model(x)
     print(f"Output:\n{y}")
     
