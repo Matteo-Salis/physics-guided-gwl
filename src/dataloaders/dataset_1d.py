@@ -55,6 +55,9 @@ class Dataset_1D(Dataset):
         if config["normalization"] is True:
             
             self.normalize(date_max = np.datetime64(config["date_max_norm"]))
+            
+        # Usefull in training 
+        self.weather_coords_dtm = self.get_weather_coords(dtm = True)
 
         # Transform       
         self.transform = config["transform"]
@@ -143,8 +146,6 @@ class Dataset_1D(Dataset):
         
         self.weather_dtm = self.weather_dtm.values
         self.weather_dtm = np.moveaxis(self.weather_dtm, 0,-1)
-        
-        self.weather_coords_dtm = self.get_weather_coords(dtm = True)
 
     def loading_point_wtd(self, fill_value = None):
         
