@@ -39,7 +39,8 @@ def load_model(config):
                  ccnn_kernel_size =  config["ccnn_kernel_size"],
                  ccnn_n_filters =  config["ccnn_n_filters"],
                  ccnn_n_layers =  config["ccnn_n_layers"],
-                 ph_params = ph_params), model_name
+                 ph_params = ph_params,
+                 ph_params_neurons = config["ph_params_neurons"]), model_name
     
     elif config["model"] == "CCNN_att_1D":
         
