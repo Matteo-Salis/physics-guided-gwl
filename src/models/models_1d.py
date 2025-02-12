@@ -952,13 +952,13 @@ class SC_PICCNN_att(nn.Module):
     
 if __name__ == "__main__":
     print("Loading data.json...")
-    dict_files = {}
+    config = {}
     with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json') as f:
-        dict_files = json.load(f)
-    print(f"Read data.json: {dict_files}")
+        config = json.load(f)
+    print(f"Read data.json: {config}")
 
     print("Loading ContinuousDataset...")
-    ds = Dataset_1D(dict_files)
+    ds = Dataset_1D(config)
     x, z, w_values, y, x_mask, y_mask  = ds[0]
     
     weather_coords = ds.get_weather_coords()
@@ -976,14 +976,14 @@ if __name__ == "__main__":
     )
 
     print("Loading Continuous1DNN...")
-    timesteps = dict_files["timesteps"]
-    model = SC_LSTM_idw(timestep = dict_files["timesteps"],
-                 cb_fc_layer = dict_files["cb_fc_layer"], #5,
-                 cb_fc_neurons = dict_files["cb_fc_neurons"], # 32,
-                 conv_filters = dict_files["conv_filters"], #32,
-                 lstm_layer = dict_files["lstm_layer"], #5,
-                 lstm_input_units = dict_files["lstm_input_units"], #16,
-                 lstm_units = dict_files["lstm_units"] #32
+    timesteps = config["timesteps"]
+    model = SC_LSTM_idw(timestep = config["timesteps"],
+                 cb_fc_layer = config["cb_fc_layer"], #5,
+                 cb_fc_neurons = config["cb_fc_neurons"], # 32,
+                 conv_filters = config["conv_filters"], #32,
+                 lstm_layer = config["lstm_layer"], #5,
+                 lstm_input_units = config["lstm_input_units"], #16,
+                 lstm_units = config["lstm_units"] #32
                  ).to(device)
     print("Continuous1DNN prediction...")
     y = model(x, z, w, x_mask)

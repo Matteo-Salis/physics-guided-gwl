@@ -41,7 +41,7 @@ def load_model(config):
                  ccnn_n_layers =  config["ccnn_n_layers"],
                  ph_params = ph_params), model_name
     
-    elif dict_files["model"] == "CCNN_att":
+    elif config["model"] == "CCNN_att_1D":
         
         print("model causal cnn att")
         
@@ -59,7 +59,7 @@ def load_model(config):
                     ccnn_n_layers =  config["ccnn_n_layers"],
                     ), model_name
         
-    elif dict_files["model"] == "SC_LSTM_att":
+    elif config["model"] == "LSTM_att_1D":
         
         print("model lstm att")
         
@@ -78,3 +78,8 @@ def load_model(config):
     
     else:
         raise Exception("Model name unknown.")
+    
+    
+    
+if __name__ == "__main__":
+    pass

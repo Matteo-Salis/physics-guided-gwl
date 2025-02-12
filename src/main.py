@@ -14,8 +14,8 @@ from tqdm import tqdm
 
 from dataloaders.load_dataset import load_dataset, get_dataloader
 from models.load_model import load_model
-from train.load_train import training_model
-from test.load_test import test_model
+from train_test.load_train import training_model
+from train_test.load_test import test_model
 
 wandb.login()
 
@@ -62,7 +62,11 @@ def main(config):
     print("Device: ", device)
     
     print("Loading model...")
-    model, model_id = load_model(config).to(device)
+    model, model_id = load_model(config)
+    model = model.to(device)
+    
+    wandb.watch(model, log_freq=100)
+    print("Model :", model_id)
     print("Total number of trainable parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     model_name = 'model_{}_{}'.format(model_id, timestamp)
@@ -70,8 +74,6 @@ def main(config):
     
     train = training_model(config)
     test = test_model(config)
-    
-    wandb.watch(model, log_freq=100)
 
     print(f"Start time: {timestamp}")
     # optimization parameters
@@ -85,9 +87,8 @@ def main(config):
         model.train()
         start_time = time.time()
 
-        train(epoch, dataset, model, train_loader, optimizer,
-                    model_dir, model_name,
-                    device)
+        train(epoch = epoch, dataset = dataset, model = model, train_loader = train_loader,
+              optimizer = optimizer, model_dir = model_dir, model_name = model_name, device = device)
 
         end_time = time.time()
         exec_time = end_time-start_time
@@ -100,7 +101,8 @@ def main(config):
         model.eval()
         start_time = time.time()
 
-        test(epoch, dataset, model, test_loader, device)
+        test(epoch = epoch, dataset = dataset, model = model, test_loader = test_loader,
+             device = device)
 
         end_time = time.time()
         exec_time = end_time-start_time
@@ -110,8 +112,6 @@ def main(config):
     print(f"Execution ended.")
 
     # end main
-
-
 
 if __name__ == "__main__":
     args = parse_arguments()

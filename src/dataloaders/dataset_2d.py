@@ -21,28 +21,28 @@ from shapely.geometry import box
 class DiscreteDataset(Dataset):
     """... dataset."""
 
-    def __init__(self, dict_files, transform=None):
+    def __init__(self, config, transform=None):
         """
         Args:
-            dict_files (string): Path to the .nc file.
+            config (string): Path to the .nc file.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.dict_files = dict_files
-        self.timesteps = self.dict_files["timesteps"]
+        self.config = config
+        self.timesteps = self.config["timesteps"]
 
         self.loading_rasterized_wtd()
 
         self.loading_weather()
 
-        if dict_files["normalization"]:
+        if config["normalization"]:
             print("Normalization: ON")
             self.normalize_dataset()
 
         self.transform = transform
 
     def loading_weather(self):
-        self.weather_xr = xarray.open_dataset(self.dict_files["weather_nc_path"])
+        self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
 
         self.weather_xr_mean = self.weather_xr.sel(time=slice(self.weather_xr["time"][0], 
@@ -55,13 +55,13 @@ class DiscreteDataset(Dataset):
         # self.weather_xr_std = self.weather_xr[:self.train_max_index].std()
 
     def loading_rasterized_wtd(self):
-        wtd_df = pd.read_csv(self.dict_files["wtd_csv_path"], dtype= {"sensor_id": "str"})
+        wtd_df = pd.read_csv(self.config["wtd_csv_path"], dtype= {"sensor_id": "str"})
         wtd_df = wtd_df.astype({"date":'datetime64[ns]'})
 
-        wtd_names  = gpd.read_file(self.dict_files["wtd_shp"], engine='fiona')
+        wtd_names  = gpd.read_file(self.config["wtd_shp"], engine='fiona')
         wtd_names = wtd_names.to_crs('epsg:4326')
 
-        dtm_roi = rioxarray.open_rasterio(self.dict_files["dtm_nc"], engine='fiona')
+        dtm_roi = rioxarray.open_rasterio(self.config["dtm_nc"], engine='fiona')
         dtm_roi = dtm_roi.rio.write_crs("epsg:4326")
 
         all_dates = wtd_df["date"].unique()
@@ -134,13 +134,13 @@ class DiscreteDataset(Dataset):
         mask = mask.rename({'wtd':'nan_mask'})
         self.wtd_data_raserized = self.wtd_data_raserized.assign(wtd_mask = mask["nan_mask"])
 
-        if self.dict_files["piezo_head"]:
+        if self.config["piezo_head"]:
             print("Creating piezometric head dataset...")
             self.wtd_data_raserized["wtd"] = - self.wtd_data_raserized["wtd"] + self.dtm_roi_downsampled.values
             print("Piezometric head dataset created.")
 
         # saving mean and std before fill na
-        train_split_p = 1 - self.dict_files["test_split_p"]
+        train_split_p = 1 - self.config["test_split_p"]
         self.train_max_index = int(self.__len__()*train_split_p)
 
         self.wtd_numpy_mean = self.wtd_data_raserized["wtd"][:self.train_max_index].mean().values.astype(np.float32)
@@ -201,12 +201,12 @@ class DiscreteDataset(Dataset):
         return torch.from_numpy(input_wtd), torch.from_numpy(input_weather), torch.from_numpy(output_wtd)
 
 if __name__ == "__main__":
-    dict_files = {}
+    config = {}
     with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/data.json') as f:
-        dict_files = json.load(f)
-    print(f"Read data.json: {dict_files}")
+        config = json.load(f)
+    print(f"Read data.json: {config}")
 
-    ds = DiscreteDataset(dict_files)
+    ds = DiscreteDataset(config)
     print("Dataset created.")
     print(f"Length of the dataset: {ds.__len__()}")
     print(f"Item -1: {ds[-1]}")
