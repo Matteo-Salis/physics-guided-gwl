@@ -104,7 +104,7 @@ def predict_map_points(ds, lon_point,
     x_cpoint = x.expand(total_cpoint,-1,-1).to(device)
     x_mask_cpoint = x_mask.expand(total_cpoint,-1).to(device)
                     
-    z_cpoint = ds.cpoint_generation(mode = "even",
+    z_cpoint = ds.control_points_generator(mode = "even",
                                     num_lon_point = lon_point,
                                     num_lat_point = lat_point)
 

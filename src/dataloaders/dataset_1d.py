@@ -25,17 +25,17 @@ import warnings
 class Dataset_1D(Dataset):
     """Weather and WTD Dataset for the continuous case model"""
 
-    def __init__(self, dict_files):
+    def __init__(self, config):
         """
         Args:
-            dict_files (string): Path to the .nc file.
+            config (string): Path to the .nc file.
             transform (callable, optional): Optional transform to be applied
                     on a sample.
         """
         
         # Attributes init
-        self.dict_files = dict_files
-        self.timesteps = self.dict_files["timesteps"]
+        self.config = config
+        self.timesteps = self.config["timesteps"]
 
         # Meteorological data loading 
         self.loading_weather()
@@ -44,20 +44,20 @@ class Dataset_1D(Dataset):
         self.loading_dtm()
         
         # Water Table Depth data loading 
-        self.loading_point_wtd(fill_value = dict_files["fill_value"])
+        self.loading_point_wtd(fill_value = config["fill_value"])
         
-        if dict_files["piezo_head"] is True:
+        if config["piezo_head"] is True:
             self.compute_piezo_head()
             self.target = "h"
         else:
             self.target = "wtd"
         
-        if dict_files["normalization"] is True:
+        if config["normalization"] is True:
             
-            self.normalize(date_max = np.datetime64(dict_files["date_max_norm"]))
+            self.normalize(date_max = np.datetime64(config["date_max_norm"]))
 
         # Transform       
-        self.transform = dict_files["transform"]
+        self.transform = config["transform"]
         
         
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
@@ -123,13 +123,13 @@ class Dataset_1D(Dataset):
             
         
     def loading_dtm(self):
-        self.dtm_roi = rioxarray.open_rasterio(self.dict_files["dtm_nc"],
+        self.dtm_roi = rioxarray.open_rasterio(self.config["dtm_nc"],
                                                engine='fiona')
         self.dtm_roi = self.dtm_roi.rio.write_crs("epsg:4326")
         
             
     def loading_weather(self):
-        self.weather_xr = xarray.open_dataset(self.dict_files["weather_nc_path"])
+        self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
         
         # Compute coord matrix
@@ -138,7 +138,7 @@ class Dataset_1D(Dataset):
         
         self.weather_coords = np.stack([lat_matrix,lon_matrix], axis = -1)
         
-        self.weather_dtm = rioxarray.open_rasterio(self.dict_files["weather_dtm"],
+        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
                                                engine='fiona')
         
         self.weather_dtm = self.weather_dtm.values
@@ -149,12 +149,12 @@ class Dataset_1D(Dataset):
     def loading_point_wtd(self, fill_value = None):
         
         # Water Table Depth data loading
-        self.wtd_df = pd.read_csv(self.dict_files["wtd_csv_path"], 
+        self.wtd_df = pd.read_csv(self.config["wtd_csv_path"], 
                                     dtype= {"sensor_id": "str"})
         self.wtd_df = self.wtd_df.astype({"date":'datetime64[ns]'})
 
         # Water Table Depth Sensors shapefile loading: 
-        self.wtd_names = gpd.read_file(self.dict_files["wtd_shp"],
+        self.wtd_names = gpd.read_file(self.config["wtd_shp"],
                                              engine='fiona')
         self.wtd_names = self.wtd_names.to_crs('epsg:4326')
 
@@ -345,6 +345,8 @@ class Dataset_1D(Dataset):
             coords = np.concat([coords, np.moveaxis(dtm_xy, 0, -1)], axis=-1)
             coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
             
+            return coords
+            
         elif mode == "urandom":
             
             if(num_lon_point != num_lat_point):
@@ -358,6 +360,8 @@ class Dataset_1D(Dataset):
                             method = "nearest").values for i in range(num_cpoints)])
             
             coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
+            
+            return coords
             
         elif mode == "urandom+nb":
             
@@ -447,17 +451,17 @@ class Dataset_1D(Dataset):
             all_coords = np.stack([coords, coords_right, coords_left, coords_up, coords_down,
                 coords_two_right, coords_two_left, coords_two_up, coords_two_down], axis=-1)
             
-        return all_coords
+            return all_coords
     
      
     
 if __name__ == "__main__":
-    dict_files = {}
+    config = {}
     with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json') as f:
-        dict_files = json.load(f)
-    print(f"Read data.json: {dict_files}")
+        config = json.load(f)
+    print(f"Read data.json: {config}")
 
-    ds = Dataset_1D(dict_files)
+    ds = Dataset_1D(config)
     print("Dataset created.")
     print(f"Length of the dataset: {ds.__len__()}")
     print(f"Item -1: {ds[-1]}")

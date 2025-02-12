@@ -79,8 +79,12 @@ def disc_physics_loss(y_hat,
     second_lon_diff = fdiff_fprime_soa(first_lon_diff_right, first_lon_diff_left, delta = step)
     second_lat_diff = fdiff_fprime_soa(first_lat_diff_up, first_lat_diff_down, delta = step)
 
-    first_time_diff = S_y * (y_hat[:,1:] - y_hat[:,:-1])
+    first_time_diff = S_y * (y_hat[:,:,1:] - y_hat[:,:,:-1])
     
-    residuals = first_time_diff + second_lon_diff + second_lat_diff + g
+    residuals = first_time_diff + second_lon_diff[:,:,:-1] + second_lat_diff[:,:,:-1] + g
     loss_physics = torch.sum(residuals**2)
     return loss_physics
+
+
+if __name__ == "__main__":
+    pass

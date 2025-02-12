@@ -106,3 +106,7 @@ def loss_masked(y_hat, y, device = "cuda"):
     mask = y[:,1,:,:,:].bool().to(device)
     out = (torch.sum( (predict - target) * mask) ** 2.0 ) / torch.sum(mask)
     return out
+
+
+if __name__ == "__main__":
+    pass

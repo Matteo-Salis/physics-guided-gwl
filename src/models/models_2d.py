@@ -431,13 +431,13 @@ class Discrete2DConvLSTM(nn.Module):
     
 if __name__ == "__main__":
     print("Loading data.json...")
-    dict_files = {}
+    config = {}
     with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/discrete_2D_wtd/test_2D_blocks.json') as f:
-        dict_files = json.load(f)
-    print(f"Read data.json: {dict_files}")
+        config = json.load(f)
+    print(f"Read data.json: {config}")
 
     print("Loading DiscreteDataset...")
-    ds = DiscreteDataset(dict_files)
+    ds = DiscreteDataset(config)
     wtd_init, weather, wtd_out  = ds[0]
     x = [wtd_init, weather]
 
@@ -450,7 +450,7 @@ if __name__ == "__main__":
     )
 
     print("Loading Discrete2DConvLSTM...")
-    timesteps = dict_files["timesteps"]
+    timesteps = config["timesteps"]
     model = Discrete2DConvLSTM(timesteps).to(device)
     print("Discrete2DConvLSTM prediction...")
     y = model(x)

@@ -85,7 +85,7 @@ def train_model_2d(epoch, dataset, model, train_loader, optimizer, model_dir, mo
             if epoch == 0:
                 print("Saving plot of the model...")
                 wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model, 
-                                                          input_data = [X],
+                                                          sample_input = [X],
                                                           device = device)})
 
 if __name__ == "__main__":
