@@ -82,7 +82,7 @@ def disc_physics_loss(y_hat,
     first_time_diff = S_y * (y_hat[:,:,1:] - y_hat[:,:,:-1])
     
     residuals = first_time_diff + second_lon_diff[:,:,:-1] + second_lat_diff[:,:,:-1] + g
-    loss_physics = torch.sum(residuals**2)
+    loss_physics = torch.mean(residuals**2)
     return loss_physics
 
 
