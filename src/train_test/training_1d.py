@@ -42,16 +42,16 @@ def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir,
                                           y,
                                           y_mask)
                         
-                        print("Training_loss: ", loss.item())
+                        print("Training_data_loss: ", loss.item())
                         
                         loss.backward()
                         optimizer.step()
                         
-                        wandb.log({"Training_loss":loss.item()})   
+                        wandb.log({"Training_data_loss":loss.item()})   
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(dataset, model, device, 
+                        plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
                         tsteps_list= tsteps_list)
                         
@@ -128,9 +128,7 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                         
                         z_cpoints = torch.tensor(z_cpoints, requires_grad=True).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
                         
-                        print("before mva", z_cpoints.shape)
                         z_cpoints = z_cpoints.moveaxis(-1, 2).flatten(start_dim=0, end_dim=2)  # flatten cpoints as instances in the batch
-                        print("after mva", z_cpoints.shape)
                         
                         y_hat_pde, hydro_cond_hat = model(x_cpoints, z_cpoints, w_cpoints, x_mask_cpoints, hc_out = True)
                         
@@ -167,9 +165,10 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(dataset, model, device, 
+                        plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
-                        tsteps_list = tsteps_list)
+                        tsteps_list = tsteps_list,
+                        hydro_cond = True)
                         
                         if epoch == 0:
                             print("Saving plot of the model...")
