@@ -42,10 +42,10 @@ def test_dl_model_1d(epoch, dataset, model, test_loader,
                                               y,
                                               y_mask)
                                 
-                                print("Test_loss: ", loss.item())
-                                wandb.log({"Test_loss":loss.item()})
+                                print("Test_data_loss: ", loss.item())
+                                wandb.log({"Test_data_loss":loss.item()})
                                 
-                            plot_series_maps(dataset, model, device, 
+                            plot_series_and_maps(dataset, model, device, 
                                     dates_list = dates_list,
                                     tsteps_list= tsteps_list)
                             
@@ -113,9 +113,7 @@ def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                         
                         z_cpoints = torch.tensor(z_cpoints, requires_grad=True).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
                         
-                        print("before mva", z_cpoints.shape)
                         z_cpoints = z_cpoints.moveaxis(-1, 2).flatten(start_dim=0, end_dim=2)  # flatten cpoints as instances in the batch
-                        print("after mva", z_cpoints.shape)
                         
                         y_hat_pde, hydro_cond_hat = model(x_cpoints, z_cpoints, w_cpoints, x_mask_cpoints, hc_out = True)
                         
@@ -148,9 +146,10 @@ def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                         
                     # Plots
                     with torch.no_grad():
-                        plot_series_maps(dataset, model, device, 
+                        plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
-                        tsteps_list= tsteps_list)       
+                        tsteps_list = tsteps_list,
+                        hydro_cond = True)       
                                 
                     
 if __name__ == "__main__":

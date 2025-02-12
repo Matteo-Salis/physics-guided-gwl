@@ -85,7 +85,8 @@ def plot_one_series(ds, date_t0, df_prediction = None, sensor = None,
 
 def predict_map_points(ds, lon_point, 
                  sample_date,
-                 model, device):
+                 model, device,
+                 hydro_cond = False):
     
     sample_idx = ds.get_iloc_from_date(date_max = sample_date)
     x = ds[sample_idx][0].unsqueeze(0)
@@ -116,8 +117,11 @@ def predict_map_points(ds, lon_point,
     z_cpoint = torch.tensor(z_cpoint).to(torch.float32).to(device)
     w_cpoint = [w[0].expand(total_cpoint,-1,-1,-1,-1),
             w[1].expand(total_cpoint,-1,-1,-1)]
-                
-    y_hat_cpoint = model(x_cpoint, z_cpoint, w_cpoint, x_mask_cpoint)
+    
+    if hydro_cond is True:            
+        y_hat_cpoint, hc_hat = model(x_cpoint, z_cpoint, w_cpoint, x_mask_cpoint, hc_out = True)
+    else:
+        y_hat_cpoint = model(x_cpoint, z_cpoint, w_cpoint, x_mask_cpoint)
     
     # Adapt dtm resolution
     
@@ -163,10 +167,33 @@ def predict_map_points(ds, lon_point,
                                dims = ["lat", "lon", "time"]
                                )
     
-    return [sample_h, sample_wtd, dtm_denorm_downsampled]
+    if hydro_cond is True:
+        hc_hat = hc_hat.reshape(lat_point,lon_point,2).detach().cpu().numpy()
+        
+        sample_hc_lat = xarray.DataArray(data = hc_hat[:,:,0],
+                                coords = dict(
+                                            lon=("lon", z_cpoint[:,1].unique().detach().cpu().numpy()),
+                                            lat=("lat", z_cpoint[:,0].unique().detach().cpu().numpy()[::-1])),
+                                dims = ["lat", "lon"],
+                                name = "hc_lat",
+                                )
+        
+        sample_hc_lon = xarray.DataArray(data = hc_hat[:,:,1],
+                                coords = dict(
+                                            lon=("lon", z_cpoint[:,1].unique().detach().cpu().numpy()),
+                                            lat=("lat", z_cpoint[:,0].unique().detach().cpu().numpy()[::-1])),
+                                dims = ["lat", "lon"],
+                                name = "hc_lon",
+                                )
+        
+        sample_hc = xarray.merge([sample_hc_lat, sample_hc_lon])
+        return [sample_h, sample_wtd, dtm_denorm_downsampled, sample_hc]
+    
+    else:
+        return [sample_h, sample_wtd, dtm_denorm_downsampled]
 
 
-def plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled, 
+def plot_one_map_target(sample_h, sample_wtd, dtm_denorm_downsampled, 
                  sample_date, pred_timestep,
                  save_dir = None, 
                  print_plot = False):
@@ -197,8 +224,32 @@ def plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled,
     else:
         return fig 
     
+def plot_one_map_hc(sample_hc,
+                 save_dir = None, 
+                 print_plot = False):
     
-def plot_series_maps(ds, model, device, dates_list, tsteps_list):
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(1,2, figsize = (10,4))
+    fig.suptitle(f"Hydraulic Condictivity")
+
+    sample_hc["hc_lat"].plot(ax = ax[0])
+    ax[0].set_title("HC - Lat")
+    
+    sample_hc["hc_lon"].plot(ax = ax[1])
+    ax[1].set_title("HC - Lon")
+
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+    
+    if print_plot is True:
+        plt.tight_layout()
+        
+    else:
+        return fig 
+    
+    
+def plot_series_and_maps(ds, model, device, dates_list, tsteps_list, hydro_cond = False):
 
         for date in dates_list:
                     # Time Series  
@@ -217,16 +268,28 @@ def plot_series_maps(ds, model, device, dates_list, tsteps_list):
                                                                 print_plot = False))})
                     
                     # Maps
-                    sample_h, sample_wtd, dtm_denorm_downsampled = predict_map_points(ds, lon_point = 40, 
-                                sample_date = date,
-                                model = model, device = device)
-                    
+                    if hydro_cond is True:
+                        sample_h, sample_wtd, dtm_denorm_downsampled, sample_hc = predict_map_points(ds, lon_point = 40, 
+                                                                                sample_date = date,
+                                                                                model = model, device = device, 
+                                                                                hydro_cond = True)
+                        
+                        wandb.log({f"hydraulic_conductivity_{date}":wandb.Image(plot_one_map_hc(sample_hc,
+                                                                                    save_dir = None, 
+                                                                                    print_plot = False))})
+                    else:
+                        sample_h, sample_wtd, dtm_denorm_downsampled = predict_map_points(ds, lon_point = 40, 
+                                                                        sample_date = date,
+                                                                        model = model, device = device)
+                        
                     for tstep in tsteps_list:
         
-                            wandb.log({f"pred_map_{date}-t{tstep}":wandb.Image(plot_one_map(sample_h, sample_wtd, dtm_denorm_downsampled, 
-                                        date, pred_timestep = tstep,
-                                        save_dir = None, 
-                                        print_plot = False))})
+                            wandb.log({f"pred_map_{date}-t{tstep}":wandb.Image(plot_one_map_target(sample_h, sample_wtd, dtm_denorm_downsampled, 
+                                                                                date, pred_timestep = tstep,
+                                                                                save_dir = None, 
+                                                                                print_plot = False))})
+                            
+                    
 
 
 ################
