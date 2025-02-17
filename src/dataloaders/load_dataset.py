@@ -18,9 +18,11 @@ def load_dataset(config):
 
 def get_dataloader(dataset, config):
 
-    max_ds_elems = dataset.__len__()
-    if not config["all_dataset"]:
+    if config["all_dataset"] is True:
+        max_ds_elems = dataset.__len__()
+    else:
         max_ds_elems = config["max_ds_elems"]
+        
         
     if type(config["test_split_p"]) is str:
         

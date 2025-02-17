@@ -6,7 +6,7 @@ def masked_mse(y_hat, y, mask):
     # y_hat = y_hat.to(device)
     # y = y.to(device)
     # mask = mask.to(device)
-    return torch.sum(((y_hat[mask]-y[mask]))**2.0)  / torch.sum(mask)
+    return torch.sum((y_hat[mask]-y[mask])**2.0)  / torch.sum(mask)
 
 
 # Gradient computation with autograd - more efficient

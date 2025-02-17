@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from models.unet_blocks import *
 from dataloaders.dataset_2d import DiscreteDataset
 
 class ConvTransposeBlock(nn.Module):
@@ -66,14 +65,67 @@ class ConvMaskBlock(nn.Module):
 
         return out
 
+class DoubleConv(nn.Module):
+    def __init__(self, filters_in, filters_out, mask = None):
+        super().__init__()
+
+        filters_mid = int((filters_in + filters_out) / 2)
+        
+        self.double_conv = nn.Sequential(
+            nn.Conv3d(filters_in, filters_mid, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(filters_mid),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(filters_mid, filters_out,  (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same'),
+            nn.BatchNorm3d(filters_out),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.double_conv(x)
 
 class UNetBlock(nn.Module):
     def __init__(self, dims = (57,84), filters_in = 1, filters_out = 1):
         super(UNetBlock, self).__init__()
-        pass
 
+        self.conv_0 = nn.Conv3d(filters_in, filters_in, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same')
+        self.btc_0 = nn.BatchNorm3d(filters_in)
+        self.relu_0 = nn.ReLU(inplace=True)
+
+        # Downscaling part
+        self.dconv_1 = DoubleConv(filters_in, 8)
+        self.maxpool_2 = nn.MaxPool3d((1,2,2))
+        self.dconv_3 = DoubleConv(8, 16)
+        self.maxpool_4 = nn.MaxPool3d((1,2,2))
+
+        self.dconv_5 = DoubleConv(16, 16)
+
+        # Upscaling part
+        self.up_6 = nn.ConvTranspose3d(16, 16, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+        self.dconv_7 = DoubleConv(32, 16)
+        self.up_8 = nn.ConvTranspose3d(16, 8, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+        self.dconv_9 = DoubleConv(16, 1)
+        
     def forward(self, x):
-        pass
+        mask = x[:,1].unsqueeze(1)
+        
+        x_0 = self.relu_0(self.btc_0(self.conv_0(x)))
+        x = x_0 * mask
+        x = F.pad(x, (0,0,2,1,0,0), mode="reflect")
+
+        x_1 = self.dconv_1(x)
+        x_2 = self.maxpool_2(x_1)
+        x_3 = self.dconv_3(x_2)
+        x_4 = self.maxpool_4(x_3)
+
+        x_5 = self.dconv_5(x_4)
+
+        x_6 = self.up_6(x_5)
+        x_7 = self.dconv_7(torch.concat([x_3,x_6], dim=1))
+        x_8 = self.up_8(x_7)
+        out = self.dconv_9(torch.concat([x_1,x_8], dim=1))
+
+        return out[:,:,:,3:,:]
+
 
 
 class ConvBlock(nn.Module):
@@ -239,6 +291,52 @@ class Discrete2DConcat1(nn.Module):
         return out
     
 ############## MODEL 2 BIS ##############
+# class Discrete2DConcat1_Time(nn.Module):
+#     def __init__(self, timesteps = 180, num_layers = 1):
+#         super().__init__()
+        
+#         self.timesteps = timesteps
+
+#         # processing initial values
+#         self.mask_conv = ConvMaskBlock(filters_in = 3)
+#         self.m_conv_1 = ConvBlock(filters_in = 1, conv_num=2, filters_out = 1)
+
+#         # transpose conv (upsampling weather)
+#         self.m_conv_tr_1 = ConvTransposeBlock(conv_num = 2, filters_out = 1)
+#         self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
+
+#         self.m_conv_f_3 = ConvBlockFinal(input_ch=1, k=3, conv_num=2, del_time_block = True)
+
+
+#     def forward(self, x):
+#         """
+#         return 
+#             lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+#         x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+#         """
+#         (x_init, dtm, x_weather) = x 
+
+#         # processing initial values x
+#         dtm = torch.unsqueeze(dtm, dim=0)
+#         dtm = dtm.expand(x_init.shape[0],-1,-1,-1)
+#         x_init = torch.concat([x_init, dtm], dim=1)
+#         x_init = torch.unsqueeze(x_init, dim=2)
+
+#         x_init = self.mask_conv(x_init)
+#         x_init = self.m_conv_1(x_init)
+
+#         # processing weaterh
+#         x_weather = self.m_conv_tr_1(x_weather)
+#         x_weather = self.m_avg_pool_2b(x_weather)
+
+#         # concat
+#         concat = torch.concat([x_init, x_weather], dim=2)
+
+#         out = self.m_conv_f_3(concat)
+        
+#         return out
+    
+############## MODEL 2 TER ##############
 class Discrete2DConcat1_Time(nn.Module):
     def __init__(self, timesteps = 180, num_layers = 1):
         super().__init__()
@@ -246,8 +344,7 @@ class Discrete2DConcat1_Time(nn.Module):
         self.timesteps = timesteps
 
         # processing initial values
-        self.mask_conv = ConvMaskBlock(filters_in = 3)
-        self.m_conv_1 = ConvBlock(filters_in = 1, conv_num=2, filters_out = 1)
+        self.unet_conv_1 = UNetBlock(filters_in=3)
 
         # transpose conv (upsampling weather)
         self.m_conv_tr_1 = ConvTransposeBlock(conv_num = 2, filters_out = 1)
@@ -270,8 +367,7 @@ class Discrete2DConcat1_Time(nn.Module):
         x_init = torch.concat([x_init, dtm], dim=1)
         x_init = torch.unsqueeze(x_init, dim=2)
 
-        x_init = self.mask_conv(x_init)
-        x_init = self.m_conv_1(x_init)
+        x_init = self.unet_conv_1(x_init)
 
         # processing weaterh
         x_weather = self.m_conv_tr_1(x_weather)

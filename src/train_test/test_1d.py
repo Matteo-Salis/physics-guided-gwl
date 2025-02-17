@@ -135,14 +135,15 @@ def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                         #coords_two_right, coords_two_left, coords_two_up, coords_two_down
                         
                         ### Print and Backward
-                        print("Test_pde_loss: ", loss_pde.item(), end = " --- ")
+                        print("Test_pde_loss: ", loss_pde.item()) #, end = " --- "
                         
-                        tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
-                        print("Test_Total_loss: ", tot_loss.item())
+                        # tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
+                        # print("Test_Total_loss: ", tot_loss.item())
                         
                         wandb.log({"Test_data_loss": loss_data.item(),
-                                   "Test_pde_loss": loss_pde.item(),
-                                   "Test_Total_loss": tot_loss.item()})   
+                                   "Test_pde_loss": loss_pde.item() #,
+                                   #"Test_Total_loss": tot_loss.item()
+                                   })   
                         
                     # Plots
                     with torch.no_grad():

@@ -18,10 +18,6 @@ from torchview import draw_graph
 ################
 
 def predict_series_points(ds, date_t0, sensor_number, model, device):
-    
-    weather_coords = ds.get_weather_coords()
-    weather_dtm = ds.get_weather_dtm()
-    weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
 
     sample_idx = ds.get_iloc_from_date(date_max = date_t0) + 1
 
@@ -30,7 +26,7 @@ def predict_series_points(ds, date_t0, sensor_number, model, device):
     x = x.to(device)
     x_mask = x_mask.to(device)
     z = z.to(device)
-    w = [w_values.to(device), weather_coords.to(device)]
+    w = [w_values.to(device), ds.weather_coords_dtm.to(device)]
     y = y.to(device)
     y_mask = y_mask.to(device)
 
@@ -61,8 +57,7 @@ def plot_one_series(ds, date_t0, df_prediction = None, sensor = None,
     """
     
     if generate_points is True:
-        df_prediction = predict_series_points(ds, date_t0, sensor, model, device)[0]
-        sensor_id = predict_series_points(ds, date_t0, sensor, model, device)[1]
+        df_prediction, sensor_id = predict_series_points(ds, date_t0, sensor, model, device)
 
     fig, ax = plt.subplots()
     ax.plot(df_prediction, label = df_prediction.columns, marker = "o", lw = 0.7, markersize = 2)
@@ -92,13 +87,8 @@ def predict_map_points(ds, lon_point,
     x = ds[sample_idx][0].unsqueeze(0)
     x_mask = ds[sample_idx][4].unsqueeze(0)
 
-    weather_coords = ds.get_weather_coords()
-    weather_dtm = ds.get_weather_dtm()
-    weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
-    weather_coords_batch = weather_coords.unsqueeze(0)
-
     w = [ds[sample_idx][2].unsqueeze(0).to(device),
-        weather_coords_batch.to(device)]
+        ds.weather_coords_dtm.unsqueeze(0).to(device)]
     
     lat_point = int(lon_point * 0.75)
     total_cpoint = lat_point * lon_point
@@ -109,10 +99,6 @@ def predict_map_points(ds, lon_point,
                                     num_lon_point = lon_point,
                                     num_lat_point = lat_point)
 
-    # normalization 
-    z_cpoint[:,0] = (z_cpoint[:,0] - ds.norm_factors["lat_mean"])/ds.norm_factors["lat_std"]
-    z_cpoint[:,1] = (z_cpoint[:,1] - ds.norm_factors["lon_mean"])/ds.norm_factors["lon_std"]
-    z_cpoint[:,2] = (z_cpoint[:,2] - ds.norm_factors["dtm_mean"].values)/ds.norm_factors["dtm_std"].values
                     
     z_cpoint = torch.tensor(z_cpoint).to(torch.float32).to(device)
     w_cpoint = [w[0].expand(total_cpoint,-1,-1,-1,-1),
@@ -330,7 +316,7 @@ def plot_random_station_time_series(y, y_hat, i, save_dir = None, model_name = N
                 })
         
 
-def plot_2d_prediction(Y_hat, i, save_dir, timestep, model_name, mode = "training",
+def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, mode = "training",
                        print_plot = False, wandb_log = True):
     
     fig, ax = plt.subplots(figsize = (10,10))
