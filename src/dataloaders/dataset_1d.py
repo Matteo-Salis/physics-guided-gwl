@@ -249,7 +249,8 @@ class Dataset_1D(Dataset):
         
         Z = [torch.tensor(sample_lat).reshape(1).to(torch.float32),
              torch.tensor(sample_lon).reshape(1).to(torch.float32),
-             torch.tensor(sample_dtm).reshape(1).to(torch.float32)]  
+             torch.tensor(sample_dtm).reshape(1).to(torch.float32)]
+          
         Z = torch.stack(Z, dim = -1).squeeze()
         
         # Initial state WTD (t0) data        
@@ -267,7 +268,9 @@ class Dataset_1D(Dataset):
         return [X, Z, W, Y, X_mask, Y_mask]
     
     def get_avail_target_data(self, date):
+        
         target_t0 = self.wtd_df[[self.target, "nan_mask", "lat", "lon", "height"]].loc[self.wtd_df.index.get_level_values(0) == date]
+        
         target_t0_values = target_t0[self.target].values
         target_t0_mask = target_t0["nan_mask"].values
         target_t0_lat = target_t0["lat"].values
@@ -323,6 +326,9 @@ class Dataset_1D(Dataset):
                                  num_lon_point = 100,
                                  num_lat_point = 100,
                                  step = None):
+        """
+        output: normalized cpoints
+        """
 
         if bbox is None:
             bbox = [self.dtm_roi.x.min().values,
@@ -343,6 +349,9 @@ class Dataset_1D(Dataset):
             dtm_xy = self.dtm_roi.sel(x = x, y = y,
                             method = "nearest").values
             
+            coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            
             coords = np.concat([coords, np.moveaxis(dtm_xy, 0, -1)], axis=-1)
             coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
             
@@ -359,6 +368,9 @@ class Dataset_1D(Dataset):
             
             dtm_xy = np.array([self.dtm_roi.sel(x = x[i], y = y[i],
                             method = "nearest").values for i in range(num_cpoints)])
+            
+            coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
             
             coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
             
@@ -420,7 +432,20 @@ class Dataset_1D(Dataset):
                 dtm_xy_two_down.append(self.dtm_roi.sel(x = x[i], y = y_two_down[i],
                                 method = "nearest").values)
             
-                
+            # Normalization
+            x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            x_right = (x_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            x_two_right = (x_two_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            x_left = (x_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            x_two_left = (x_two_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            
+            y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            y_up = (y_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            y_two_up = (y_two_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            y_down = (y_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            y_two_down = (y_two_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+            
+    
             dtm_xy = np.array(dtm_xy)
             
             dtm_xy_right = np.array(dtm_xy_right)

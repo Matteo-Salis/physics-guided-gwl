@@ -49,7 +49,7 @@ def main(config):
     # load dataloader
     print("Getting dataloader...")
     train_loader, test_loader = get_dataloader(dataset, config)
-    print("Dataloader ready.")
+    print("Dataloaders ready.")
 
     # load model
     device = (
@@ -84,7 +84,7 @@ def main(config):
     # loop training and test
     for epoch in range(config["epochs"]):
         print(f"############### Training epoch {epoch} ###############")
-        model.train()
+        model.train(True)
         start_time = time.time()
 
         train(epoch = epoch, dataset = dataset, model = model, train_loader = train_loader,

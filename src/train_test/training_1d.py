@@ -15,6 +15,8 @@ from dataloaders.dataset_1d import *
 from utils.plot import *
 from loss.losses_1d import *
 
+from loss.PytorchPCGrad.pcgrad import PCGrad
+
 
 def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir, model_name,
                       dates_list, tsteps_list, device = "cuda"):
@@ -50,19 +52,24 @@ def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir,
                         wandb.log({"Training_data_loss":loss.item()})   
                         
                     # Plots
+                    model.eval()
                     with torch.no_grad():
                         plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
                         tsteps_list= tsteps_list)
                         
                         if epoch == 0:
-                            print("Saving plot of the model...")
+                            print("Saving plot of the model's architecture...")
                             wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
                                                                       sample_input = (dataset[0][0], dataset[0][1],
-                                                                       [dataset[0][2], dataset.get_weather_coords(dtm = True)],
+                                                                       [dataset[0][2], dataset.weather_coords_dtm],
                                                                        dataset[0][4]),
                                                                       device = device)})
-                        
+def multi_task_backprop(losses, optimizer, pcgrad = True):
+    
+    optimizer = PCGrad(optimizer) 
+    optimizer.pc_backward(losses) # calculate the gradient can apply gradient modification
+    optimizer.step()  # apply gradient step                       
                         
 def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                           model_dir, model_name,
@@ -74,7 +81,8 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                           fdif_step = 0.0009,
                           device = "cuda",
                           coeff_data_loss = 1,
-                          coeff_pde_loss = 1):
+                          coeff_pde_loss = 1,
+                          pcgrad = True):
     
     g = g.to(device)
     S_y = S_y.to(device)
@@ -150,20 +158,24 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                         #coords_two_right, coords_two_left, coords_two_up, coords_two_down
                         
                         ### Print and Backward
-                        print("Training_pde_loss: ", loss_pde.item(), end = " --- ")
+                        print("Training_pde_loss: ", loss_pde.item()) #, end = " --- "
                         
-                        tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
-                        print("Training_Total_loss: ", tot_loss.item())
-                        
-                        tot_loss.backward()
-                        optimizer.step()
+                            #tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
+                            #print("Training_Total_loss: ", tot_loss.item())
+                            
+                            #tot_loss.backward()
+                            #optimizer.step()
+                            
+                        multi_task_backprop([loss_data, loss_pde], optimizer)
                         
                         wandb.log({"Training_data_loss": loss_data.item(),
-                                   "Training_pde_loss": loss_pde.item(),
-                                   "Training_Total_loss": tot_loss.item()})   
+                                   "Training_pde_loss": loss_pde.item()})
+                        # ,
+                        #           "Training_Total_loss": tot_loss.item()   
 
                         
                     # Plots
+                    model.eval()
                     with torch.no_grad():
                         plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
@@ -174,7 +186,7 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                             print("Saving plot of the model...")
                             wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
                                                                       sample_input = (dataset[0][0], dataset[0][1],
-                                                                       [dataset[0][2], dataset.get_weather_coords(dtm = True)],
+                                                                       [dataset[0][2], dataset.weather_coords_dtm],
                                                                        dataset[0][4]),
                                                                       device = device)})
 

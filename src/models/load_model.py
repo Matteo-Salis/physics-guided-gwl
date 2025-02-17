@@ -60,6 +60,22 @@ def load_model(config):
                     ccnn_n_layers =  config["ccnn_n_layers"],
                     ), model_name
         
+    elif config["model"] == "CCNN_idw_1D":
+        
+        print("model causal cnn idw")
+        
+        model_name = "CCNN_IDW_1D"
+        
+        return SC_CCNN_idw(timestep = config["timesteps"],
+                    cb_fc_layer = config["cb_fc_layer"],
+                    cb_fc_neurons = config["cb_fc_neurons"],
+                    conv_filters = config["conv_filters"],
+                    ccnn_input_filters =  config["ccnn_input_filters"],
+                    ccnn_kernel_size =  config["ccnn_kernel_size"],
+                    ccnn_n_filters =  config["ccnn_n_filters"],
+                    ccnn_n_layers =  config["ccnn_n_layers"],
+                    ), model_name
+        
     elif config["model"] == "LSTM_att_1D":
         
         print("model lstm att")

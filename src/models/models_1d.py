@@ -99,6 +99,7 @@ class SC_LSTM_idw(nn.Module):
             lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
         x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
         """
+        
         # Batch dimension
         if len(x.shape) < 3:
             x = x.unsqueeze(0)
@@ -437,21 +438,25 @@ class SC_CCNN_att(nn.Module):
         conv3d_stack.append(nn.LeakyReLU())
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
-        # Joint sequental block
+        # Joint sequential block
         
         for cl in range(self.ccnn_n_layers):
             setattr(self, f"convolution_1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
                                                self.ccnn_kernel_size))
+            
+            # setattr(self, f"batch_norm_1d_{cl}",
+            #         nn.BatchNorm1d(int(self.ccnn_n_filters)))
+            
             setattr(self, f"convolution_1d_lrelu_{cl}",
                     nn.LeakyReLU())
             
             setattr(self, f"conv1x1_{cl}",
                     nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
-                                              self.ccnn_input_filters,
-                                              1,
-                                              padding="valid"),
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
                                     nn.LeakyReLU())
                     )
         
@@ -527,6 +532,7 @@ class SC_CCNN_att(nn.Module):
         # Sequential block
         for cl in range(self.ccnn_n_layers):
             target_ts = getattr(self, f"convolution_1d_{cl}")([target_ts, target0])
+            #target_ts = getattr(self, f"batch_norm_1d_{cl}")(target_ts)
             target_ts = getattr(self, f"convolution_1d_lrelu_{cl}")(target_ts)
             target_ts = getattr(self, f"conv1x1_{cl}")(target_ts)
         
@@ -579,8 +585,6 @@ class SC_CCNN_idw(nn.Module):
     
     def __init__(self,
                  timestep = 180,
-                 cb_emb_dim = 16,
-                 cb_att_h = 4,
                  cb_fc_layer = 2,
                  cb_fc_neurons = 32,
                  conv_filters = 32,
@@ -596,8 +600,6 @@ class SC_CCNN_idw(nn.Module):
         self.ccnn_kernel_size = ccnn_kernel_size
         self.ccnn_n_filters = ccnn_n_filters
         self.ccnn_n_layers = ccnn_n_layers
-        self.cb_emb_dim = cb_emb_dim
-        self.cb_att_h = cb_att_h
         self.cb_fc_layer = cb_fc_layer
         self.cb_fc_neurons = cb_fc_neurons
         self.conv_filters = conv_filters
@@ -639,7 +641,7 @@ class SC_CCNN_idw(nn.Module):
         conv3d_stack.append(nn.LeakyReLU())
         self.conv3d_stack = nn.Sequential(*conv3d_stack)
             
-        # Joint sequental block
+        # Joint sequential block
         for cl in range(self.ccnn_n_layers):
             setattr(self, f"convolution_1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
@@ -951,41 +953,43 @@ class SC_PICCNN_att(nn.Module):
 ###########################################
     
 if __name__ == "__main__":
-    print("Loading data.json...")
-    config = {}
-    with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json') as f:
-        config = json.load(f)
-    print(f"Read data.json: {config}")
+    # print("Loading data.json...")
+    # config = {}
+    # with open('/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/continuous_1D_wtd/test_1D.json') as f:
+    #     config = json.load(f)
+    # print(f"Read data.json: {config}")
 
-    print("Loading ContinuousDataset...")
-    ds = Dataset_1D(config)
-    x, z, w_values, y, x_mask, y_mask  = ds[0]
+    # print("Loading ContinuousDataset...")
+    # ds = Dataset_1D(config)
+    # x, z, w_values, y, x_mask, y_mask  = ds[0]
     
-    weather_coords = ds.get_weather_coords()
-    weather_dtm = ds.get_weather_dtm()
-    weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
-    weather_coords_batch = weather_coords.unsqueeze(0)
-    w = [w_values, weather_coords_batch]
+    # weather_coords = ds.get_weather_coords()
+    # weather_dtm = ds.get_weather_dtm()
+    # weather_coords = torch.cat([weather_coords, weather_dtm], dim = -1)
+    # weather_coords_batch = weather_coords.unsqueeze(0)
+    # w = [w_values, weather_coords_batch]
     
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
+    # device = (
+    #     "cuda"
+    #     if torch.cuda.is_available()
+    #     else "mps"
+    #     if torch.backends.mps.is_available()
+    #     else "cpu"
+    # )
 
-    print("Loading Continuous1DNN...")
-    timesteps = config["timesteps"]
-    model = SC_LSTM_idw(timestep = config["timesteps"],
-                 cb_fc_layer = config["cb_fc_layer"], #5,
-                 cb_fc_neurons = config["cb_fc_neurons"], # 32,
-                 conv_filters = config["conv_filters"], #32,
-                 lstm_layer = config["lstm_layer"], #5,
-                 lstm_input_units = config["lstm_input_units"], #16,
-                 lstm_units = config["lstm_units"] #32
-                 ).to(device)
-    print("Continuous1DNN prediction...")
-    y = model(x, z, w, x_mask)
-    print(f"Output:\n{y}")
+    # print("Loading Continuous1DNN...")
+    # timesteps = config["timesteps"]
+    # model = SC_LSTM_idw(timestep = config["timesteps"],
+    #              cb_fc_layer = config["cb_fc_layer"], #5,
+    #              cb_fc_neurons = config["cb_fc_neurons"], # 32,
+    #              conv_filters = config["conv_filters"], #32,
+    #              lstm_layer = config["lstm_layer"], #5,
+    #              lstm_input_units = config["lstm_input_units"], #16,
+    #              lstm_units = config["lstm_units"] #32
+    #              ).to(device)
+    # print("Continuous1DNN prediction...")
+    # y = model(x, z, w, x_mask)
+    # print(f"Output:\n{y}")
+    
+    pass
     
