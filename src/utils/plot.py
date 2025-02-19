@@ -320,6 +320,7 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
                        print_plot = False, wandb_log = True):
     
     fig, ax = plt.subplots(figsize = (10,10))
+    fig.suptitle(f"Prediction t={timestep}")
     image = ax.imshow(Y_hat[0,0,timestep,:,:])
     
     divider = make_axes_locatable(ax)

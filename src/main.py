@@ -16,6 +16,7 @@ from dataloaders.load_dataset import load_dataset, get_dataloader
 from models.load_model import load_model
 from train_test.load_train import training_model
 from train_test.load_test import test_model
+from optimizer.load_optimizer import load_optimizer
 
 wandb.login()
 
@@ -77,7 +78,7 @@ def main(config):
 
     print(f"Start time: {timestamp}")
     # optimization parameters
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    optimizer = load_optimizer(config, model)
     
     
 

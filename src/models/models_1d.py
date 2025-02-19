@@ -8,6 +8,129 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataloaders.dataset_1d import Dataset_1D
 
+##### Blocks ######
+
+class CausalConv1d(torch.nn.Conv1d):
+    # inspired by https://github.com/pytorch/pytorch/issues/1333
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 dilation=1,
+                 groups=1,
+                 bias=True):
+
+        super(CausalConv1d, self).__init__(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding="valid",
+            dilation=dilation,
+            groups=groups,
+            bias=bias)
+        
+        self.causal_padding = (kernel_size - 1) * dilation
+        
+    def causal_conditional_padding(self, conditioning, series, padding):
+        
+        conditioning = conditioning.unsqueeze(-1).expand(-1, -1, padding)
+        conditioned_padded_series = torch.cat([conditioning,
+                                               series], dim = -1)
+        
+        return conditioned_padded_series
+        
+    def forward(self, input):
+
+        padded_series = self.causal_conditional_padding(input[1],
+                                                        input[0],
+                                                        self.causal_padding)
+        
+        return super(CausalConv1d, self).forward(padded_series)
+
+## Weather block
+    
+class WeatherBlock(nn.Module):
+    def __init__(self, conv_filters, ccnn_input_filters):
+        super(WeatherBlock, self).__init__()
+
+        
+        self.conv3d_1 = nn.Conv3d(16, conv_filters, (1,2,2)) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
+        self.conv3d_bn_1 = nn.BatchNorm3d(conv_filters)
+        self.conv3d_a_1 = nn.LeakyReLU()
+        
+        for i in range(4):
+            setattr(self, f"conv3d_{i+2}",
+                    nn.Conv3d(conv_filters, conv_filters, (1,2,2)))
+            setattr(self, f"conv3d_bn_{i+2}",
+                    nn.BatchNorm3d(conv_filters))
+            setattr(self, f"conv3d_a_{i+2}",
+                    nn.LeakyReLU())
+        
+        self.conv3d_ap = nn.AdaptiveAvgPool3d((None,4,4))
+        self.conv3d_skip_1 = nn.AdaptiveAvgPool3d((None,4,4))    
+        
+        self.conv3d_6 = nn.Conv3d(conv_filters, conv_filters, (1,1,1))
+        self.conv3d_6_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_6_a = nn.LeakyReLU()
+        
+        self.conv3d_skip_2 = nn.AdaptiveAvgPool3d((None,1,1))
+        
+        self.conv3d_7 = nn.Conv3d(conv_filters, conv_filters, (1,2,2))
+        self.conv3d_7_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_7_a = nn.LeakyReLU()
+        
+        self.conv3d_8 = nn.Conv3d(conv_filters, int(conv_filters), (1,2,2))
+        self.conv3d_8_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_8_a = nn.LeakyReLU()
+        
+        self.conv3d_9 = nn.Conv3d(int(conv_filters), ccnn_input_filters, (1,2,2))
+        self.conv3d_9_bn = nn.BatchNorm3d(ccnn_input_filters)
+        self.conv3d_9_a = nn.LeakyReLU()
+  
+    def forward(self, x):
+        
+        conv3d_out = self.conv3d_1(x)
+        conv3d_out = self.conv3d_bn_1(conv3d_out)
+        conv3d_out = self.conv3d_a_1(conv3d_out)
+        
+        conv_3d_skip_1 = self.conv3d_skip_1(torch.clone(conv3d_out))
+        
+        for i in range(4):
+            conv3d_out = getattr(self, f"conv3d_{i+2}")(conv3d_out)
+            conv3d_out = getattr(self, f"conv3d_bn_{i+2}")(conv3d_out)
+            conv3d_out = getattr(self, f"conv3d_a_{i+2}")(conv3d_out)
+        
+        conv3d_out = self.conv3d_ap(conv_3d_skip_1)
+        #skip 1
+        conv3d_out = conv3d_out + conv_3d_skip_1
+        
+        conv3d_out = self.conv3d_6(conv3d_out)
+        conv3d_out = self.conv3d_6_bn(conv3d_out)
+        conv3d_out = self.conv3d_6_a(conv3d_out)
+        
+        conv_3d_skip_2 = self.conv3d_skip_2(torch.clone(conv3d_out))
+        
+        conv3d_out = self.conv3d_7(conv3d_out)
+        conv3d_out = self.conv3d_7_bn(conv3d_out)
+        conv3d_out = self.conv3d_7_a(conv3d_out)
+        
+        conv3d_out = self.conv3d_8(conv3d_out)
+        conv3d_out = self.conv3d_8_bn(conv3d_out)
+        conv3d_out = self.conv3d_8_a(conv3d_out)
+        
+        # skip 2
+        conv3d_out = conv3d_out + conv_3d_skip_2
+        
+        conv3d_out = self.conv3d_9(conv3d_out)
+        conv3d_out = self.conv3d_9_bn(conv3d_out)
+        conv3d_out = self.conv3d_9_a(conv3d_out)
+        
+        return conv3d_out
+    
+############################################ MODEL 1 ########################################################
+
 class SC_LSTM_idw(nn.Module):
     
     def __init__(self,
@@ -154,7 +277,7 @@ class SC_LSTM_idw(nn.Module):
         return target_ts_out.squeeze()
     
 
-############## MODEL 2 ##############
+############################################ MODEL 2 ########################################################
 
 class SC_LSTM_att(nn.Module):
     def __init__(self,
@@ -320,47 +443,8 @@ class SC_LSTM_att(nn.Module):
         return target_ts_out.squeeze()
     
 
-############## MODEL 3 ############## 
-
-class CausalConv1d(torch.nn.Conv1d):
-    # inspired by https://github.com/pytorch/pytorch/issues/1333
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 dilation=1,
-                 groups=1,
-                 bias=True):
-
-        super(CausalConv1d, self).__init__(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding="valid",
-            dilation=dilation,
-            groups=groups,
-            bias=bias)
-        
-        self.causal_padding = (kernel_size - 1) * dilation
-        
-    def causal_conditional_padding(self, conditioning, series, padding):
-        
-        conditioning = conditioning.unsqueeze(-1).expand(-1, -1, padding)
-        conditioned_padded_series = torch.cat([conditioning,
-                                               series], dim = -1)
-        
-        return conditioned_padded_series
-        
-    def forward(self, input):
-
-        padded_series = self.causal_conditional_padding(input[1],
-                                                        input[0],
-                                                        self.causal_padding)
-        
-        return super(CausalConv1d, self).forward(padded_series)
-
+############################################ MODEL 3 ########################################################
+    
 class SC_CCNN_att(nn.Module):
     def __init__(self,
                  timestep = 180,
@@ -403,7 +487,7 @@ class SC_CCNN_att(nn.Module):
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(edim + 4, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -416,27 +500,8 @@ class SC_CCNN_att(nn.Module):
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        
-        for i in range(4):
-            conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-            conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.LeakyReLU())
-            
-        conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters), int(self.conv_filters/2), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), self.ccnn_input_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.ccnn_input_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        self.conv3d_stack = nn.Sequential(*conv3d_stack)
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     ccnn_input_filters = self.ccnn_input_filters)
             
         # Joint sequential block
         
@@ -445,9 +510,6 @@ class SC_CCNN_att(nn.Module):
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
                                                self.ccnn_kernel_size))
-            
-            # setattr(self, f"batch_norm_1d_{cl}",
-            #         nn.BatchNorm1d(int(self.ccnn_n_filters)))
             
             setattr(self, f"convolution_1d_lrelu_{cl}",
                     nn.LeakyReLU())
@@ -460,11 +522,7 @@ class SC_CCNN_att(nn.Module):
                                     nn.LeakyReLU())
                     )
         
-        fc = []
-        fc.append(nn.Linear(self.ccnn_input_filters, 8))
-        fc.append(nn.LeakyReLU())
-        fc.append(nn.Linear(8, 1))
-        self.fc = nn.Sequential(*fc)
+        self.fc = nn.Linear(self.ccnn_input_filters, 1)
 
     def forward(self, x, z, w, x_mask):
         """
@@ -507,11 +565,13 @@ class SC_CCNN_att(nn.Module):
                                                   key_padding_mask = ~x_mask, #(N,S)
                                                    )
         
-        weights_cv = torch.std(attn_output_weights, dim = (1,2)) / torch.mean(attn_output_weights, dim = (1,2))
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
         
         target0 = torch.cat([z,
                              attn_output.squeeze(1),
-                             weights_cv.unsqueeze(1)], dim = -1)
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
         
         
         target0 = self.cb_fc(target0)
@@ -525,61 +585,23 @@ class SC_CCNN_att(nn.Module):
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
                              torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
-        wb_td3dconv = self.conv3d_stack(weather)
+        weather_block_out = self.weather_block(weather)
         
-        target_ts = wb_td3dconv.squeeze((3,4))
+        target_ts = weather_block_out.squeeze((3,4))
         
         # Sequential block
         for cl in range(self.ccnn_n_layers):
             target_ts = getattr(self, f"convolution_1d_{cl}")([target_ts, target0])
-            #target_ts = getattr(self, f"batch_norm_1d_{cl}")(target_ts)
             target_ts = getattr(self, f"convolution_1d_lrelu_{cl}")(target_ts)
             target_ts = getattr(self, f"conv1x1_{cl}")(target_ts)
         
         target_ts = torch.moveaxis(target_ts, -1, 1)
+        
         target_ts_out = self.fc(target_ts)
         
         return target_ts_out.squeeze()
     
-############## MODEL 4 ############## 
-
-class CausalConv1d(torch.nn.Conv1d):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 dilation=1,
-                 groups=1,
-                 bias=True):
-
-        super(CausalConv1d, self).__init__(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding="valid",
-            dilation=dilation,
-            groups=groups,
-            bias=bias)
-        
-        self.causal_padding = (kernel_size - 1) * dilation
-        
-    def causal_conditional_padding(self, conditioning, series, padding):
-        
-        conditioning = conditioning.unsqueeze(-1).expand(-1, -1, padding)
-        conditioned_padded_series = torch.cat([conditioning,
-                                               series], dim = -1)
-        
-        return conditioned_padded_series
-        
-    def forward(self, input):
-
-        padded_series = self.causal_conditional_padding(input[1],
-                                                        input[0],
-                                                        self.causal_padding)
-        
-        return super(CausalConv1d, self).forward(padded_series)
+############################################ MODEL 4 ########################################################
 
 class SC_CCNN_idw(nn.Module):
     
@@ -742,7 +764,8 @@ class SC_CCNN_idw(nn.Module):
         
         return target_ts_out.squeeze()
 
-######### Model 5 PI ################ 
+############################################ PHYSICS INFORMED ###############################################
+############################################ MODEL 5 ########################################################
 
 class SC_PICCNN_att(nn.Module):
     def __init__(self,
@@ -777,6 +800,9 @@ class SC_PICCNN_att(nn.Module):
         # Physics block
         self.ph_params_fc = nn.Sequential(nn.Linear(3, self.ph_params_neurons),
                                          nn.LeakyReLU(),
+                                         nn.Linear(self.ph_params_neurons,
+                                                   self.ph_params_neurons),
+                                         nn.LeakyReLU(),
                                          nn.Linear(self.ph_params_neurons, 2))
             
             # self.hydro_cond_lon = torch.FloatTensor([self.ph_params["hyd_cond"][0]])
@@ -798,7 +824,7 @@ class SC_PICCNN_att(nn.Module):
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(edim + 4, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -811,27 +837,8 @@ class SC_PICCNN_att(nn.Module):
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        
-        for i in range(4):
-            conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-            conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.LeakyReLU())
-            
-        conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters), int(self.conv_filters/2), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), self.ccnn_input_filters, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.ccnn_input_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        self.conv3d_stack = nn.Sequential(*conv3d_stack)
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     ccnn_input_filters = self.ccnn_input_filters)
             
         # Joint sequental block
         
@@ -840,8 +847,6 @@ class SC_PICCNN_att(nn.Module):
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
                                                self.ccnn_kernel_size))
-            setattr(self, f"batch_norm_1d_{cl}",
-                    nn.BatchNorm1d(int(self.ccnn_n_filters)))
             
             setattr(self, f"convolution_1d_lrelu_{cl}",
                     nn.LeakyReLU())
@@ -854,11 +859,7 @@ class SC_PICCNN_att(nn.Module):
                                     nn.LeakyReLU())
                     )
         
-        fc = []
-        fc.append(nn.Linear(self.ccnn_input_filters, 8))
-        fc.append(nn.LeakyReLU())
-        fc.append(nn.Linear(8, 1))
-        self.fc = nn.Sequential(*fc)
+        self.fc = nn.Linear(self.ccnn_input_filters, 1)
 
     def forward(self, x, z, w, x_mask, hc_out = False):
         """
@@ -902,11 +903,13 @@ class SC_PICCNN_att(nn.Module):
                                                   key_padding_mask = ~x_mask, #(N,S)
                                                    )
         
-        weights_cv = torch.std(attn_output_weights, dim = (1,2)) / torch.mean(attn_output_weights, dim = (1,2))
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
         
         target0 = torch.cat([z,
                              attn_output.squeeze(1),
-                             weights_cv.unsqueeze(1)], dim = -1)
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
         
         
         target0 = self.cb_fc(target0)
@@ -920,20 +923,18 @@ class SC_PICCNN_att(nn.Module):
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
                              torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
-        wb_td3dconv = self.conv3d_stack(weather)
+        weather_block_out = self.weather_block(weather)
         
-        target_ts = wb_td3dconv.squeeze((3,4))
+        target_ts = weather_block_out.squeeze((3,4))
         
         # Sequential block
         for cl in range(self.ccnn_n_layers):
             target_ts = getattr(self, f"convolution_1d_{cl}")([target_ts, target0])
-            target_ts = getattr(self, f"batch_norm_1d_{cl}")(target_ts)
             target_ts = getattr(self, f"convolution_1d_lrelu_{cl}")(target_ts)
             target_ts = getattr(self, f"conv1x1_{cl}")(target_ts)
         
         target_ts = torch.moveaxis(target_ts, -1, 1)
         target_ts_out = self.fc(target_ts).squeeze()
-
         
         # Physics Block
         hyd_cond = self.ph_params_fc(z)
