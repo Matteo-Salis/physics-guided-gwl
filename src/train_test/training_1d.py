@@ -78,7 +78,8 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                           dates_list,
                           tsteps_list,
                           g =  torch.tensor([0]), S_y =  torch.tensor([1]),
-                          fdif_step = 0.0009,
+                          sampling_step = 0.0009,
+                          fdif_step = 1,
                           device = "cuda",
                           coeff_data_loss = 1,
                           coeff_pde_loss = 1,
@@ -132,9 +133,9 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                                  mode = "urandom+nb",
                                  num_lon_point = num_cpoint_instance,
                                  num_lat_point = num_cpoint_instance,
-                                 step = fdif_step) for i in range(num_cpoint_batch)], axis = 0)
+                                 step = sampling_step) for i in range(num_cpoint_batch)], axis = 0)
                         
-                        z_cpoints = torch.tensor(z_cpoints, requires_grad=True).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
+                        z_cpoints = torch.tensor(z_cpoints).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
                         
                         z_cpoints = z_cpoints.moveaxis(-1, 2).flatten(start_dim=0, end_dim=2)  # flatten cpoints as instances in the batch
                         
@@ -160,18 +161,19 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                         ### Print and Backward
                         print("Training_pde_loss: ", loss_pde.item()) #, end = " --- "
                         
-                            #tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
-                            #print("Training_Total_loss: ", tot_loss.item())
-                            
-                            #tot_loss.backward()
-                            #optimizer.step()
+                        # tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
+                        # print("Training_Total_loss: ", tot_loss.item())
+                        
+                        # tot_loss.backward()
+                        # optimizer.step()
                             
                         multi_task_backprop([loss_data, loss_pde], optimizer)
                         
                         wandb.log({"Training_data_loss": loss_data.item(),
-                                   "Training_pde_loss": loss_pde.item()})
-                        # ,
-                        #           "Training_Total_loss": tot_loss.item()   
+                                   "Training_pde_loss": loss_pde.item(),
+                                  # "Training_Total_loss": tot_loss.item()
+                                  }
+                                  )   
 
                         
                     # Plots

@@ -55,7 +55,8 @@ def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                           num_cpoint_instance,
                           dates_list, tsteps_list,
                           g =  torch.tensor([0]), S_y =  torch.tensor([1]),
-                          fdif_step = 0.0009,
+                          sampling_step = 0.0009,
+                          fdif_step = 1,
                           device = "cuda",
                           coeff_data_loss = 1,
                           coeff_pde_loss = 1):
@@ -109,7 +110,7 @@ def test_dl_pde_model_1d(epoch, dataset, model, test_loader,
                                  mode = "urandom+nb",
                                  num_lon_point = num_cpoint_instance,
                                  num_lat_point = num_cpoint_instance,
-                                 step = fdif_step) for i in range(num_cpoint_batch)], axis = 0)
+                                 step = sampling_step) for i in range(num_cpoint_batch)], axis = 0)
                         
                         z_cpoints = torch.tensor(z_cpoints, requires_grad=True).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
                         

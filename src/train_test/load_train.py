@@ -31,10 +31,14 @@ def training_model(config):
             coeff_data_loss = config["coeff_data_loss"]
             coeff_pde_loss = config["coeff_pde_loss"]
             
+            sampling_step = config["sampling_step"]
+            fdif_step = config["fdif_step"]
+            
             return partial(train_dl_pde_model_1d, 
                             num_cpoint_batch = num_cpoint_batch,
                             num_cpoint_instance = num_cpoint_instance,
-                            fdif_step = 0.0009,
+                            sampling_step = sampling_step,
+                            fdif_step = fdif_step,
                             coeff_data_loss = coeff_data_loss,
                             coeff_pde_loss = coeff_pde_loss,
                             dates_list = dates_list,
