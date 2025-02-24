@@ -92,6 +92,21 @@ def load_model(config):
                     lstm_input_units = config["lstm_input_units"],
                     lstm_units = config["lstm_units"]
                     ), model_name
+        
+    elif config["model"] == "LSTM_idw_1D":
+        
+        print("model lstm idw")
+        
+        model_name = "LSTM_IDW_1D"
+        
+        return SC_LSTM_idw(timestep = config["timesteps"],
+                           cb_fc_layer = config["cb_fc_layer"],
+                           cb_fc_neurons = config["cb_fc_neurons"],
+                           conv_filters = config["conv_filters"],
+                           lstm_layer = config["lstm_layer"],
+                           lstm_input_units = config["lstm_input_units"],
+                           lstm_units = config["lstm_units"]
+                           ), model_name
     
     else:
         raise Exception("Model name unknown.")

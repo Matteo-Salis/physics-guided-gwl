@@ -52,7 +52,7 @@ class CausalConv1d(torch.nn.Conv1d):
 ## Weather block
     
 class WeatherBlock(nn.Module):
-    def __init__(self, conv_filters, ccnn_input_filters):
+    def __init__(self, conv_filters, output_filters):
         super(WeatherBlock, self).__init__()
 
         
@@ -85,8 +85,8 @@ class WeatherBlock(nn.Module):
         self.conv3d_8_bn = nn.BatchNorm3d(int(conv_filters))
         self.conv3d_8_a = nn.LeakyReLU()
         
-        self.conv3d_9 = nn.Conv3d(int(conv_filters), ccnn_input_filters, (1,2,2))
-        self.conv3d_9_bn = nn.BatchNorm3d(ccnn_input_filters)
+        self.conv3d_9 = nn.Conv3d(int(conv_filters), output_filters, (1,2,2))
+        self.conv3d_9_bn = nn.BatchNorm3d(output_filters)
         self.conv3d_9_a = nn.LeakyReLU()
   
     def forward(self, x):
@@ -135,10 +135,10 @@ class SC_LSTM_idw(nn.Module):
     
     def __init__(self,
                  timestep = 180,
-                 cb_fc_layer = 5,
+                 cb_fc_layer = 2,
                  cb_fc_neurons = 32,
                  conv_filters = 32,
-                 lstm_layer = 5,
+                 lstm_layer = 1,
                  lstm_input_units = 16,
                  lstm_units = 32,
                  ):
@@ -154,7 +154,7 @@ class SC_LSTM_idw(nn.Module):
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(5, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(6, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -167,27 +167,8 @@ class SC_LSTM_idw(nn.Module):
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        
-        for i in range(4):
-            conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-            conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.LeakyReLU())
-            
-        conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters), int(self.conv_filters/2), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), self.lstm_input_units, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.lstm_input_units))
-        conv3d_stack.append(nn.LeakyReLU())
-        self.conv3d_stack = nn.Sequential(*conv3d_stack)
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     output_filters = self.lstm_input_units)
             
         # Joint sequental block
         self.lstm_1 = nn.LSTM(self.lstm_input_units, self.lstm_units,
@@ -200,17 +181,18 @@ class SC_LSTM_idw(nn.Module):
         fc.append(nn.Linear(8, 1))
         self.fc = nn.Sequential(*fc)
         
-    def idw(self, dist, values, x_mask, weight_std = True):
+    def idw(self, dist, values, x_mask, weight_stats = True):
         
         weights = 1/(dist + torch.tensor([1e-8]).to(torch.float32).to(dist.device))
         weights = weights * x_mask
         numerator = torch.sum(weights*values, dim = 1)
         denominator = torch.sum(weights, dim = 1)
         output = numerator/denominator
-        weights_cv = torch.std(weights, dim = (1,2)) / torch.mean(weights, dim = (1,2))
+        weights_mean = torch.mean(weights, dim = (1,2))
+        weights_std = torch.std(weights, dim = (1,2))
             
-        if weight_std is True:
-                output = [output, weights_cv]
+        if weight_stats is True:
+                output = [output, weights_mean, weights_std]
             
         return output
 
@@ -239,14 +221,15 @@ class SC_LSTM_idw(nn.Module):
             
         # Conditioning block
         target_dist = torch.cdist(x[:,:,:3], z.unsqueeze(1), p=2.0) # (B×P×M), (B×R×M), OUTPUT: (B×P×R) 
-        target0 = self.idw(dist = target_dist,
+        target0, weights_mean, weights_std  = self.idw(dist = target_dist,
                           values = x[:,:,-1].unsqueeze(-1),
                           x_mask = x_mask.unsqueeze(-1),
-                          weight_std = True)
+                          weight_stats = True)
         
         target0 = torch.cat([z,
-                             target0[0],
-                             target0[1].unsqueeze(1)], dim = -1)
+                             target0,
+                             weights_mean.unsqueeze(1),
+                             weights_std.unsqueeze(1)], dim = -1)
         
         target0 = self.cb_fc(target0)
         
@@ -259,16 +242,16 @@ class SC_LSTM_idw(nn.Module):
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
                              torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
-        wb_td3dconv = self.conv3d_stack(weather)
+        weather_block_out = self.weather_block(weather)
         
-        wb_td3dconv = wb_td3dconv.squeeze((3,4))
-        wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
+        weather_block_out = weather_block_out.squeeze((3,4))
+        weather_block_out = torch.moveaxis(weather_block_out, 1, -1)
         
         # Sequential block
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
         target0_h = torch.movedim(target0_h, 0, 1)
         
-        target_ts = self.lstm_1(wb_td3dconv,
+        target_ts = self.lstm_1(weather_block_out,
                                  (target0_h.contiguous(),
                                   torch.zeros_like(target0_h).to(target0_h.device))) #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
@@ -289,7 +272,7 @@ class SC_LSTM_att(nn.Module):
                  conv_filters = 32,
                  lstm_layer = 1,
                  lstm_input_units = 16,
-                 lstm_units = 128,
+                 lstm_units = 32,
                  ):
         super().__init__()
         
@@ -319,7 +302,7 @@ class SC_LSTM_att(nn.Module):
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(edim + 4, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -332,27 +315,8 @@ class SC_LSTM_att(nn.Module):
         self.cb_fc = nn.Sequential(*cb_fc)
         
         # Weather block
-        conv3d_stack=[]
-        conv3d_stack.append(nn.Conv3d(16, self.conv_filters, (1,2,2))) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-        conv3d_stack.append(nn.LeakyReLU())
-        
-        for i in range(4):
-            conv3d_stack.append(nn.Conv3d(self.conv_filters, self.conv_filters, (1,2,2)))
-            conv3d_stack.append(nn.BatchNorm3d(self.conv_filters))
-            conv3d_stack.append(nn.LeakyReLU())
-            
-        conv3d_stack.append(nn.AdaptiveAvgPool3d((None,4,4)))
-        conv3d_stack.append(nn.Conv3d(self.conv_filters, int(self.conv_filters), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters), int(self.conv_filters/2), (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(int(self.conv_filters/2)))
-        conv3d_stack.append(nn.LeakyReLU())
-        conv3d_stack.append(nn.Conv3d(int(self.conv_filters/2), self.lstm_input_units, (1,2,2)))
-        conv3d_stack.append(nn.BatchNorm3d(self.lstm_input_units))
-        conv3d_stack.append(nn.LeakyReLU())
-        self.conv3d_stack = nn.Sequential(*conv3d_stack)
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     output_filters = self.lstm_input_units)
             
         # Joint sequental block
         self.lstm_1 = nn.LSTM(self.lstm_input_units, self.lstm_units,
@@ -407,11 +371,13 @@ class SC_LSTM_att(nn.Module):
                                                   key_padding_mask = ~x_mask, #(N,S)
                                                    )
         
-        weights_cv = torch.std(attn_output_weights, dim = (1,2)) / torch.mean(attn_output_weights, dim = (1,2))
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
         
         target0 = torch.cat([z,
                              attn_output.squeeze(1),
-                             weights_cv.unsqueeze(1)], dim = -1)
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
         
         
         target0 = self.cb_fc(target0)
@@ -425,16 +391,16 @@ class SC_LSTM_att(nn.Module):
                              torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
                              torch.moveaxis(weather_dist, -1, 1)], dim = 1)
         
-        wb_td3dconv = self.conv3d_stack(weather)
+        weather_block_out = self.weather_block(weather)
         
-        wb_td3dconv = wb_td3dconv.squeeze((3,4))
-        wb_td3dconv = torch.moveaxis(wb_td3dconv, 1, -1)
+        weather_block_out = weather_block_out.squeeze((3,4))
+        weather_block_out = torch.moveaxis(weather_block_out, 1, -1)
         
         # Sequential block
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
         target0_h = torch.movedim(target0_h, 0, 1)
         
-        target_ts = self.lstm_1(wb_td3dconv,
+        target_ts = self.lstm_1(weather_block_out,
                                  (target0_h.contiguous(),
                                   torch.zeros_like(target0_h).to(target0_h.device)))  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
         
@@ -501,7 +467,7 @@ class SC_CCNN_att(nn.Module):
         
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
-                                     ccnn_input_filters = self.ccnn_input_filters)
+                                     output_filters = self.ccnn_input_filters)
             
         # Joint sequential block
         
@@ -838,7 +804,7 @@ class SC_PICCNN_att(nn.Module):
         
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
-                                     ccnn_input_filters = self.ccnn_input_filters)
+                                     output_filters = self.ccnn_input_filters)
             
         # Joint sequental block
         
