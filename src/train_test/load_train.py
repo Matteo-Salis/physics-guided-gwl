@@ -15,9 +15,17 @@ def training_model(config):
             dates_list = config["train_plot_dates"]
             tsteps_list = config["train_plot_tstep_map"]
             
+            teacher_training = config["teacher_training"]
+            plot_arch = config["plot_arch"]
+            
+            if teacher_training is True:
+                print("Teacher training")
+            
             return partial(train_dl_model_1d, 
                            dates_list = dates_list,
-                           tsteps_list = tsteps_list)
+                           tsteps_list = tsteps_list,
+                           teacher_training = teacher_training,
+                           plot_arch = plot_arch)
         
         elif config["loss"] == "data+pde":
             

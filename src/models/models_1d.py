@@ -300,6 +300,8 @@ class SC_LSTM_att(nn.Module):
         self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
                                                    batch_first=True, vdim=1)
         
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape= edim + 5)
+        
         # Fully connected
         cb_fc = []
         cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
@@ -311,23 +313,38 @@ class SC_LSTM_att(nn.Module):
                 cb_fc.append(nn.LeakyReLU())
             
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
-        cb_fc.append(nn.Tanh())
+        cb_fc.append(nn.LeakyReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
         
-        # Weather block
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape= self.lstm_units)
+        
+        # Sequental Conditioning Block
+        # self.cb_lstm = nn.LSTM(self.lstm_input_units, self.lstm_units,
+        #                       batch_first=True,
+        #                       num_layers=self.lstm_layer) # Batch first input (N,L,H)
+        
+        # Sequential Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
                                      output_filters = self.lstm_input_units)
             
-        # Joint sequental block
-        self.lstm_1 = nn.LSTM(self.lstm_input_units, self.lstm_units,
+        # Sequental conditioning block
+        self.weather_lstm = nn.LSTM(self.lstm_input_units, self.lstm_units,
                               batch_first=True,
                               num_layers=self.lstm_layer) # Batch first input (N,L,H)
         
-        fc = []
-        fc.append(nn.Linear(self.lstm_units, 8))
-        fc.append(nn.LeakyReLU())
-        fc.append(nn.Linear(8, 1))
-        self.fc = nn.Sequential(*fc)
+        # Sequential joint block
+        # self.joint_lstm = nn.LSTM(self.lstm_units, self.lstm_units*2,
+        #                                batch_first=True, 
+        #                                num_layers=self.lstm_layer)
+        
+        if self.lstm_units > 8:
+            fc = []
+            fc.append(nn.Linear(self.lstm_units, 8))
+            fc.append(nn.LeakyReLU())
+            fc.append(nn.Linear(8, 1))
+            self.fc = nn.Sequential(*fc)
+        else:
+            self.fc = nn.Linear(self.lstm_units, 1)
 
 
     def forward(self, x, z, w, x_mask):
@@ -380,7 +397,11 @@ class SC_LSTM_att(nn.Module):
                              weights_sd.unsqueeze(1)], dim = -1)
         
         
+        target0 = self.layer_norm_1(target0)
+        
         target0 = self.cb_fc(target0)
+        
+        target0 = self.layer_norm_2(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
@@ -400,13 +421,243 @@ class SC_LSTM_att(nn.Module):
         target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
         target0_h = torch.movedim(target0_h, 0, 1)
         
-        target_ts = self.lstm_1(weather_block_out,
-                                 (target0_h.contiguous(),
-                                  torch.zeros_like(target0_h).to(target0_h.device)))  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+        weather_block_ts = self.weather_lstm(weather_block_out,  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+                                (target0_h.contiguous(),    
+                                 torch.zeros_like(target0_h).to(target0_h.device))) #torch.zeros_like(target0_h).to(target0_h.device)
         
-        target_ts_out = self.fc(target_ts[0])
+        # Sequential conditioning block
+        # target_ts = self.cb_lstm(torch.zeros_like(weather_block_out),
+        #                          (target0_h.contiguous(),
+        #                           target0_h.contiguous()))
+        
+        # Block join
+        #target_ts_out = target_ts[0] + weather_block_ts[0]
+        
+        #target_ts_out = self.joint_lstm(target_ts_out)
+        
+        target_ts_out = self.fc(weather_block_ts[0])
         
         return target_ts_out.squeeze()
+    
+    
+################################ MODEL 2 TEACHER TRAINING ####################################################
+
+class SC_LSTM_att_TT(nn.Module):
+    def __init__(self,
+                 timestep = 180,
+                 cb_emb_dim = 16,
+                 cb_att_h = 4,
+                 cb_fc_layer = 2,
+                 cb_fc_neurons = 32,
+                 conv_filters = 32,
+                 lstm_layer = 1,
+                 lstm_input_units = 16,
+                 lstm_units = 32,
+                 ):
+        super().__init__()
+        
+        self.timestep = timestep
+        self.lstm_layer = lstm_layer
+        self.lstm_input_units = lstm_input_units
+        self.lstm_units = lstm_units
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_att_h = cb_att_h
+        self.cb_fc_layer = cb_fc_layer
+        self.cb_fc_neurons = cb_fc_neurons
+        self.conv_filters = conv_filters
+        
+        # Attention block
+        if self.cb_emb_dim is not None:
+            cb_emb = []
+            cb_emb.append(nn.Linear(3, self.cb_emb_dim))
+            cb_emb.append(nn.LeakyReLU())
+            self.cb_emb = nn.Sequential(*cb_emb)
+            edim = self.cb_emb_dim
+            
+        else:
+            edim = 3
+        
+        self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
+                                                   batch_first=True, vdim=1)
+        
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape= edim + 5)
+        
+        # Fully connected
+        cb_fc = []
+        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
+        
+        if self.cb_fc_layer > 2:
+            for l in range(self.cb_fc_layer - 2):
+                cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+                cb_fc.append(nn.LeakyReLU())
+            
+        cb_fc.append(nn.Linear(self.cb_fc_neurons, self.lstm_units))
+        cb_fc.append(nn.LeakyReLU())
+        self.cb_fc = nn.Sequential(*cb_fc)
+        
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape= self.lstm_units)
+        
+        # Sequental Conditioning Block
+        # self.cb_lstm = nn.LSTM(self.lstm_input_units, self.lstm_units,
+        #                       batch_first=True,
+        #                       num_layers=self.lstm_layer) # Batch first input (N,L,H)
+        
+        # Sequential Weather block
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     output_filters = int(self.lstm_input_units/2))
+            
+        # Sequental conditioning block
+        self.weather_lstm = nn.LSTM(self.lstm_input_units, self.lstm_units,
+                              batch_first=True,
+                              num_layers=self.lstm_layer) # Batch first input (N,L,H)
+        
+        # Sequential joint block
+        # self.joint_lstm = nn.LSTM(self.lstm_units, self.lstm_units*2,
+        #                                batch_first=True, 
+        #                                num_layers=self.lstm_layer)
+        
+        if self.lstm_units > 8:
+            fc = []
+            fc.append(nn.Linear(self.lstm_units, 8))
+            fc.append(nn.LeakyReLU())
+            fc.append(nn.Linear(8, 1))
+            self.fc = nn.Sequential(*fc)
+        else:
+            self.fc = nn.Linear(self.lstm_units, 1)
+
+
+    def forward(self, x, z, w, x_mask, y = None):
+        """
+        input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        # Batch dimension
+        if len(x.shape) < 3:
+            x = x.unsqueeze(0)
+        
+        if len(z.shape) < 2:
+            z = z.unsqueeze(0)
+        
+        if len(w[0].shape) < 5 and len(w[1].shape) < 4:
+            w[0] = w[0].unsqueeze(0)
+            w[1] = w[1].unsqueeze(0)
+        
+        if len(x_mask.shape) < 2:
+            x_mask = x_mask.unsqueeze(0)
+            
+        # Conditioning block
+        
+        if self.cb_emb_dim is not None:
+            coords = torch.cat([x[:,:,:3],
+                                z.unsqueeze(1)], dim = 1)
+            
+            cb_emb = self.cb_emb(coords)
+            query = cb_emb[:,coords.shape[1]-1,:]
+            keys = cb_emb[:,:coords.shape[1]-1,:]
+            
+        else:
+            query = z
+            keys = x[:,:,:3]
+        
+        attn_output, attn_output_weights = self.multihead_att(query = query.unsqueeze(1), #(N,L,E)
+                                                  key = keys,
+                                                  value = x[:,:,-1].unsqueeze(-1),
+                                                  key_padding_mask = ~x_mask, #(N,S)
+                                                   )
+        
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
+        
+        target0 = torch.cat([z,
+                             attn_output.squeeze(1),
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
+        
+        
+        target0 = self.layer_norm_1(target0)
+        
+        target0 = self.cb_fc(target0)
+        
+        target0 = self.layer_norm_2(target0)
+        
+        # Weather block
+        ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        weather_dist = w[1] - z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_dist = weather_dist[:, None, :, : ,:].expand(-1, w[0].shape[2], -1, -1, -1 )
+
+        weather = torch.cat([w[0],
+                             torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
+                             torch.moveaxis(weather_dist, -1, 1)], dim = 1)
+        
+        weather_block_out = self.weather_block(weather)
+        
+        weather_block_out = weather_block_out.squeeze((3,4))
+        weather_block_out = torch.moveaxis(weather_block_out, 1, -1)
+        
+        # Sequential block
+        target0_h = target0.unsqueeze(1).expand([-1,self.lstm_layer,-1])
+        target0_h = torch.movedim(target0_h, 0, 1)
+        
+        # if y is not None: 
+        #     lstm_input = torch.concat([weather_block_out,
+        #                                y.unsqueeze(-1)], dim = -1 )
+            
+        #     weather_block_ts = self.weather_lstm(lstm_input,  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+        #                                         (target0_h.contiguous(),
+        #                                         target0_h.contiguous()))
+            
+        #     lstm_outputs = self.fc(weather_block_ts[0])
+            
+        h_lstm_input = self.fc(target0.unsqueeze(1))
+        lstm_outputs = []
+        lstm_hidden = (target0_h.contiguous(),    
+                       torch.zeros_like(target0_h).to(target0_h.device))
+    
+        for tstep in range(self.timestep):
+            
+            lstm_output, lstm_hidden = self.weather_lstm(
+                                                torch.cat([weather_block_out[:,tstep,:].unsqueeze(1),
+                                                            h_lstm_input], dim = -1),
+                                                lstm_hidden)
+            lstm_output = self.fc(lstm_output)            
+            lstm_outputs.append(lstm_output)
+            
+            if y is not None: 
+                h_lstm_input = y[0][:,tstep][:,None, None]
+                
+                h_lstm_input_mask = ~y[1][:,tstep][:,None, None]
+                if (h_lstm_input_mask).any():
+                    h_lstm_input[h_lstm_input_mask] = lstm_output.detach()[h_lstm_input_mask]
+            else:
+                h_lstm_input = lstm_output.detach()
+                
+                
+        lstm_outputs = torch.cat(lstm_outputs, dim=1)
+            
+        
+        return lstm_outputs.squeeze()
+                
+            
+            # weather_block_ts = self.weather_lstm(weather_block_out,  #input  [input, (h_0, c_0)] - h and c (D∗num_layers,N,H)
+            #                         (target0_h.contiguous(),    
+            #                         target0_h.contiguous())) #torch.zeros_like(target0_h).to(target0_h.device)
+            
+        # Sequential conditioning block
+        # target_ts = self.cb_lstm(torch.zeros_like(weather_block_out),
+        #                          (target0_h.contiguous(),
+        #                           target0_h.contiguous()))
+        
+        # Block join
+        #target_ts_out = target_ts[0] + weather_block_ts[0]
+        
+        #target_ts_out = self.joint_lstm(target_ts_out)
+        
+        # target_ts_out = self.fc(weather_block_ts[0])
+        
+        # return target_ts_out.squeeze()
     
 
 ############################################ MODEL 3 ########################################################
@@ -451,6 +702,8 @@ class SC_CCNN_att(nn.Module):
         self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
                                                    batch_first=True, vdim=1)
         
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape= edim + 5)
+        
         # Fully connected
         cb_fc = []
         cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
@@ -464,6 +717,8 @@ class SC_CCNN_att(nn.Module):
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.ccnn_input_filters))
         cb_fc.append(nn.LeakyReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
+        
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape= self.lstm_units)
         
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
@@ -568,6 +823,260 @@ class SC_CCNN_att(nn.Module):
         return target_ts_out.squeeze()
     
 ############################################ MODEL 4 ########################################################
+
+class SC_CCNN_att_TRSP(nn.Module):
+    def __init__(self,
+                 timestep = 180,
+                 cb_emb_dim = 16,
+                 cb_att_h = 4,
+                 cb_fc_layer = 2,
+                 cb_fc_neurons = 32,
+                 conv_filters = 32,
+                 ccnn_input_filters = 8,
+                 ccnn_kernel_size = 7,
+                 ccnn_n_filters = 16,
+                 ccnn_n_layers = 4,
+                 ):
+        super().__init__()
+        
+        self.timestep = timestep
+        self.ccnn_input_filters = ccnn_input_filters
+        self.ccnn_kernel_size = ccnn_kernel_size
+        self.ccnn_n_filters = ccnn_n_filters
+        self.ccnn_n_layers = ccnn_n_layers
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_att_h = cb_att_h
+        self.cb_fc_layer = cb_fc_layer
+        self.cb_fc_neurons = cb_fc_neurons
+        self.conv_filters = conv_filters
+        
+        # Attention block
+        if self.cb_emb_dim is not None:
+            cb_emb = []
+            cb_emb.append(nn.Linear(3, self.cb_emb_dim))
+            cb_emb.append(nn.LeakyReLU())
+            self.cb_emb = nn.Sequential(*cb_emb)
+            edim = self.cb_emb_dim
+            
+        else:
+            edim = 3
+        
+        self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
+                                                   batch_first=True, vdim=1)
+        
+        # Fully connected
+        cb_fc = []
+        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
+        
+        if self.cb_fc_layer > 2:
+            for l in range(self.cb_fc_layer - 2):
+                cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+                cb_fc.append(nn.LeakyReLU())
+        
+        cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
+        self.cb_fc = nn.Sequential(*cb_fc)
+        
+        # Sequental Conditioning Block
+        
+        self.cb_transp_conv = nn.Sequential(
+                                torch.nn.ConvTranspose1d(self.cb_fc_neurons,
+                                                        self.cb_fc_neurons,
+                                                        16,
+                                                        stride=1,
+                                                        padding=0,
+                                                        bias=True,
+                                                        dilation=1,
+                                                        ),
+                                nn.LeakyReLU(),
+                                torch.nn.ConvTranspose1d(self.cb_fc_neurons,
+                                                        self.cb_fc_neurons,
+                                                        16,
+                                                        stride=16,
+                                                        padding=0,
+                                                        bias=True,
+                                                        dilation=1,
+                                                        ),
+                                nn.LeakyReLU(),
+                                nn.Conv1d(self.cb_fc_neurons,
+                                        self.ccnn_input_filters,
+                                        1,
+                                        padding="valid"),
+                                nn.AdaptiveAvgPool1d(self.timestep)
+                                )
+        
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"cb_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               kernel_size= 5,
+                                               dilation = 2**cl))
+            
+            setattr(self, f"cb_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"cb_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+        
+        # Weather block
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     output_filters = self.ccnn_input_filters)
+            
+        
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"weather_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               3))
+            
+            setattr(self, f"weather_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"weather_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+            
+        # Joint sequential block
+        
+        self.joint_1x1conv = nn.Sequential(nn.Conv1d(self.ccnn_input_filters*2,
+                                        self.ccnn_input_filters,
+                                        kernel_size= 1,
+                                        padding="valid"),
+                                      nn.LeakyReLU())
+        
+        for cl in range(self.ccnn_n_layers*2):
+            setattr(self, f"joint_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               self.ccnn_kernel_size,
+                                               dilation = 2**cl))
+            
+            setattr(self, f"joint_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"joint_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+        
+        self.fc = nn.Linear(self.ccnn_input_filters, 1)
+
+    def forward(self, x, z, w, x_mask):
+        """
+        input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        # Batch dimension
+        if len(x.shape) < 3:
+            x = x.unsqueeze(0)
+        
+        if len(z.shape) < 2:
+            z = z.unsqueeze(0)
+        
+        if len(w[0].shape) < 5 and len(w[1].shape) < 4:
+            w[0] = w[0].unsqueeze(0)
+            w[1] = w[1].unsqueeze(0)
+        
+        if len(x_mask.shape) < 2:
+            x_mask = x_mask.unsqueeze(0)
+            
+        # Conditioning block
+        
+        if self.cb_emb_dim is not None:
+            coords = torch.cat([x[:,:,:3],
+                                z.unsqueeze(1)], dim = 1)
+            
+            cb_emb = self.cb_emb(coords)
+            query = cb_emb[:,coords.shape[1]-1,:]
+            keys = cb_emb[:,:coords.shape[1]-1,:]
+            
+        else:
+            query = z
+            keys = x[:,:,:3]
+        
+        attn_output, attn_output_weights = self.multihead_att(query = query.unsqueeze(1), #(N,L,E)
+                                                  key = keys,
+                                                  value = x[:,:,-1].unsqueeze(-1),
+                                                  key_padding_mask = ~x_mask, #(N,S)
+                                                   )
+        
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
+        
+        target0 = torch.cat([z,
+                             attn_output.squeeze(1),
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
+        
+        
+        target0 = self.cb_fc(target0)
+        
+        # Weather block
+        ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        weather_dist = w[1] - z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_dist = weather_dist[:, None, :, : ,:].expand(-1, w[0].shape[2], -1, -1, -1 )
+
+        weather = torch.cat([w[0],
+                             torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
+                             torch.moveaxis(weather_dist, -1, 1)], dim = 1)
+        
+        weather_block_out = self.weather_block(weather)
+        
+        # Sequential block
+        weather_block_ts = weather_block_out.squeeze((3,4))
+    
+        for cl in range(self.ccnn_n_layers):
+            weather_block_ts = getattr(self, f"weather_conv1d_{cl}")([weather_block_ts, torch.zeros_like(weather_block_ts[:,:,0])])
+            weather_block_ts = getattr(self, f"weather_conv1d_lrelu_{cl}")(weather_block_ts)
+            weather_block_ts = getattr(self, f"weather_conv1x1_{cl}")(weather_block_ts)
+            
+        # Sequential conditioning block
+        
+        target_ts = target0.unsqueeze(-1)
+        
+        target_ts = self.cb_transp_conv(target_ts)
+        
+        for cl in range(self.ccnn_n_layers):
+            target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, torch.zeros_like(target_ts[:,:,0])])
+            target_ts = getattr(self, f"cb_conv1d_lrelu_{cl}")(target_ts)
+            target_ts = getattr(self, f"cb_conv1x1_{cl}")(target_ts)
+            
+        # Block join
+        
+        #target_ts_out = target_ts + weather_block_ts
+        
+        target_ts_out = torch.cat([target_ts, weather_block_ts], dim = 1)
+        
+        target_ts_out = self.joint_1x1conv(target_ts_out)
+        
+        for cl in range(self.ccnn_n_layers*2):
+            target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, torch.zeros_like(target_ts_out[:,:,0])])
+            target_ts_out = getattr(self, f"joint_conv1d_lrelu_{cl}")(target_ts_out)
+            target_ts_out = getattr(self, f"joint_conv1x1_{cl}")(target_ts_out)
+            
+        
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        
+        target_ts_out = self.fc(target_ts_out)
+        
+        return target_ts_out.squeeze()
+    
+############################################ MODEL 5 ########################################################
 
 class SC_CCNN_idw(nn.Module):
     
@@ -731,7 +1240,7 @@ class SC_CCNN_idw(nn.Module):
         return target_ts_out.squeeze()
 
 ############################################ PHYSICS INFORMED ###############################################
-############################################ MODEL 5 ########################################################
+############################################ MODEL 1-PI ########################################################
 
 class SC_PICCNN_att(nn.Module):
     def __init__(self,
