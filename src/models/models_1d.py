@@ -57,14 +57,14 @@ class WeatherBlock(nn.Module):
 
         
         self.conv3d_1 = nn.Conv3d(16, conv_filters, (1,2,2)) # Conv input (N, C, D, H, W) - kernel 3d (D, H, W)
-        self.conv3d_bn_1 = nn.BatchNorm3d(conv_filters)
+        self.conv3d_bn_1 = nn.LayerNorm(int(conv_filters))
         self.conv3d_a_1 = nn.LeakyReLU()
         
         for i in range(4):
             setattr(self, f"conv3d_{i+2}",
                     nn.Conv3d(conv_filters, conv_filters, (1,2,2)))
             setattr(self, f"conv3d_bn_{i+2}",
-                    nn.BatchNorm3d(conv_filters))
+                    nn.LayerNorm(int(conv_filters)))
             setattr(self, f"conv3d_a_{i+2}",
                     nn.LeakyReLU())
         
@@ -72,60 +72,60 @@ class WeatherBlock(nn.Module):
         self.conv3d_skip_1 = nn.AdaptiveAvgPool3d((None,4,4))    
         
         self.conv3d_6 = nn.Conv3d(conv_filters, conv_filters, (1,1,1))
-        self.conv3d_6_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_6_bn = nn.LayerNorm(int(conv_filters)) #nn.BatchNorm3d(int(conv_filters))
         self.conv3d_6_a = nn.LeakyReLU()
         
         self.conv3d_skip_2 = nn.AdaptiveAvgPool3d((None,1,1))
         
         self.conv3d_7 = nn.Conv3d(conv_filters, conv_filters, (1,2,2))
-        self.conv3d_7_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_7_bn = nn.LayerNorm(int(conv_filters))
         self.conv3d_7_a = nn.LeakyReLU()
         
         self.conv3d_8 = nn.Conv3d(conv_filters, int(conv_filters), (1,2,2))
-        self.conv3d_8_bn = nn.BatchNorm3d(int(conv_filters))
+        self.conv3d_8_bn = nn.LayerNorm(int(conv_filters))
         self.conv3d_8_a = nn.LeakyReLU()
         
         self.conv3d_9 = nn.Conv3d(int(conv_filters), output_filters, (1,2,2))
-        self.conv3d_9_bn = nn.BatchNorm3d(output_filters)
+        self.conv3d_9_bn = nn.LayerNorm(int(output_filters))
         self.conv3d_9_a = nn.LeakyReLU()
   
     def forward(self, x):
         
         conv3d_out = self.conv3d_1(x)
-        conv3d_out = self.conv3d_bn_1(conv3d_out)
-        conv3d_out = self.conv3d_a_1(conv3d_out)
+        conv3d_out = self.conv3d_bn_1(torch.moveaxis(conv3d_out, 1, -1))
+        conv3d_out = self.conv3d_a_1(torch.moveaxis(conv3d_out, -1, 1))
         
         conv_3d_skip_1 = self.conv3d_skip_1(torch.clone(conv3d_out))
         
         for i in range(4):
             conv3d_out = getattr(self, f"conv3d_{i+2}")(conv3d_out)
-            conv3d_out = getattr(self, f"conv3d_bn_{i+2}")(conv3d_out)
-            conv3d_out = getattr(self, f"conv3d_a_{i+2}")(conv3d_out)
+            conv3d_out = getattr(self, f"conv3d_bn_{i+2}")(torch.moveaxis(conv3d_out, 1, -1))
+            conv3d_out = getattr(self, f"conv3d_a_{i+2}")(torch.moveaxis(conv3d_out, -1, 1))
         
         conv3d_out = self.conv3d_ap(conv_3d_skip_1)
         #skip 1
         conv3d_out = conv3d_out + conv_3d_skip_1
         
         conv3d_out = self.conv3d_6(conv3d_out)
-        conv3d_out = self.conv3d_6_bn(conv3d_out)
-        conv3d_out = self.conv3d_6_a(conv3d_out)
+        conv3d_out = self.conv3d_6_bn(torch.moveaxis(conv3d_out, 1, -1))
+        conv3d_out = self.conv3d_6_a(torch.moveaxis(conv3d_out, -1, 1))
         
         conv_3d_skip_2 = self.conv3d_skip_2(torch.clone(conv3d_out))
         
         conv3d_out = self.conv3d_7(conv3d_out)
-        conv3d_out = self.conv3d_7_bn(conv3d_out)
-        conv3d_out = self.conv3d_7_a(conv3d_out)
+        conv3d_out = self.conv3d_7_bn(torch.moveaxis(conv3d_out, 1, -1))
+        conv3d_out = self.conv3d_7_a(torch.moveaxis(conv3d_out, -1, 1))
         
         conv3d_out = self.conv3d_8(conv3d_out)
-        conv3d_out = self.conv3d_8_bn(conv3d_out)
-        conv3d_out = self.conv3d_8_a(conv3d_out)
+        conv3d_out = self.conv3d_8_bn(torch.moveaxis(conv3d_out, 1, -1))
+        conv3d_out = self.conv3d_8_a(torch.moveaxis(conv3d_out, -1, 1))
         
         # skip 2
         conv3d_out = conv3d_out + conv_3d_skip_2
         
         conv3d_out = self.conv3d_9(conv3d_out)
-        conv3d_out = self.conv3d_9_bn(conv3d_out)
-        conv3d_out = self.conv3d_9_a(conv3d_out)
+        conv3d_out = self.conv3d_9_bn(torch.moveaxis(conv3d_out, 1, -1))
+        conv3d_out = self.conv3d_9_a(torch.moveaxis(conv3d_out, -1, 1))
         
         return conv3d_out
     
@@ -689,24 +689,54 @@ class SC_CCNN_att(nn.Module):
         self.conv_filters = conv_filters
         
         # Attention block
-        if self.cb_emb_dim is not None:
-            cb_emb = []
-            cb_emb.append(nn.Linear(3, self.cb_emb_dim))
-            cb_emb.append(nn.LeakyReLU())
-            self.cb_emb = nn.Sequential(*cb_emb)
-            edim = self.cb_emb_dim
-            
-        else:
-            edim = 3
+        cb_emb_coord = []
+        cb_emb_coord.append(nn.Linear(3, self.cb_emb_dim))
+        cb_emb_coord.append(nn.LeakyReLU())
+        self.cb_emb_coord = nn.Sequential(*cb_emb_coord)
         
-        self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
-                                                   batch_first=True, vdim=1)
+        cb_emb_value = []
+        cb_emb_value.append(nn.Linear(1, self.cb_emb_dim))
+        cb_emb_value.append(nn.LeakyReLU())
+        self.cb_emb_coord = nn.Sequential(*cb_emb_value)
         
-        self.layer_norm_1 = nn.LayerNorm(normalized_shape= edim + 5)
+        self.multihead_att_1 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        # q, k, v tutti a 16, sommiamo value e output e concat coord (in 16 dim)
+        
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        self.fc_att_1 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # q, k, v - q, k sono skip da primi solo coord e v sono valori in output da fc
+        
+        self.multihead_att_2 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        self.layer_norm_3 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        self.fc_att_2 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_4 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # qua q = 1, ~ decoder
+        # k sono sempre skip coord originarie
+        # v dal layer prima
+        self.multihead_att_3 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        # concat come vecchio 
+        
+        self.layer_norm_5 = nn.LayerNorm(normalized_shape = self.cb_emb_dim + 5)
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(self.cb_emb_dim + 5, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -718,7 +748,7 @@ class SC_CCNN_att(nn.Module):
         cb_fc.append(nn.LeakyReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
         
-        self.layer_norm_2 = nn.LayerNorm(normalized_shape= self.lstm_units)
+        self.layer_norm_6 = nn.LayerNorm(normalized_shape= self.ccnn_input_filters)
         
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
@@ -768,34 +798,64 @@ class SC_CCNN_att(nn.Module):
             
         # Conditioning block
         
-        if self.cb_emb_dim is not None:
-            coords = torch.cat([x[:,:,:3],
-                                z.unsqueeze(1)], dim = 1)
-            
-            cb_emb = self.cb_emb(coords)
-            query = cb_emb[:,coords.shape[1]-1,:]
-            keys = cb_emb[:,:coords.shape[1]-1,:]
-            
-        else:
-            query = z
-            keys = x[:,:,:3]
         
-        attn_output, attn_output_weights = self.multihead_att(query = query.unsqueeze(1), #(N,L,E)
-                                                  key = keys,
-                                                  value = x[:,:,-1].unsqueeze(-1),
-                                                  key_padding_mask = ~x_mask, #(N,S)
-                                                   )
+        coords = torch.cat([x[:,:,:3],
+                            z.unsqueeze(1)], dim = 1)
+        
+        cb_emb_coords = self.cb_emb_coord =(coords)
+        
+        query = cb_emb_coords[:,coords.shape[1]-1,:]
+        keys = cb_emb_coords[:,:coords.shape[1]-1,:]
+        
+        cb_emb_values = self.cb_emb_value(x[:,:,-1])
+        
+        att_values_1, _ = self.multihead_att_1(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = cb_emb_values,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_1 = att_values_1 + cb_emb_values
+        att_values_1 = torch.cat([att_values_1, keys], dim = -1)
+        att_values_1 = self.layer_norm_1(att_values_1)
+        att_values_1 = self.fc_att_1(att_values_1)
+        att_values_1 = self.layer_norm_2(att_values_1)
+        
+        att_values_2, _ = self.multihead_att_2(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = att_values_1,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_2 = att_values_2 + att_values_1
+        att_values_2 = torch.cat([att_values_2, keys], dim = -1)
+        att_values_2 = self.layer_norm_3(att_values_2)
+        att_values_2 = self.fc_att_2(att_values_2)
+        att_values_2 = self.layer_norm_4(att_values_2)
+        
+        att_values, attn_output_weights = self.multihead_att_3(
+                                            query = query.unsqueeze(1), #(N,L,E)
+                                            key = keys,
+                                            value = att_values_2,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
         
         weights_mean = torch.mean(attn_output_weights, dim = (1,2))
         weights_sd = torch.std(attn_output_weights, dim = (1,2))
         
         target0 = torch.cat([z,
-                             attn_output.squeeze(1),
+                             att_values.squeeze(1),
                              weights_mean.unsqueeze(1),
                              weights_sd.unsqueeze(1)], dim = -1)
         
+        target0 = self.layer_norm_5(target0)
         
         target0 = self.cb_fc(target0)
+        
+        target0 = self.layer_norm_6(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
@@ -851,22 +911,54 @@ class SC_CCNN_att_TRSP(nn.Module):
         self.conv_filters = conv_filters
         
         # Attention block
-        if self.cb_emb_dim is not None:
-            cb_emb = []
-            cb_emb.append(nn.Linear(3, self.cb_emb_dim))
-            cb_emb.append(nn.LeakyReLU())
-            self.cb_emb = nn.Sequential(*cb_emb)
-            edim = self.cb_emb_dim
-            
-        else:
-            edim = 3
+        cb_emb_coord = []
+        cb_emb_coord.append(nn.Linear(3, self.cb_emb_dim))
+        cb_emb_coord.append(nn.LeakyReLU())
+        self.cb_emb_coord = nn.Sequential(*cb_emb_coord)
         
-        self.multihead_att = nn.MultiheadAttention(edim, self.cb_att_h,
-                                                   batch_first=True, vdim=1)
+        cb_emb_value = []
+        cb_emb_value.append(nn.Linear(1, self.cb_emb_dim))
+        cb_emb_value.append(nn.LeakyReLU())
+        self.cb_emb_value = nn.Sequential(*cb_emb_value)
+        
+        self.multihead_att_1 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        # q, k, v tutti a 16, sommiamo value e output e concat coord (in 16 dim)
+        
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape = self.cb_emb_dim*2)
+        
+        self.fc_att_1 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # q, k, v - q, k sono skip da primi solo coord e v sono valori in output da fc
+        
+        self.multihead_att_2 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        self.layer_norm_3 = nn.LayerNorm(normalized_shape = self.cb_emb_dim*2)
+        
+        self.fc_att_2 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_4 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # qua q = 1, ~ decoder
+        # k sono sempre skip coord originarie
+        # v dal layer prima
+        self.multihead_att_3 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        # concat come vecchio 
+        
+        self.layer_norm_5 = nn.LayerNorm(normalized_shape = self.cb_emb_dim + 5)
         
         # Fully connected
         cb_fc = []
-        cb_fc.append(nn.Linear(edim + 5, self.cb_fc_neurons))
+        cb_fc.append(nn.Linear(self.cb_emb_dim + 5, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         
         if self.cb_fc_layer > 2:
@@ -877,6 +969,8 @@ class SC_CCNN_att_TRSP(nn.Module):
         cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
         cb_fc.append(nn.LeakyReLU())
         self.cb_fc = nn.Sequential(*cb_fc)
+        
+        self.layer_norm_6 = nn.LayerNorm(normalized_shape= self.cb_fc_neurons)
         
         # Sequental Conditioning Block
         
@@ -905,6 +999,8 @@ class SC_CCNN_att_TRSP(nn.Module):
                                         padding="valid"),
                                 nn.AdaptiveAvgPool1d(self.timestep)
                                 )
+        
+        self.cb_layer_norm = nn.LayerNorm(self.ccnn_input_filters)
         
         for cl in range(self.ccnn_n_layers):
             setattr(self, f"cb_conv1d_{cl}",
@@ -948,11 +1044,16 @@ class SC_CCNN_att_TRSP(nn.Module):
             
         # Joint sequential block
         
-        self.joint_1x1conv = nn.Sequential(nn.Conv1d(self.ccnn_input_filters*2,
+        self.joint_layer_norm_1 = nn.LayerNorm(int(ccnn_input_filters)*2)
+        self.joint_lrelu_1 = nn.LeakyReLU()
+        
+        self.joint_1x1conv = nn.Conv1d(self.ccnn_input_filters*2,
                                         self.ccnn_input_filters,
                                         kernel_size= 1,
-                                        padding="valid"),
-                                      nn.LeakyReLU())
+                                        padding="valid")
+        self.joint_layer_norm_2 = nn.LayerNorm(int(ccnn_input_filters))
+        self.joint_lrelu_2 = nn.LeakyReLU()
+        
         
         for cl in range(self.ccnn_n_layers*2):
             setattr(self, f"joint_conv1d_{cl}",
@@ -995,36 +1096,64 @@ class SC_CCNN_att_TRSP(nn.Module):
         if len(x_mask.shape) < 2:
             x_mask = x_mask.unsqueeze(0)
             
-        # Conditioning block
+        # Conditioning block 
+        coords = torch.cat([x[:,:,:3],
+                            z.unsqueeze(1)], dim = 1)
         
-        if self.cb_emb_dim is not None:
-            coords = torch.cat([x[:,:,:3],
-                                z.unsqueeze(1)], dim = 1)
-            
-            cb_emb = self.cb_emb(coords)
-            query = cb_emb[:,coords.shape[1]-1,:]
-            keys = cb_emb[:,:coords.shape[1]-1,:]
-            
-        else:
-            query = z
-            keys = x[:,:,:3]
+        cb_emb_coords = self.cb_emb_coord(coords)
         
-        attn_output, attn_output_weights = self.multihead_att(query = query.unsqueeze(1), #(N,L,E)
-                                                  key = keys,
-                                                  value = x[:,:,-1].unsqueeze(-1),
-                                                  key_padding_mask = ~x_mask, #(N,S)
-                                                   )
+        query = cb_emb_coords[:,coords.shape[1]-1,:]
+        keys = cb_emb_coords[:,:coords.shape[1]-1,:]
+        
+        cb_emb_values = self.cb_emb_value(x[:,:,-1].unsqueeze(-1))
+        
+        att_values_1, _ = self.multihead_att_1(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = cb_emb_values,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_1 = att_values_1 + cb_emb_values
+        att_values_1 = torch.cat([att_values_1, keys], dim = -1)
+        att_values_1 = self.layer_norm_1(att_values_1)
+        att_values_1 = self.fc_att_1(att_values_1)
+        att_values_1 = self.layer_norm_2(att_values_1)
+        
+        att_values_2, _ = self.multihead_att_2(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = att_values_1,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_2 = att_values_2 + att_values_1
+        att_values_2 = torch.cat([att_values_2, keys], dim = -1)
+        att_values_2 = self.layer_norm_3(att_values_2)
+        att_values_2 = self.fc_att_2(att_values_2)
+        att_values_2 = self.layer_norm_4(att_values_2)
+        
+        att_values, attn_output_weights = self.multihead_att_3(
+                                            query = query.unsqueeze(1), #(N,L,E)
+                                            key = keys,
+                                            value = att_values_2,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
         
         weights_mean = torch.mean(attn_output_weights, dim = (1,2))
         weights_sd = torch.std(attn_output_weights, dim = (1,2))
         
         target0 = torch.cat([z,
-                             attn_output.squeeze(1),
+                             att_values.squeeze(1),
                              weights_mean.unsqueeze(1),
                              weights_sd.unsqueeze(1)], dim = -1)
         
+        target0 = self.layer_norm_5(target0)
         
         target0 = self.cb_fc(target0)
+        
+        target0 = self.layer_norm_6(target0)
         
         # Weather block
         ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
@@ -1051,6 +1180,9 @@ class SC_CCNN_att_TRSP(nn.Module):
         
         target_ts = self.cb_transp_conv(target_ts)
         
+        target_ts = self.cb_layer_norm(torch.moveaxis(target_ts, 1, -1))
+        target_ts = torch.moveaxis(target_ts, -1, 1)
+        
         for cl in range(self.ccnn_n_layers):
             target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, torch.zeros_like(target_ts[:,:,0])])
             target_ts = getattr(self, f"cb_conv1d_lrelu_{cl}")(target_ts)
@@ -1062,7 +1194,17 @@ class SC_CCNN_att_TRSP(nn.Module):
         
         target_ts_out = torch.cat([target_ts, weather_block_ts], dim = 1)
         
+        target_ts_out = self.joint_layer_norm_1(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        target_ts_out = self.joint_lrelu_1(target_ts_out)
+        
         target_ts_out = self.joint_1x1conv(target_ts_out)
+        
+        target_ts_out = self.joint_layer_norm_2(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        target_ts_out = self.joint_lrelu_2(target_ts_out)
+        
+        
         
         for cl in range(self.ccnn_n_layers*2):
             target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, torch.zeros_like(target_ts_out[:,:,0])])
@@ -1418,6 +1560,369 @@ class SC_PICCNN_att(nn.Module):
                                 max=self.ph_params["hyd_cond"][2])
         
         hyd_cond = hyd_cond + torch.ones_like(hyd_cond)*self.ph_params["hyd_cond"][0]
+            
+        if hc_out is True:    
+            return target_ts_out, hyd_cond
+        
+        else: 
+            return target_ts_out
+        
+########################################### MODEL 2-PI #########################################
+
+class SC_PICCNN_att_2(nn.Module):
+    def __init__(self,
+                 ph_params,
+                 timestep = 180,
+                 cb_emb_dim = 16,
+                 cb_att_h = 4,
+                 cb_fc_layer = 2,
+                 cb_fc_neurons = 32,
+                 conv_filters = 32,
+                 ccnn_input_filters = 8,
+                 ccnn_kernel_size = 7,
+                 ccnn_n_filters = 16,
+                 ccnn_n_layers = 4,
+                 ph_params_neurons = 16,
+                 ):
+        super().__init__()
+        
+        self.timestep = timestep
+        self.ccnn_input_filters = ccnn_input_filters
+        self.ccnn_kernel_size = ccnn_kernel_size
+        self.ccnn_n_filters = ccnn_n_filters
+        self.ccnn_n_layers = ccnn_n_layers
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_att_h = cb_att_h
+        self.cb_fc_layer = cb_fc_layer
+        self.cb_fc_neurons = cb_fc_neurons
+        self.conv_filters = conv_filters
+        self.ph_params = ph_params
+        self.ph_params_neurons = ph_params_neurons
+        
+        # Physics block
+        self.ph_params_fc = nn.Sequential(nn.Linear(3, self.ph_params_neurons),
+                                         nn.LeakyReLU(),
+                                         nn.Linear(self.ph_params_neurons,
+                                                   self.ph_params_neurons),
+                                         nn.LeakyReLU(),
+                                         nn.Linear(self.ph_params_neurons, 2))
+            
+            # self.hydro_cond_lon = torch.FloatTensor([self.ph_params["hyd_cond"][0]])
+            # self.hydro_cond_lat = torch.FloatTensor([self.ph_params["hyd_cond"][0]])
+            
+        # Attention block
+        cb_emb_coord = []
+        cb_emb_coord.append(nn.Linear(3, self.cb_emb_dim))
+        cb_emb_coord.append(nn.LeakyReLU())
+        self.cb_emb_coord = nn.Sequential(*cb_emb_coord)
+        
+        cb_emb_value = []
+        cb_emb_value.append(nn.Linear(1, self.cb_emb_dim))
+        cb_emb_value.append(nn.LeakyReLU())
+        self.cb_emb_value = nn.Sequential(*cb_emb_value)
+        
+        self.multihead_att_1 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        # q, k, v tutti a 16, sommiamo value e output e concat coord (in 16 dim)
+        
+        self.layer_norm_1 = nn.LayerNorm(normalized_shape = self.cb_emb_dim*2)
+        
+        self.fc_att_1 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_2 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # q, k, v - q, k sono skip da primi solo coord e v sono valori in output da fc
+        
+        self.multihead_att_2 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        
+        self.layer_norm_3 = nn.LayerNorm(normalized_shape = self.cb_emb_dim*2)
+        
+        self.fc_att_2 = nn.Sequential(nn.Linear(self.cb_emb_dim*2, self.cb_emb_dim),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(self.cb_emb_dim, self.cb_emb_dim))
+        
+        self.layer_norm_4 = nn.LayerNorm(normalized_shape = self.cb_emb_dim)
+        
+        # qua q = 1, ~ decoder
+        # k sono sempre skip coord originarie
+        # v dal layer prima
+        self.multihead_att_3 = nn.MultiheadAttention(self.cb_emb_dim, self.cb_att_h,
+                                                   batch_first=True)
+        # concat come vecchio 
+        
+        self.layer_norm_5 = nn.LayerNorm(normalized_shape = self.cb_emb_dim + 5)
+        
+        # Fully connected
+        cb_fc = []
+        cb_fc.append(nn.Linear(self.cb_emb_dim + 5, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
+        
+        if self.cb_fc_layer > 2:
+            for l in range(self.cb_fc_layer - 2):
+                cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+                cb_fc.append(nn.LeakyReLU())
+        
+        cb_fc.append(nn.Linear(self.cb_fc_neurons, self.cb_fc_neurons))
+        cb_fc.append(nn.LeakyReLU())
+        self.cb_fc = nn.Sequential(*cb_fc)
+        
+        self.layer_norm_6 = nn.LayerNorm(normalized_shape= self.cb_fc_neurons)
+        
+        # Sequental Conditioning Block
+        
+        self.cb_transp_conv = nn.Sequential(
+                                torch.nn.ConvTranspose1d(self.cb_fc_neurons,
+                                                        self.cb_fc_neurons,
+                                                        16,
+                                                        stride=1,
+                                                        padding=0,
+                                                        bias=True,
+                                                        dilation=1,
+                                                        ),
+                                nn.LeakyReLU(),
+                                torch.nn.ConvTranspose1d(self.cb_fc_neurons,
+                                                        self.cb_fc_neurons,
+                                                        16,
+                                                        stride=16,
+                                                        padding=0,
+                                                        bias=True,
+                                                        dilation=1,
+                                                        ),
+                                nn.LeakyReLU(),
+                                nn.Conv1d(self.cb_fc_neurons,
+                                        self.ccnn_input_filters,
+                                        1,
+                                        padding="valid"),
+                                nn.AdaptiveAvgPool1d(self.timestep)
+                                )
+        
+        self.cb_layer_norm = nn.LayerNorm(self.ccnn_input_filters)
+        
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"cb_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               kernel_size= 5,
+                                               dilation = 2**cl))
+            
+            setattr(self, f"cb_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"cb_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+        
+        # Weather block
+        self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
+                                     output_filters = self.ccnn_input_filters)
+            
+        
+        for cl in range(self.ccnn_n_layers):
+            setattr(self, f"weather_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               3))
+            
+            setattr(self, f"weather_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"weather_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+            
+        # Joint sequential block
+        
+        self.joint_layer_norm_1 = nn.LayerNorm(int(ccnn_input_filters)*2)
+        self.joint_lrelu_1 = nn.LeakyReLU()
+        
+        self.joint_1x1conv = nn.Conv1d(self.ccnn_input_filters*2,
+                                        self.ccnn_input_filters,
+                                        kernel_size= 1,
+                                        padding="valid")
+        self.joint_layer_norm_2 = nn.LayerNorm(int(ccnn_input_filters))
+        self.joint_lrelu_2 = nn.LeakyReLU()
+        
+        
+        for cl in range(self.ccnn_n_layers*2):
+            setattr(self, f"joint_conv1d_{cl}",
+                    CausalConv1d(self.ccnn_input_filters,
+                                               self.ccnn_n_filters,
+                                               self.ccnn_kernel_size,
+                                               dilation = 2**cl))
+            
+            setattr(self, f"joint_conv1d_lrelu_{cl}",
+                    nn.LeakyReLU())
+            
+            setattr(self, f"joint_conv1x1_{cl}",
+                    nn.Sequential(nn.Conv1d(self.ccnn_n_filters,
+                                            self.ccnn_input_filters,
+                                            1,
+                                            padding="valid"),
+                                    nn.LeakyReLU())
+                    )
+        
+        self.fc = nn.Linear(self.ccnn_input_filters, 1)
+
+    def forward(self, x, z, w, x_mask, hc_out = False):
+        """
+        input : x (31, 5); z (1, 3); w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        return 
+            lstm_out (array): lstm_out = [S_we, M, P_r, Es, K_s, K_r]
+        x: tensor of shape (L,Hin) if minibatches itaration (L,N,Hin) when batch_first=False (default)
+        """
+        # Batch dimension
+        if len(x.shape) < 3:
+            x = x.unsqueeze(0)
+        
+        if len(z.shape) < 2:
+            z = z.unsqueeze(0)
+        
+        if len(w[0].shape) < 5 and len(w[1].shape) < 4:
+            w[0] = w[0].unsqueeze(0)
+            w[1] = w[1].unsqueeze(0)
+        
+        if len(x_mask.shape) < 2:
+            x_mask = x_mask.unsqueeze(0)
+            
+        # Conditioning block 
+        coords = torch.cat([x[:,:,:3],
+                            z.unsqueeze(1)], dim = 1)
+        
+        cb_emb_coords = self.cb_emb_coord(coords)
+        
+        query = cb_emb_coords[:,coords.shape[1]-1,:]
+        keys = cb_emb_coords[:,:coords.shape[1]-1,:]
+        
+        cb_emb_values = self.cb_emb_value(x[:,:,-1].unsqueeze(-1))
+        
+        att_values_1, _ = self.multihead_att_1(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = cb_emb_values,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_1 = att_values_1 + cb_emb_values
+        att_values_1 = torch.cat([att_values_1, keys], dim = -1)
+        att_values_1 = self.layer_norm_1(att_values_1)
+        att_values_1 = self.fc_att_1(att_values_1)
+        att_values_1 = self.layer_norm_2(att_values_1)
+        
+        att_values_2, _ = self.multihead_att_2(
+                                            query = keys, #(N,L,E)
+                                            key = keys,
+                                            value = att_values_1,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        att_values_2 = att_values_2 + att_values_1
+        att_values_2 = torch.cat([att_values_2, keys], dim = -1)
+        att_values_2 = self.layer_norm_3(att_values_2)
+        att_values_2 = self.fc_att_2(att_values_2)
+        att_values_2 = self.layer_norm_4(att_values_2)
+        
+        att_values, attn_output_weights = self.multihead_att_3(
+                                            query = query.unsqueeze(1), #(N,L,E)
+                                            key = keys,
+                                            value = att_values_2,
+                                            key_padding_mask = ~x_mask, #(N,S)
+                                            )
+        
+        
+        weights_mean = torch.mean(attn_output_weights, dim = (1,2))
+        weights_sd = torch.std(attn_output_weights, dim = (1,2))
+        
+        target0 = torch.cat([z,
+                             att_values.squeeze(1),
+                             weights_mean.unsqueeze(1),
+                             weights_sd.unsqueeze(1)], dim = -1)
+        
+        target0 = self.layer_norm_5(target0)
+        
+        target0 = self.cb_fc(target0)
+        
+        target0 = self.layer_norm_6(target0)
+        
+        # Weather block
+        ## w[0] (10, 180, 9, 12); w[1] (9, 12, 3)
+        weather_dist = w[1] - z[:,None,None,:].expand(-1, w[1].shape[1], w[1].shape[2], -1)
+        weather_dist = weather_dist[:, None, :, : ,:].expand(-1, w[0].shape[2], -1, -1, -1 )
+
+        weather = torch.cat([w[0],
+                             torch.moveaxis(w[1], -1, 1).unsqueeze(2).expand(-1, -1, w[0].shape[2], -1, -1 ) ,
+                             torch.moveaxis(weather_dist, -1, 1)], dim = 1)
+        
+        weather_block_out = self.weather_block(weather)
+        
+        # Sequential block
+        weather_block_ts = weather_block_out.squeeze((3,4))
+    
+        for cl in range(self.ccnn_n_layers):
+            weather_block_ts = getattr(self, f"weather_conv1d_{cl}")([weather_block_ts, torch.zeros_like(weather_block_ts[:,:,0])])
+            weather_block_ts = getattr(self, f"weather_conv1d_lrelu_{cl}")(weather_block_ts)
+            weather_block_ts = getattr(self, f"weather_conv1x1_{cl}")(weather_block_ts)
+            
+        # Sequential conditioning block
+        
+        target_ts = target0.unsqueeze(-1)
+        
+        target_ts = self.cb_transp_conv(target_ts)
+        
+        target_ts = self.cb_layer_norm(torch.moveaxis(target_ts, 1, -1))
+        target_ts = torch.moveaxis(target_ts, -1, 1)
+        
+        for cl in range(self.ccnn_n_layers):
+            target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, torch.zeros_like(target_ts[:,:,0])])
+            target_ts = getattr(self, f"cb_conv1d_lrelu_{cl}")(target_ts)
+            target_ts = getattr(self, f"cb_conv1x1_{cl}")(target_ts)
+            
+        # Block join
+        
+        #target_ts_out = target_ts + weather_block_ts
+        
+        target_ts_out = torch.cat([target_ts, weather_block_ts], dim = 1)
+        
+        target_ts_out = self.joint_layer_norm_1(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        target_ts_out = self.joint_lrelu_1(target_ts_out)
+        
+        target_ts_out = self.joint_1x1conv(target_ts_out)
+        
+        target_ts_out = self.joint_layer_norm_2(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        target_ts_out = self.joint_lrelu_2(target_ts_out)
+        
+        
+        
+        for cl in range(self.ccnn_n_layers*2):
+            target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, torch.zeros_like(target_ts_out[:,:,0])])
+            target_ts_out = getattr(self, f"joint_conv1d_lrelu_{cl}")(target_ts_out)
+            target_ts_out = getattr(self, f"joint_conv1x1_{cl}")(target_ts_out)
+            
+        
+        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
+        
+        target_ts_out = self.fc(target_ts_out).squeeze()
+        
+        # Physics Block
+        hyd_cond = self.ph_params_fc(z)
+        hyd_cond = torch.clamp(hyd_cond,
+                                min=self.ph_params["hyd_cond"][1],
+                                max=self.ph_params["hyd_cond"][2])
+        
+        hyd_cond = hyd_cond + (torch.ones_like(hyd_cond)*self.ph_params["hyd_cond"][0])
             
         if hc_out is True:    
             return target_ts_out, hyd_cond

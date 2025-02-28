@@ -325,7 +325,9 @@ class Dataset_1D(Dataset):
                                  mode = "even",
                                  num_lon_point = 100,
                                  num_lat_point = 100,
-                                 step = None):
+                                 step = None, 
+                                 normalized = True,
+                                 flatten = True):
         """
         output: normalized cpoints
         """
@@ -349,11 +351,16 @@ class Dataset_1D(Dataset):
             dtm_xy = self.dtm_roi.sel(x = x, y = y,
                             method = "nearest").values
             
-            coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            if normalized is True:
+                coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            else:
+                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
             
             coords = np.concat([coords, np.moveaxis(dtm_xy, 0, -1)], axis=-1)
-            coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
+            
+            if flatten is True:
+                coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
             
             return coords
             
@@ -369,8 +376,11 @@ class Dataset_1D(Dataset):
             dtm_xy = np.array([self.dtm_roi.sel(x = x[i], y = y[i],
                             method = "nearest").values for i in range(num_cpoints)])
             
-            coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            if normalized is True:
+                y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            else:
+                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
             
             coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
             
@@ -433,18 +443,33 @@ class Dataset_1D(Dataset):
                                 method = "nearest").values)
             
             # Normalization
-            x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            x_right = (x_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            x_two_right = (x_two_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            x_left = (x_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            x_two_left = (x_two_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+            if normalized is True:
+                x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+                x_right = (x_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+                x_two_right = (x_two_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+                x_left = (x_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+                x_two_left = (x_two_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+                
+                y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                y_up = (y_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                y_two_up = (y_two_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                y_down = (y_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+                y_two_down = (y_two_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
             
-            y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            y_up = (y_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            y_two_up = (y_two_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            y_down = (y_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            y_two_down = (y_two_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            
+            else:
+                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                
+                dtm_xy_right = (dtm_xy_right * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                dtm_xy_two_right = (dtm_xy_two_right * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                
+                dtm_xy_left = (dtm_xy_left * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                dtm_xy_two_left = (dtm_xy_two_left * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                
+                dtm_xy_up = (dtm_xy_up * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                dtm_xy_two_up = (dtm_xy_two_up * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                
+                dtm_xy_down = (dtm_xy_down * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
+                dtm_xy_two_down = (dtm_xy_two_down * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
     
             dtm_xy = np.array(dtm_xy)
             
