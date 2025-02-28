@@ -76,6 +76,24 @@ def load_model(config):
                     ccnn_n_layers =  config["ccnn_n_layers"],
                     ), model_name
         
+    elif config["model"] == "CCNN_att_TRPS_1D":
+    
+        print("model causal cnn att blocks")
+        
+        model_name = "CCNN_A_1D"
+    
+        return SC_CCNN_att_TRSP(timestep = config["timesteps"],
+                    cb_emb_dim = config["cb_emb_dim"],
+                    cb_att_h = config["cb_att_h"],
+                    cb_fc_layer = config["cb_fc_layer"],
+                    cb_fc_neurons = config["cb_fc_neurons"],
+                    conv_filters = config["conv_filters"],
+                    ccnn_input_filters =  config["ccnn_input_filters"],
+                    ccnn_kernel_size =  config["ccnn_kernel_size"],
+                    ccnn_n_filters =  config["ccnn_n_filters"],
+                    ccnn_n_layers =  config["ccnn_n_layers"],
+                                ), model_name
+    
     elif config["model"] == "LSTM_att_1D":
         
         print("model lstm att")
@@ -83,6 +101,23 @@ def load_model(config):
         model_name = "LSTM_A_1D"
         
         return SC_LSTM_att(timestep = config["timesteps"],
+                    cb_emb_dim = config["cb_emb_dim"],
+                    cb_att_h = config["cb_att_h"],
+                    cb_fc_layer = config["cb_fc_layer"],
+                    cb_fc_neurons = config["cb_fc_neurons"],
+                    conv_filters = config["conv_filters"],
+                    lstm_layer = config["lstm_layer"],
+                    lstm_input_units = config["lstm_input_units"],
+                    lstm_units = config["lstm_units"]
+                    ), model_name
+        
+    elif config["model"] == "LSTM_att_TT_1D":
+        
+        print("model lstm att Teacher Training")
+        
+        model_name = "LSTM_A_TT_1D"
+        
+        return SC_LSTM_att_TT(timestep = config["timesteps"],
                     cb_emb_dim = config["cb_emb_dim"],
                     cb_att_h = config["cb_att_h"],
                     cb_fc_layer = config["cb_fc_layer"],

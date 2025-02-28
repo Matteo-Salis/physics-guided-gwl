@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 def masked_mse(y_hat, y, mask):
@@ -84,6 +85,13 @@ def disc_physics_loss(y_hat,
     residuals = first_time_diff + second_lon_diff[:,:,:-1] + second_lat_diff[:,:,:-1] + g
     loss_physics = torch.mean(residuals**2)
     return loss_physics
+
+def fdif_conv(f, filter):
+    
+    filter = filter[None, None, :, :] # f(minibatch,in_channels,iH,iW)
+    output = F.conv2d(f, filter)
+    
+    return output
 
 
 if __name__ == "__main__":

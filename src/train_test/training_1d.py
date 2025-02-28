@@ -196,6 +196,148 @@ def train_dl_pde_model_1d(epoch, dataset, model, train_loader, optimizer,
                                                                        [dataset[0][2], dataset.weather_coords_dtm],
                                                                        dataset[0][4]),
                                                                       device = device)})
+                            
+                            
+def train_dl_pde_model_1d_conv(epoch, dataset, model, train_loader, optimizer,
+                          model_dir, model_name,
+                          num_cpoint_batch,
+                          num_cpoint_instance,
+                          dates_list,
+                          tsteps_list,
+                          g =  torch.tensor([0]), S_y =  torch.tensor([1]),
+                          sampling_step = 0.0009,
+                          fdif_step = 1,
+                          device = "cuda",
+                          coeff_data_loss = 1,
+                          coeff_pde_loss = 1,
+                          cimages_size = 7,
+                          pcgrad = True):
+    
+    g = g.to(device)
+    S_y = S_y.to(device)
+    
+    with tqdm(train_loader, unit="batch") as tepoch:
+                    
+                    for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
+                        tepoch.set_description(f"Epoch {epoch}")
+                        
+                        x = x.to(device)
+                        x_mask = x_mask.to(device)
+                        z = z.to(device)
+                        weather_coords_batch = dataset.weather_coords_dtm.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
+                        w = [w_values.to(device), weather_coords_batch.to(device)]
+                        y = y.to(device)
+                        y_mask = y_mask.to(device)
+                        #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                        
+                        optimizer.zero_grad()
+                        
+                        y_hat = model(x, z, w, x_mask)
+                        
+                        #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                        loss_data = masked_mse(y_hat,
+                                          y,
+                                          y_mask)
+                        
+                        print("Training_data_loss: ", loss_data.item(), end = " --- ")
+                        
+                        ## Control Points Generation
+                        sample_idx = torch.randint(0,x.shape[0],
+                                                 (num_cpoint_batch,))
+                        
+                        x_cpoints = x[sample_idx,:,:]#.unsqueeze(0)
+                        x_mask_cpoints = x_mask[sample_idx,:]#.unsqueeze(0)
+                        
+                        w_cpoints = [w[0][sample_idx,:,:,:,:],#.unsqueeze(0).to(device),
+                                     w[1][sample_idx,:,:,:]]#.unsqueeze(0).to(device)]
+                        
+                        x_cpoints = torch.repeat_interleave(x_cpoints, num_cpoint_instance*cimages_size*2, dim=0).to(device) # repeat instances 
+                        x_mask_cpoints = torch.repeat_interleave(x_mask_cpoints, num_cpoint_instance*cimages_size*2, dim=0).to(device)
+                        w_cpoints = [torch.repeat_interleave(w_cpoints[0], num_cpoint_instance*cimages_size*2, dim=0).to(device),
+                                     torch.repeat_interleave(w_cpoints[1], num_cpoint_instance*cimages_size*2, dim=0).to(device)]
+                        
+                        
+                        # z_cpoints = np.stack([dataset.control_points_generator(
+                        #          mode = "urandom+nb",
+                        #          num_lon_point = num_cpoint_instance,
+                        #          num_lat_point = num_cpoint_instance,
+                        #          step = sampling_step) for i in range(num_cpoint_batch)], axis = 0) # (num_cpoint_batch, num_cpoint_instance, 3, 9)
+                        
+                        center_cpoints = torch.stack([ds.control_points_generator(mode = "urandom",
+                                                    num_lat_point= num_cpoint_instance,
+                                                    num_lon_point= num_cpoint_instance,
+                                                    normalized = False) for i in range(num_cpoint_batch)], dim = 0).to(torch.float32).to(device) # (num_cpoint_batch, num_cpoint_instance, 3)
+                        
+                        
+                        z_cimages = torch.stack([ds.control_points_generator(mode = "even",
+                                                    bbox =  [center_cpoints[i,j,1] - sampling_step,
+                                                            center_cpoints[i,j,1] + sampling_step,
+                                                            center_cpoints[i,j,0] - sampling_step,
+                                                            center_cpoints[i,j,1] + sampling_step],
+                                                    num_lat_point= cimages_size,
+                                                    num_lon_point= cimages_size,
+                                                    normalized = False,
+                                                    flatten = False) for i in range(num_cpoint_batch) for j in range(num_cpoint_instance)], dim = 0).to(torch.float32).to(device)
+                        # z_cimages (num_cpoint_batch*num_cpoint_instance, lat_nb, lon_nb, 3)
+                        
+                        z_cpoints = z_cimages.flatten(start_dim=1, end_dim=2)
+                     
+                        # z_cpoints = z_cpoints.moveaxis(-1, 2).flatten(start_dim=0, end_dim=2)  # flatten cpoints as instances in the batch
+                        
+                        y_hat_pde, hydro_cond_hat = model(x_cpoints, z_cpoints, w_cpoints, x_mask_cpoints, hc_out = True)
+                        
+                        y_hat_pde = y_hat_pde.reshape(num_cpoint_batch*num_cpoint_instance, cimages_size, cimages_size, y_hat.shape[-1]) ##(num_cpoint_batch*num_cpoint_instance, cimages_size, cimages_size 9, 180)
+                        hydro_cond_hat = hydro_cond_hat.reshape(num_cpoint_batch*num_cpoint_instance, cimages_size, cimages_size, 2) #(num_cpoint_batch*num_cpoint_instance, cimages_size, cimages_size, 2)
+                        
+                        ##### QUA
+                        
+                        loss_pde = disc_physics_loss(y_hat = y_hat_pde[:,:,0,:],
+                                                    y_hat_two_right = y_hat_pde[:,:,5,:], y_hat_two_left = y_hat_pde[:,:,6,:],
+                                                    y_hat_two_up = y_hat_pde[:,:,7,:], y_hat_two_down = y_hat_pde[:,:,8,:],
+                                                    k_lon_right = hydro_cond_hat[:,:,1,1].unsqueeze(-1).expand(-1,-1,y_hat.shape[-1]),
+                                                    k_lon_left = hydro_cond_hat[:,:,2,1].unsqueeze(-1).expand(-1,-1,y_hat.shape[-1]),
+                                                    k_lat_up = hydro_cond_hat[:,:,3,0].unsqueeze(-1).expand(-1,-1,y_hat.shape[-1]),
+                                                    k_lat_down = hydro_cond_hat[:,:,4,0].unsqueeze(-1).expand(-1,-1,y_hat.shape[-1]),
+                                                    step = fdif_step,
+                                                    g = g,
+                                                    S_y = S_y)
+                        
+                        # coords, coords_right, coords_left, coords_up, coords_down,
+                        #coords_two_right, coords_two_left, coords_two_up, coords_two_down
+                        
+                        ### Print and Backward
+                        print("Training_pde_loss: ", loss_pde.item()) #, end = " --- "
+                        
+                        # tot_loss = coeff_data_loss * loss_data + coeff_pde_loss * loss_pde
+                        # print("Training_Total_loss: ", tot_loss.item())
+                        
+                        # tot_loss.backward()
+                        # optimizer.step()
+                            
+                        multi_task_backprop([loss_data, loss_pde], optimizer)
+                        
+                        wandb.log({"Training_data_loss": loss_data.item(),
+                                   "Training_pde_loss": loss_pde.item(),
+                                  # "Training_Total_loss": tot_loss.item()
+                                  }
+                                  )   
+
+                        
+                    # Plots
+                    model.eval()
+                    with torch.no_grad():
+                        plot_series_and_maps(dataset, model, device, 
+                        dates_list = dates_list,
+                        tsteps_list = tsteps_list,
+                        hydro_cond = True)
+                        
+                        if epoch == 0:
+                            print("Saving plot of the model...")
+                            wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
+                                                                      sample_input = (dataset[0][0], dataset[0][1],
+                                                                       [dataset[0][2], dataset.weather_coords_dtm],
+                                                                       dataset[0][4]),
+                                                                      device = device)})
 
 if __name__ == "__main__":
     pass
