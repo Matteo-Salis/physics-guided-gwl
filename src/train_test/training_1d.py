@@ -19,7 +19,7 @@ from loss.PytorchPCGrad.pcgrad import PCGrad
 
 
 def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir, model_name,
-                      dates_list, tsteps_list, device = "cuda"):
+                      dates_list, tsteps_list, teacher_training = False, device = "cuda", plot_arch = True):
     
     with tqdm(train_loader, unit="batch") as tepoch:
                     
@@ -37,7 +37,11 @@ def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir,
                         
                         optimizer.zero_grad()
                         
-                        y_hat = model(x, z, w, x_mask)
+                        if teacher_training is True:
+                            y_hat = model(x, z, w, x_mask, (y, y_mask))
+                            
+                        else:
+                            y_hat = model(x, z, w, x_mask)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                         loss = masked_mse(y_hat,
@@ -56,9 +60,10 @@ def train_dl_model_1d(epoch, dataset, model, train_loader, optimizer, model_dir,
                     with torch.no_grad():
                         plot_series_and_maps(dataset, model, device, 
                         dates_list = dates_list,
-                        tsteps_list= tsteps_list)
+                        tsteps_list= tsteps_list,
+                        teacher_training = teacher_training)
                         
-                        if epoch == 0:
+                        if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
                             wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
                                                                       sample_input = (dataset[0][0], dataset[0][1],
