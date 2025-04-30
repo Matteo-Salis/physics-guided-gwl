@@ -60,6 +60,10 @@ def train_model_2d(epoch, dataset, model, train_loader, optimizer, model_dir, mo
                 loss_pos = loss_positive_height(Y_hat, dataset.wtd_numpy_mean, dataset.wtd_numpy_std, device)
                 wandb.log({"train_loss_pos" : loss_pos})
                 loss = loss + c3_positive_loss * loss_pos
+                
+            loss_init_value = loss_initial_value(init_wtd, Y, device)
+            loss = loss + 1 * loss_init_value
+            wandb.log({"loss_init_value" : loss_init_value})
 
             wandb.log({"train_loss" : loss})
             print(f"Train loss: {loss}")
