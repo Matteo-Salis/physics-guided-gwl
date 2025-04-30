@@ -1,0 +1,76 @@
+{
+    "cuda_device":"cuda:0",
+    
+    "entity" : "gsartor-unito",
+    "experiment_name": "pizeo_head_2D",
+    "run_name": "lstm_2D",
+    "comments": null,
+
+    "wandb_dir" : "/leonardo_scratch/fast/IscrC_DL4EO/results/results_2D/logs",
+    "save_model_dir": "/leonardo_scratch/fast/IscrC_DL4EO/results/results_2D/models",
+
+    "dtm_nc" : "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI.nc",
+    "weather_nc_path" : "/leonardo_work/IscrC_DL4EO/trials/data/meteo_bucket_model_snowpack_ROI_1958_2023.nc",
+    "weather_dtm": "/leonardo_work/IscrC_DL4EO/trials/data/dtm_ROI_arpa_weather.nc",
+    "wtd_csv_path" : "/leonardo_work/IscrC_DL4EO/trials/data/dataset_wtd_roi.csv",
+    "wtd_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/underground_wtd_sensor_roi.shp",
+    "piedmont_shp" : "/leonardo_work/IscrC_DL4EO/trials/data/shapefile/piemonte_admin_boundaries.shp",
+
+    "dataset_type": "2D",
+    "piezo_head":true,
+    "normalization": true,
+    "date_max_norm":"2018-01-01",
+
+    "all_dataset" : true,
+    "max_ds_elems" : null,
+    "fill_value":0,
+    "test_split_p" : "2018-01-01",
+
+    "random_sampler": true,
+    "densification_dropout": 0.25,
+    "batch_size": 256,
+
+    "twindow":30,
+    "target_downscale_factor":0.0437,
+
+    "model":"LSTM_2D_SATT",
+    "teacher_training": true,
+    "plot_arch": false,
+    "cb_emb_dim":32,
+    "cb_att_h": 4,
+    "cb_fc_layer": 2,
+    "cb_fc_neurons": 64,
+    "conv_filters": 64,
+    
+    "ccnn_input_filters": null,
+    "ccnn_kernel_size": null,
+    "ccnn_n_filters": null,
+    "ccnn_n_layers": null,
+
+    "lstm_layer":2,
+    "lstm_input_units":2,
+    "lstm_units":64,
+
+    "loss":"data",
+    "optimizer": "adamw",
+    "momentum": null,
+    "nesterov": null,
+    "weight_decay": 2.5e-4,
+    "coeff_data_loss":null,
+    "coeff_pde_loss":null,
+    "coeff_superres_loss":null,
+    "coeff_positive_loss":null,
+    "ph_params_neurons":null,
+
+    "pde_hyd_cond": null,
+    "num_cpoint_batch":null,
+    "num_cpoint_instance":null,
+
+    "lr": 7.5e-5,
+    "epochs": 25, 
+
+    "train_plot_dates": ["2008-01-01", "2012-06-01"],
+    "test_plot_dates": ["2018-06-01", "2020-01-01"],
+    "train_plot_tstep_map": [0,60,120,179],
+    "test_plot_tstep_map": [0,60,120,179]
+}

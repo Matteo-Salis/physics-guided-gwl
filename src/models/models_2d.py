@@ -83,6 +83,49 @@ class DoubleConv(nn.Module):
     def forward(self, x):
         return self.double_conv(x)
 
+# class UNetBlock(nn.Module):
+#     def __init__(self, dims = (57,84), filters_in = 1, filters_out = 1):
+#         super(UNetBlock, self).__init__()
+
+#         self.conv_0 = nn.Conv3d(filters_in, filters_in, (1,3,3), stride=(1,1,1), dtype=torch.float32, padding='same')
+#         self.btc_0 = nn.BatchNorm3d(filters_in)
+#         self.relu_0 = nn.ReLU(inplace=True)
+
+#         # Downscaling part
+#         self.dconv_1 = DoubleConv(filters_in, 4)
+#         self.maxpool_2 = nn.MaxPool3d((1,2,2))
+#         self.dconv_3 = DoubleConv(4, 8)
+#         self.maxpool_4 = nn.MaxPool3d((1,2,2))
+
+#         self.dconv_5 = DoubleConv(8, 8)
+
+#         # Upscaling part
+#         self.up_6 = nn.ConvTranspose3d(8, 8, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+#         self.dconv_7 = DoubleConv(16, 8)
+#         self.up_8 = nn.ConvTranspose3d(8, 4, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+#         self.dconv_9 = DoubleConv(8, 1)
+        
+#     def forward(self, x):
+#         mask = x[:,1].unsqueeze(1)
+        
+#         x_0 = self.relu_0(self.btc_0(self.conv_0(x)))
+#         x = x_0 * mask
+#         x = F.pad(x, (0,0,3,0,0,0), mode="reflect")
+
+#         x_1 = self.dconv_1(x)
+#         x_2 = self.maxpool_2(x_1)
+#         x_3 = self.dconv_3(x_2)
+#         x_4 = self.maxpool_4(x_3)
+
+#         x_5 = self.dconv_5(x_4)
+
+#         x_6 = self.up_6(x_5)
+#         x_7 = self.dconv_7(torch.concat([x_3,x_6], dim=1))
+#         x_8 = self.up_8(x_7)
+#         out = self.dconv_9(torch.concat([x_1,x_8], dim=1))
+
+#         return out[:,:,:,3:,:]
+
 class UNetBlock(nn.Module):
     def __init__(self, dims = (57,84), filters_in = 1, filters_out = 1):
         super(UNetBlock, self).__init__()
@@ -96,36 +139,46 @@ class UNetBlock(nn.Module):
         self.maxpool_2 = nn.MaxPool3d((1,2,2))
         self.dconv_3 = DoubleConv(8, 16)
         self.maxpool_4 = nn.MaxPool3d((1,2,2))
+        self.dconv_5 = DoubleConv(16, 32)
+        self.maxpool_6 = nn.MaxPool3d((1,2,2))
 
-        self.dconv_5 = DoubleConv(16, 16)
+        self.dconv_7 = DoubleConv(32, 32)
 
         # Upscaling part
-        self.up_6 = nn.ConvTranspose3d(16, 16, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.dconv_7 = DoubleConv(32, 16)
-        self.up_8 = nn.ConvTranspose3d(16, 8, (1,2,2), stride=(1,2,2), dtype=torch.float32)
-        self.dconv_9 = DoubleConv(16, 1)
+        self.up_8 = nn.ConvTranspose3d(32, 32, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+        self.dconv_9 = DoubleConv(64, 32)
+        self.up_10 = nn.ConvTranspose3d(32, 16, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+        self.dconv_11 = DoubleConv(32, 16)
+        self.up_12 = nn.ConvTranspose3d(16, 8, (1,2,2), stride=(1,2,2), dtype=torch.float32)
+        self.dconv_13 = DoubleConv(16, 1)
         
     def forward(self, x):
-        mask = x[:,1].unsqueeze(1)
+        # mask = x[:,1].unsqueeze(1)
         
-        x_0 = self.relu_0(self.btc_0(self.conv_0(x)))
-        x = x_0 * mask
-        x = F.pad(x, (0,0,2,1,0,0), mode="reflect")
+        # x_0 = self.relu_0(self.btc_0(self.conv_0(x)))
+        # x_0 = x_0 * mask
+        # x = torch.cat([x_0,x[:,2].unsqueeze(1)])
+
+        x = F.pad(x, (0,0,3,0,0,0), mode="reflect")
 
         x_1 = self.dconv_1(x)
         x_2 = self.maxpool_2(x_1)
         x_3 = self.dconv_3(x_2)
         x_4 = self.maxpool_4(x_3)
-
         x_5 = self.dconv_5(x_4)
+        x_6 = self.maxpool_6(x_5)
+        x_6 = F.pad(x_6, (1,0,1,0,0,0), mode="reflect")
 
-        x_6 = self.up_6(x_5)
-        x_7 = self.dconv_7(torch.concat([x_3,x_6], dim=1))
+        x_7 = self.dconv_7(x_6)
+
         x_8 = self.up_8(x_7)
-        out = self.dconv_9(torch.concat([x_1,x_8], dim=1))
+        x_9 = self.dconv_9(torch.concat([x_5,x_8[:,:,:,1:,1:]], dim=1))
+        x_10 = self.up_10(x_9)
+        x_11 = self.dconv_11(torch.concat([x_3,x_10], dim=1))
+        x_12 = self.up_12(x_11)
+        out = self.dconv_13(torch.concat([x_1,x_12], dim=1))
 
         return out[:,:,:,3:,:]
-
 
 
 class ConvBlock(nn.Module):
@@ -350,7 +403,7 @@ class Discrete2DConcat1_Time(nn.Module):
         self.m_conv_tr_1 = ConvTransposeBlock(conv_num = 2, filters_out = 1)
         self.m_avg_pool_2b = nn.AdaptiveMaxPool3d((None, 57, 84))
 
-        self.m_conv_f_3 = ConvBlockFinal(input_ch=1, k=3, conv_num=2, del_time_block = True)
+        self.m_conv_f_3 = ConvBlockFinal(input_ch=1, k=3, conv_num=3, del_time_block = True)
 
 
     def forward(self, x):

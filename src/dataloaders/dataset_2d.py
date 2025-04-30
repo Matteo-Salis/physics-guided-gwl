@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import xarray
-from scipy import interpolate
+from scipy import interpolate, ndimage
+from scipy.ndimage import convolve, gaussian_filter
 
 import rioxarray
 import fiona
@@ -38,6 +39,10 @@ class DiscreteDataset(Dataset):
         if config["normalization"]:
             print("Normalization: ON")
             self.normalize_dataset()
+
+        if config["expand_values"]:
+            print("Expanding values: ON")
+            self.expand_values()
 
         self.transform = transform
 
@@ -145,8 +150,13 @@ class DiscreteDataset(Dataset):
 
         self.wtd_numpy_mean = self.wtd_data_raserized["wtd"][:self.train_max_index].mean().values.astype(np.float32)
         self.wtd_numpy_std = self.wtd_data_raserized["wtd"][:self.train_max_index].std().values.astype(np.float32)
-        print(f"Value mean: {self.wtd_numpy_mean}")
-        print(f"Value std: {self.wtd_numpy_std}")
+        print(f"WTD value mean: {self.wtd_numpy_mean}")
+        print(f"WTD value std: {self.wtd_numpy_std}")
+
+        self.dtm_mean = self.dtm_roi_downsampled.mean()
+        self.dtm_std = self.dtm_roi_downsampled.std()
+        print(f"DTM value mean: {self.dtm_mean}")
+        print(f"DTM value std: {self.dtm_std}")
 
         # self.wtd_data_raserized = self.wtd_data_raserized.fillna(self.wtd_numpy_mean)
         self.wtd_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
@@ -175,6 +185,43 @@ class DiscreteDataset(Dataset):
         self.weather_xr = (self.weather_xr - self.weather_xr_mean) / self.weather_xr_std
         self.wtd_numpy[0] = (self.wtd_numpy[0] - self.wtd_numpy_mean) / self.wtd_numpy_std
         self.wtd_numpy = self.wtd_numpy.astype(np.float32)
+        self.dtm_roi_downsampled = (self.dtm_roi_downsampled - self.dtm_mean) / self.dtm_std
+
+    def expand_values(self):
+        # expand wtd values
+        # for t in range(self.wtd_numpy.shape[1]):
+        #     self.wtd_numpy[0,t] = ndimage.maximum_filter(self.wtd_numpy[0,t], size=3)
+
+        # expand mask values
+        print("3x3 expand kernel")
+        kernel = np.array([[1, 2, 1],
+                       [2, 4, 2],
+                       [1, 2, 1]], dtype=float)
+        kernel /= 4
+
+        if self.config["expand_kernel_size"] and self.config["expand_kernel_sigma"]:
+            print(f"{self.config['expand_kernel_size']}x{self.config['expand_kernel_size']} expand kernel")
+            size = self.config["expand_kernel_size"]
+            kernel = self.generate_gaussian_kernel(size=size, sigma=1)
+            kernel = kernel / kernel[size // 2, size // 2]
+
+        for t in range(self.wtd_numpy.shape[1]):
+            self.wtd_numpy[1,t] = convolve(self.wtd_numpy[1,t], kernel, mode='constant', cval=0)
+
+        self.wtd_numpy = self.wtd_numpy.astype(np.float32)
+
+    def generate_gaussian_kernel(self, size=3, sigma=1.0):
+        """
+        Generates a 2D Gaussian kernel using SciPy.
+        
+        :param size: Kernel size (must be an odd number)
+        :param sigma: Standard deviation of the Gaussian distribution
+        :return: 2D numpy array representing the Gaussian kernel
+        """
+        kernel = np.zeros((size, size))
+        kernel[size // 2, size // 2] = 1  # Impulse at center
+        return gaussian_filter(kernel, sigma=sigma)
+        
 
     def __len__(self):
         return len(self.wtd_data_raserized["wtd"]) - self.timesteps

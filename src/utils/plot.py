@@ -17,7 +17,7 @@ from torchview import draw_graph
 ##### 1-D ######
 ################
 
-def predict_series_points(ds, date_t0, sensor_number, model, device):
+def predict_series_points(ds, date_t0, sensor_number, model, device, teacher_training = False):
 
     sample_idx = ds.get_iloc_from_date(date_max = date_t0) + 1
 
@@ -30,7 +30,10 @@ def predict_series_points(ds, date_t0, sensor_number, model, device):
     y = y.to(device)
     y_mask = y_mask.to(device)
 
-    y_hat = model(x, z, w, x_mask)
+    if teacher_training is True:
+        y_hat = model(x, z, w, x_mask, (y.unsqueeze(0), y_mask.unsqueeze(0)))
+    else:
+        y_hat = model(x, z, w, x_mask)
 
     date_t0 = ds.wtd_df.iloc[sample_idx + sensor_number].name[0]
     sensor = ds.wtd_df.iloc[sample_idx + sensor_number].name[1]
@@ -50,14 +53,15 @@ def predict_series_points(ds, date_t0, sensor_number, model, device):
 
 def plot_one_series(ds, date_t0, df_prediction = None, sensor = None,
                     save_dir = None, print_plot = False,
-                    generate_points = True, model = None, device = None):
+                    generate_points = True, model = None, device = None,
+                    teacher_training = False):
     
     """
     if generate_point = True provide the sensor number, otherwise the sensor_id
     """
     
     if generate_points is True:
-        df_prediction, sensor_id = predict_series_points(ds, date_t0, sensor, model, device)
+        df_prediction, sensor_id = predict_series_points(ds, date_t0, sensor, model, device, teacher_training)
 
     fig, ax = plt.subplots()
     ax.plot(df_prediction, label = df_prediction.columns, marker = "o", lw = 0.7, markersize = 2)
@@ -235,7 +239,7 @@ def plot_one_map_hc(sample_hc,
         return fig 
     
     
-def plot_series_and_maps(ds, model, device, dates_list, tsteps_list, hydro_cond = False):
+def plot_series_and_maps(ds, model, device, dates_list, tsteps_list, hydro_cond = False, teacher_training = False):
 
         for date in dates_list:
                     # Time Series  
@@ -244,14 +248,16 @@ def plot_series_and_maps(ds, model, device, dates_list, tsteps_list, hydro_cond 
                                                                 sensor = 6,
                                                                 model = model,
                                                                 device = device,
-                                                                print_plot = False))})
+                                                                print_plot = False,
+                                                                teacher_training = teacher_training))})
         
                     wandb.log({f"pred_series_{date} - V":wandb.Image(plot_one_series(ds = ds,
                                                                 date_t0 = np.datetime64(date),
                                                                 sensor = 15,
                                                                 model = model,
                                                                 device = device,
-                                                                print_plot = False))})
+                                                                print_plot = False,
+                                                                teacher_training = teacher_training))})
                     
                     # Maps
                     if hydro_cond is True:

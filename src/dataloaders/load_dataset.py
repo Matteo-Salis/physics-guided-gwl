@@ -3,6 +3,7 @@ import torch
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 
 from dataloaders.dataset_1d import Dataset_1D
+from dataloaders.dataset_2D import Dataset_2D
 from dataloaders.dataset_2d import DiscreteDataset
 
 
@@ -12,6 +13,8 @@ def load_dataset(config):
         return DiscreteDataset(config)
     elif config["dataset_type"] == "1d":
         return Dataset_1D(config)
+    elif config["dataset_type"] == "2D":
+        return Dataset_2D(config)
     else:
         raise Exception("Model name unknown.")
     
@@ -44,22 +47,17 @@ def get_dataloader(dataset, config):
     elif config["dataset_type"] == "1d":
         print(f"Traing size: {train_idx} - {dataset.wtd_df.index.get_level_values(0)[train_idxs[-1]]}, Test size: {test_idx} - {dataset.wtd_df.index.get_level_values(0)[test_idxs[-1]]}")
 
-    # Sampler 
-    if config["random_sampler"] is True:
-        train_sampler = RandomSampler(train_idxs)
-    else:
-        train_sampler = SequentialSampler(train_idxs)
-        
-    test_sampler = SequentialSampler(test_idxs)
 
-    # DataLoaders
-    train_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                                batch_size=config["batch_size"],
-                                                sampler=train_sampler)
+    # Subset
+    train_set = torch.utils.data.Subset(dataset, train_idxs)
+    test_set = torch.utils.data.Subset(dataset, test_idxs)
 
-    test_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                                batch_size=config["batch_size"],
-                                                sampler=test_sampler)
+    # Dataloaders
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=config["batch_size"],
+                                                shuffle=config["random_sampler"])
+    
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=config["batch_size"],
+                                                shuffle=False)
     
     return train_loader, test_loader
 

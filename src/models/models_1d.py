@@ -614,7 +614,7 @@ class SC_LSTM_att_TT(nn.Module):
         h_lstm_input = self.fc(target0.unsqueeze(1))
         lstm_outputs = []
         lstm_hidden = (target0_h.contiguous(),    
-                       torch.zeros_like(target0_h).to(target0_h.device))
+                       target0_h.contiguous()) # torch.zeros_like(target0_h).to(target0_h.device)
     
         for tstep in range(self.timestep):
             
@@ -1002,11 +1002,11 @@ class SC_CCNN_att_TRSP(nn.Module):
         
         self.cb_layer_norm = nn.LayerNorm(self.ccnn_input_filters)
         
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(int(self.ccnn_n_layers/2)):
             setattr(self, f"cb_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
-                                               kernel_size= 5,
+                                               kernel_size= 3,
                                                dilation = 2**cl))
             
             setattr(self, f"cb_conv1d_lrelu_{cl}",
@@ -1020,12 +1020,19 @@ class SC_CCNN_att_TRSP(nn.Module):
                                     nn.LeakyReLU())
                     )
         
+        self.avg_pool_seq_cb = nn.AvgPool1d(kernel_size = self.ccnn_kernel_size,
+                                            padding= self.ccnn_kernel_size//2,
+                                            stride = 1,
+                                            count_include_pad = False)
+            
+        self.layer_norm_seq_cb = nn.LayerNorm(self.ccnn_input_filters)
+        
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
                                      output_filters = self.ccnn_input_filters)
             
         
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(int(self.ccnn_n_layers/2)):
             setattr(self, f"weather_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
@@ -1041,21 +1048,20 @@ class SC_CCNN_att_TRSP(nn.Module):
                                             padding="valid"),
                                     nn.LeakyReLU())
                     )
-            
-        # Joint sequential block
         
-        self.joint_layer_norm_1 = nn.LayerNorm(int(ccnn_input_filters)*2)
-        self.joint_lrelu_1 = nn.LeakyReLU()
+        self.layer_norm_seq_weather = nn.LayerNorm(self.ccnn_input_filters)    
+        # Joint sequential block
         
         self.joint_1x1conv = nn.Conv1d(self.ccnn_input_filters*2,
                                         self.ccnn_input_filters,
                                         kernel_size= 1,
                                         padding="valid")
-        self.joint_layer_norm_2 = nn.LayerNorm(int(ccnn_input_filters))
-        self.joint_lrelu_2 = nn.LeakyReLU()
+        
+        self.joint_layer_norm_seq = nn.LayerNorm(int(ccnn_input_filters))
+        self.joint_lrelu_seq = nn.LeakyReLU()
         
         
-        for cl in range(self.ccnn_n_layers*2):
+        for cl in range(self.ccnn_n_layers):
             setattr(self, f"joint_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
@@ -1169,11 +1175,13 @@ class SC_CCNN_att_TRSP(nn.Module):
         # Sequential block
         weather_block_ts = weather_block_out.squeeze((3,4))
     
-        for cl in range(self.ccnn_n_layers):
-            weather_block_ts = getattr(self, f"weather_conv1d_{cl}")([weather_block_ts, torch.zeros_like(weather_block_ts[:,:,0])])
+        for cl in range(int(self.ccnn_n_layers/2)):
+            weather_block_ts = getattr(self, f"weather_conv1d_{cl}")([weather_block_ts, weather_block_ts[:,:,0]])
             weather_block_ts = getattr(self, f"weather_conv1d_lrelu_{cl}")(weather_block_ts)
             weather_block_ts = getattr(self, f"weather_conv1x1_{cl}")(weather_block_ts)
             
+        weather_block_ts = self.layer_norm_seq_weather(torch.moveaxis(weather_block_ts, 1, -1))
+        weather_block_ts = torch.moveaxis(weather_block_ts, -1, 1)
         # Sequential conditioning block
         
         target_ts = target0.unsqueeze(-1)
@@ -1183,10 +1191,14 @@ class SC_CCNN_att_TRSP(nn.Module):
         target_ts = self.cb_layer_norm(torch.moveaxis(target_ts, 1, -1))
         target_ts = torch.moveaxis(target_ts, -1, 1)
         
-        for cl in range(self.ccnn_n_layers):
-            target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, torch.zeros_like(target_ts[:,:,0])])
+        for cl in range(int(self.ccnn_n_layers/2)):
+            target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, target_ts[:,:,0]])
             target_ts = getattr(self, f"cb_conv1d_lrelu_{cl}")(target_ts)
             target_ts = getattr(self, f"cb_conv1x1_{cl}")(target_ts)
+            
+        target_ts = self.avg_pool_seq_cb(target_ts)
+        target_ts = self.layer_norm_seq_cb(torch.moveaxis(target_ts, 1, -1))
+        target_ts = torch.moveaxis(target_ts, -1, 1)
             
         # Block join
         
@@ -1194,27 +1206,23 @@ class SC_CCNN_att_TRSP(nn.Module):
         
         target_ts_out = torch.cat([target_ts, weather_block_ts], dim = 1)
         
-        target_ts_out = self.joint_layer_norm_1(torch.moveaxis(target_ts_out, 1, -1))
-        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
-        target_ts_out = self.joint_lrelu_1(target_ts_out)
-        
         target_ts_out = self.joint_1x1conv(target_ts_out)
         
-        target_ts_out = self.joint_layer_norm_2(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = self.joint_layer_norm_seq(torch.moveaxis(target_ts_out, 1, -1))
         target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
-        target_ts_out = self.joint_lrelu_2(target_ts_out)
+        target_ts_out = self.joint_lrelu_seq(target_ts_out)
         
         
         
-        for cl in range(self.ccnn_n_layers*2):
-            target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, torch.zeros_like(target_ts_out[:,:,0])])
+        for cl in range(self.ccnn_n_layers):
+            target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, target_ts_out[:,:,0]])
             target_ts_out = getattr(self, f"joint_conv1d_lrelu_{cl}")(target_ts_out)
             target_ts_out = getattr(self, f"joint_conv1x1_{cl}")(target_ts_out)
             
         
         target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
         
-        target_ts_out = self.fc(target_ts_out)
+        target_ts_out = self.fc(target_ts_out).squeeze()
         
         return target_ts_out.squeeze()
     
@@ -1702,7 +1710,7 @@ class SC_PICCNN_att_2(nn.Module):
         
         self.cb_layer_norm = nn.LayerNorm(self.ccnn_input_filters)
         
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(self.ccnn_n_layers/2):
             setattr(self, f"cb_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
@@ -1719,13 +1727,14 @@ class SC_PICCNN_att_2(nn.Module):
                                             padding="valid"),
                                     nn.LeakyReLU())
                     )
+        self.layer_norm_seq_cb = nn.LayerNorm(self.ccnn_input_filters)
         
         # Weather block
         self.weather_block = WeatherBlock(conv_filters = self.conv_filters,
                                      output_filters = self.ccnn_input_filters)
             
         
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(self.ccnn_n_layers/2):
             setattr(self, f"weather_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
@@ -1741,21 +1750,20 @@ class SC_PICCNN_att_2(nn.Module):
                                             padding="valid"),
                                     nn.LeakyReLU())
                     )
-            
-        # Joint sequential block
         
-        self.joint_layer_norm_1 = nn.LayerNorm(int(ccnn_input_filters)*2)
-        self.joint_lrelu_1 = nn.LeakyReLU()
+        self.layer_norm_seq_weather = nn.LayerNorm(self.ccnn_input_filters)    
+        # Joint sequential block
         
         self.joint_1x1conv = nn.Conv1d(self.ccnn_input_filters*2,
                                         self.ccnn_input_filters,
                                         kernel_size= 1,
                                         padding="valid")
-        self.joint_layer_norm_2 = nn.LayerNorm(int(ccnn_input_filters))
-        self.joint_lrelu_2 = nn.LeakyReLU()
+        
+        self.joint_layer_norm_seq = nn.LayerNorm(int(ccnn_input_filters))
+        self.joint_lrelu_seq = nn.LeakyReLU()
         
         
-        for cl in range(self.ccnn_n_layers*2):
+        for cl in range(self.ccnn_n_layers):
             setattr(self, f"joint_conv1d_{cl}",
                     CausalConv1d(self.ccnn_input_filters,
                                                self.ccnn_n_filters,
@@ -1869,11 +1877,13 @@ class SC_PICCNN_att_2(nn.Module):
         # Sequential block
         weather_block_ts = weather_block_out.squeeze((3,4))
     
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(self.ccnn_n_layers/2):
             weather_block_ts = getattr(self, f"weather_conv1d_{cl}")([weather_block_ts, torch.zeros_like(weather_block_ts[:,:,0])])
             weather_block_ts = getattr(self, f"weather_conv1d_lrelu_{cl}")(weather_block_ts)
             weather_block_ts = getattr(self, f"weather_conv1x1_{cl}")(weather_block_ts)
             
+        weather_block_ts = self.layer_norm_seq_weather(torch.moveaxis(weather_block_ts, 1, -1))
+        weather_block_ts = torch.moveaxis(weather_block_ts, -1, 1)
         # Sequential conditioning block
         
         target_ts = target0.unsqueeze(-1)
@@ -1883,10 +1893,13 @@ class SC_PICCNN_att_2(nn.Module):
         target_ts = self.cb_layer_norm(torch.moveaxis(target_ts, 1, -1))
         target_ts = torch.moveaxis(target_ts, -1, 1)
         
-        for cl in range(self.ccnn_n_layers):
+        for cl in range(self.ccnn_n_layers/2):
             target_ts = getattr(self, f"cb_conv1d_{cl}")([target_ts, torch.zeros_like(target_ts[:,:,0])])
             target_ts = getattr(self, f"cb_conv1d_lrelu_{cl}")(target_ts)
             target_ts = getattr(self, f"cb_conv1x1_{cl}")(target_ts)
+            
+        target_ts = self.layer_norm_seq_cb(torch.moveaxis(target_ts, 1, -1))
+        target_ts = torch.moveaxis(target_ts, -1, 1)
             
         # Block join
         
@@ -1894,19 +1907,15 @@ class SC_PICCNN_att_2(nn.Module):
         
         target_ts_out = torch.cat([target_ts, weather_block_ts], dim = 1)
         
-        target_ts_out = self.joint_layer_norm_1(torch.moveaxis(target_ts_out, 1, -1))
-        target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
-        target_ts_out = self.joint_lrelu_1(target_ts_out)
-        
         target_ts_out = self.joint_1x1conv(target_ts_out)
         
-        target_ts_out = self.joint_layer_norm_2(torch.moveaxis(target_ts_out, 1, -1))
+        target_ts_out = self.joint_layer_norm_seq(torch.moveaxis(target_ts_out, 1, -1))
         target_ts_out = torch.moveaxis(target_ts_out, -1, 1)
-        target_ts_out = self.joint_lrelu_2(target_ts_out)
+        target_ts_out = self.joint_lrelu_seq(target_ts_out)
         
         
         
-        for cl in range(self.ccnn_n_layers*2):
+        for cl in range(self.ccnn_n_layers):
             target_ts_out = getattr(self, f"joint_conv1d_{cl}")([target_ts_out, torch.zeros_like(target_ts_out[:,:,0])])
             target_ts_out = getattr(self, f"joint_conv1d_lrelu_{cl}")(target_ts_out)
             target_ts_out = getattr(self, f"joint_conv1x1_{cl}")(target_ts_out)

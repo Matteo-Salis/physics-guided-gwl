@@ -107,6 +107,13 @@ def loss_masked(y_hat, y, device = "cuda"):
     out = (torch.sum( (predict - target) * mask) ** 2.0 ) / torch.sum(mask)
     return out
 
+def loss_initial_value(init_wtd, y, device = "cuda"):
+    predict = torch.unsqueeze(y[:,0,1,:,:], dim=1).to(device)
+    mask = init_wtd[:,1,:,:].bool().to(device)
+    init_value =  init_wtd[:,0,:,:].to(device)
+    out = (torch.sum( (predict - init_value) * mask) ** 2.0 ) / torch.sum(mask)
+    return out
+
 
 if __name__ == "__main__":
     pass
