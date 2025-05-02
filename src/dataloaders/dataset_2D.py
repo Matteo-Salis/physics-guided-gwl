@@ -63,8 +63,8 @@ class Dataset_2D(Dataset):
         self.weather_coords_dtm = self.get_weather_coords(dtm = True)
 
         # Transform
-        if config["densification_dropout"]:
-            self.densification_dropout = partial(self.densification_dropout, perc_dropout = config["densification_dropout"])
+        # if config["densification_dropout"]:
+        #     self.densification_dropout = partial(self.densification_dropout, perc_dropout = config["densification_dropout"])
         
         
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
@@ -228,6 +228,15 @@ class Dataset_2D(Dataset):
         mask = mask.rename({self.target:'nan_mask'})
         self.wtd_data_raserized = self.wtd_data_raserized.assign(mask = mask["nan_mask"])
         self.target_rasterized_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
+        
+        self.target_rasterized_dtm = self.dtm_roi.sel(x = self.wtd_data_raserized.x,
+                                                         y = self.wtd_data_raserized.y,
+                                                         method = "nearest")
+        self.target_rasterized_coords = self.coordinates_xr(self.target_rasterized_dtm, coord_name = "xy")
+        
+        self.target_rasterized_coords = np.concat([self.target_rasterized_coords,
+                                    np.moveaxis(self.target_rasterized_dtm.values, 0,-1)],
+                                    axis=-1)
 
     def loading_point_wtd(self, fill_value = None):
         
@@ -309,7 +318,7 @@ class Dataset_2D(Dataset):
         return iloc of last sensor before date_max
         """
         
-        max_idx = np.argmax(self.wtd_data_raserized.time.values[self.weather_xr.time.values < date_max])
+        max_idx = np.argmax(self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max])
         #row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) < date_max].iloc[-1].name)
         return max_idx
         
@@ -340,7 +349,7 @@ class Dataset_2D(Dataset):
         #      torch.tensor(sample_dtm).reshape(1).to(torch.float32)]
           
         # Z = torch.stack(Z, dim = -1).squeeze()
-        Z = torch.from_numpy(self.dtm_coords).to(torch.float32)
+        Z = torch.from_numpy(self.target_rasterized_coords).to(torch.float32)
         
         # Initial state WTD (t0) data        
         X, X_mask = self.get_icon_target_data(start_date)
@@ -353,24 +362,24 @@ class Dataset_2D(Dataset):
         Y = torch.from_numpy(self.target_rasterized_numpy[0,idx+1:idx+1+self.twindow,:,:]).to(torch.float32)
         Y_mask = torch.from_numpy(self.target_rasterized_numpy[1,idx+1:idx+1+self.twindow,:,:]).to(torch.bool)
         
-        if self.densification_dropout:
-            X, X_mask = self.densification_dropout([X, X_mask])
+        # if self.densification_dropout:
+        #     X, X_mask = self.densification_dropout([X, X_mask])
         
         return [X, Z, W, Y, X_mask, Y_mask]
     
-    def densification_dropout(self, sample, perc_dropout = 0.25):
+    # def densification_dropout(self, sample, perc_dropout = 0.25):
         
-        """
-        Dropout training as in densification of Andrychowicz et al. (2023)
-        """
+    #     """
+    #     Dropout training as in densification of Andrychowicz et al. (2023)
+    #     """
         
-        new_X, new_X_mask = copy.deepcopy(sample)
-        dropout_mask = torch.rand(new_X_mask.shape, device=new_X.device) > perc_dropout
+    #     new_X, new_X_mask = copy.deepcopy(sample)
+    #     dropout_mask = torch.rand(new_X_mask.shape, device=new_X.device) > perc_dropout
         
-        new_X[:,-1] = new_X[:,-1] * dropout_mask
-        new_X_mask = torch.logical_and(new_X_mask, dropout_mask)
+    #     new_X[:,-1] = new_X[:,-1] * dropout_mask
+    #     new_X_mask = torch.logical_and(new_X_mask, dropout_mask)
         
-        return new_X, new_X_mask
+    #     return new_X, new_X_mask
     
     def get_icon_target_data(self, date):
         
@@ -416,9 +425,12 @@ class Dataset_2D(Dataset):
         weather_video = weather_video.to_array().values
         
         W_video = torch.from_numpy(weather_video).to(torch.float32)
+        
         W_doy = torch.from_numpy(weather_doy).to(torch.float32)
         W_years = torch.from_numpy(weather_years).to(torch.float32)
-        return [W_video, W_doy, W_years]
+        W_date = torch.stack([W_doy, W_years], dim = -1)
+        
+        return [W_video, W_date]
     
     def get_weather_dtm(self):
         return torch.from_numpy(self.weather_dtm).to(torch.float32)

@@ -1,24 +1,25 @@
 from models.models_1d import *
 from models.models_2d import *
+from models.models_2D import *
 
 def load_model(config):
-    timesteps = config["timesteps"]
+    twindow = config["twindow"]
 
     if config["model"] == "Discrete2DConcat1":
         model_name = "Concat1_2D"
-        return Discrete2DConcat1(timesteps), model_name
+        return Discrete2DConcat1(twindow), model_name
     
     elif config["model"] == "Discrete2DConcat16":
         model_name = "Concat16_2D"
-        return Discrete2DConcat16(timesteps), model_name
+        return Discrete2DConcat16(twindow), model_name
     
     elif config["model"] == "Discrete2DConcat1_Time":
         model_name = "Concat1_T_2D"
-        return Discrete2DConcat1_Time(timesteps), model_name
+        return Discrete2DConcat1_Time(twindow), model_name
     
     elif config["model"] == "Discrete2DConvLSTM":
         model_name = "ConvLSTM_2D"
-        return Discrete2DConvLSTM(timesteps), model_name
+        return Discrete2DConvLSTM(twindow), model_name
     
     elif config["model"] == "PICCNN_att_1D":
         
@@ -142,6 +143,20 @@ def load_model(config):
                            lstm_input_units = config["lstm_input_units"],
                            lstm_units = config["lstm_units"]
                            ), model_name
+        
+    elif config["model"] == "AttCB_ConvLSTM":
+        
+        model_name = "AttCB_ConvLSTM"
+        print(f"Model: {model_name}")
+        
+        return AttCB_ConvLSTM(
+                cb_emb_dim = config["cb_emb_dim"],
+                cb_heads = config["cb_heads"],
+                channels_cb_wb = config["channels_cb_wb"],
+                convlstm_input_units = config["convlstm_input_units"],
+                convlstm_units = config["convlstm_units"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = [104, 150])
     
     else:
         raise Exception("Model name unknown.")
