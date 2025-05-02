@@ -1212,7 +1212,7 @@ class AttCB_ConvLSTM(nn.Module):
         
         Output = self.convLSTM_2(Output)
         
-        return Output
+        return Output.squeeze()
         
         
         
