@@ -893,20 +893,20 @@ class Weather_Upsampling_Block(nn.Module):
         super().__init__()
         
         self.layers = []
-        self.layers.append(nn.ConvTranspose3d(input_channles, hidden_channels, (1,5,5), stride=(1,1,1), dtype=torch.float32))
+        self.layers.append(nn.ConvTranspose3d(input_channles, int(hidden_channels/2), (1,5,5), stride=(1,1,1), dtype=torch.float32))
         # N, C, D, H, W
-        self.layers.append(nn.BatchNorm3d(hidden_channels))# [C, H, W]
+        self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))# [C, H, W]
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.ConvTranspose3d(hidden_channels, hidden_channels, (1,3,3), stride=(1,3,3), dtype=torch.float32))
-        self.layers.append(nn.BatchNorm3d(hidden_channels))
+        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.ConvTranspose3d(hidden_channels, hidden_channels, (1,3,3), stride=(1,3,3), dtype=torch.float32))
-        self.layers.append(nn.BatchNorm3d(hidden_channels))
+        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), dtype=torch.float32))
+        self.layers.append(nn.Conv3d(int(hidden_channels/2), hidden_channels, (1,5,5), dtype=torch.float32))
         self.layers.append(nn.BatchNorm3d(hidden_channels))
         self.layers.append(nn.LeakyReLU())
         
@@ -969,6 +969,18 @@ class Conditioning_Attention_Block(nn.Module):
         self.cb_layer_norm_2 = nn.LayerNorm(normalized_shape = hidden_channels)
         
         self.cb_conv = nn.Sequential(nn.Conv2d(hidden_channels,
+                                               hidden_channels,
+                                               5,
+                                               padding='same'),
+                                     nn.BatchNorm2d(hidden_channels),
+                                     nn.LeakyReLU(),
+                                     nn.Conv2d(hidden_channels,
+                                               hidden_channels,
+                                               5,
+                                               padding='same'),
+                                     nn.BatchNorm2d(hidden_channels),
+                                     nn.LeakyReLU(),
+                                     nn.Conv2d(hidden_channels,
                                                output_channels,
                                                5,
                                                padding='same'),
@@ -977,7 +989,7 @@ class Conditioning_Attention_Block(nn.Module):
         
     def forward(self, X, Z, X_mask):
             
-            if self.training is True:
+            if self.training is True and self.densification_dropout_p>0:
                 X, X_mask = self.densification_dropout([X, X_mask],
                                                        p = self.densification_dropout_p)
             
@@ -1057,7 +1069,7 @@ class ConvLSTMBlock(nn.Module):
     def __init__(self, 
                  input_channles,
                  hidden_channels,
-                 kernel_size=3,
+                 kernel_size=5,
                  padding=1,
                  stride=1):
         super().__init__()
@@ -1065,7 +1077,7 @@ class ConvLSTMBlock(nn.Module):
         self.conv = self._make_layer(input_channles+hidden_channels, hidden_channels*4,
                                        kernel_size, padding, stride)
         
-        self.leaky_rely = nn.LeakyReLU()
+        self.value_activation = nn.Tanh()
         
 
     def _make_layer(self, input_channles, out_channels, kernel_size, padding, stride):
@@ -1099,7 +1111,7 @@ class ConvLSTMBlock(nn.Module):
             outgate = torch.sigmoid(outgate)
 
             cy = (forgetgate * c_0) + (ingate * cellgate)
-            hy = outgate * self.leaky_rely(cy)
+            hy = outgate * self.value_activation(cy)
             outputs.append(hy)
             h_0 = hy
             c_0 = cy
@@ -1115,18 +1127,26 @@ class Date_Conditioning_Block(nn.Module):
         
         for i in range(n_channels):
             
-            setattr(self, f"fc_{i}",
-                    nn.Linear(2, 2))
+            setattr(self, f"fc_0_{i}",
+                    nn.Linear(2, 16))
+            setattr(self, f"activation_{i}",
+                    nn.LeakyReLU()),
+            setattr(self, f"fc_1_{i}",
+                    nn.Linear(16, 2))
             
             
     def forward(self, input):
-        output = []
+        outputs = []
         for i in range(self.n_channels):
-            output.append(getattr(self, f"fc_{i}")(input))
+            output = getattr(self, f"fc_0_{i}")(input)
+            output = getattr(self, f"activation_{i}")(output)
+            output = getattr(self, f"fc_1_{i}")(output)
+            
+            outputs.append(output)
         
-        output = torch.stack(output, dim = 1)
+        outputs = torch.stack(outputs, dim = 1)
         
-        return output
+        return outputs
         
         
     
@@ -1176,8 +1196,10 @@ class AttCB_ConvLSTM(nn.Module):
         self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
         
         self.convLSTM_2 =ConvLSTMBlock(input_channles = self.convlstm_units,
-                 hidden_channels = 1,
+                 hidden_channels = self.convlstm_units,
                  kernel_size=3)
+        
+        self.linear = nn.Linear(self.convlstm_units, 1)
         
     def forward(self, X, Z, W, X_mask):
         
@@ -1211,6 +1233,10 @@ class AttCB_ConvLSTM(nn.Module):
         Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
         
         Output = self.convLSTM_2(Output)
+        
+        Output = self.linear(torch.moveaxis(Output, 1, -1))
+        
+        Output = torch.moveaxis(Output, -1, 1)
         
         return Output.squeeze()
         

@@ -19,7 +19,7 @@ from loss.PytorchPCGrad.pcgrad import PCGrad
 
 def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, model_name,
                       start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
-                      device = "cuda", plot_arch = True):
+                      device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
     
     with tqdm(train_loader, unit="batch") as tepoch:
                     
@@ -39,9 +39,11 @@ def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, mo
                         Y_hat = model(X, Z, W, X_mask)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        loss = loss_masked_mse(Y_hat,
+                        loss = loss_masked_focal_mse(Y_hat,
                                           Y,
                                           Y_mask)
+                        
+                        #loss += l2_alpha * loss_l2_regularization(model)
                         
                         print("Training_data_loss: ", loss.item())
                         
