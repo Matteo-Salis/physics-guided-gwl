@@ -2,6 +2,7 @@ from functools import partial
 
 from train_test.training_1d import *
 from train_test.training_2d import *
+from train_test.training_2D import *
 
 def training_model(config):
 
@@ -52,9 +53,9 @@ def training_model(config):
                             dates_list = dates_list,
                             tsteps_list = tsteps_list)
             
-            
+    ######## 2d Approach ########  
     elif config["dataset_type"] == "2d":
-    ######## 2D Approach ########
+    
         
         print("Training Approach: 2d")
         
@@ -73,7 +74,25 @@ def training_model(config):
                         c3_positive_loss = c3_positive_loss,
                         h_timesteps = h_timesteps,
                         timesteps = timesteps)
-        
+    
+    ######## 2D Approach ########
+    elif config["dataset_type"] == "2D":
+        if config["loss"] == "data":
+            
+            print("Training Approach: 2D-Pure DL")
+            
+            start_dates_plot_training = config["start_dates_plot_training"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            timesteps_to_look = config["timesteps_to_look"]
+            plot_arch = config["plot_arch"]
+            
+            return partial(train_dl_model, 
+                           start_dates_plot = start_dates_plot_training,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           timesteps_to_look = timesteps_to_look,
+                           plot_arch = plot_arch)
         
 if __name__ == "__main__":
     pass

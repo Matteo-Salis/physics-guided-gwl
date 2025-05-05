@@ -11,7 +11,6 @@ import wandb
 
 from torchview import draw_graph
 
-from dataloaders.dataset_1d import *
 from utils.plot import *
 from loss.losses_2D import *
 
@@ -19,7 +18,8 @@ from loss.PytorchPCGrad.pcgrad import PCGrad
 
 
 def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, model_name,
-                      dates_list, tsteps_list, teacher_training = False, device = "cuda", plot_arch = True):
+                      start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
+                      device = "cuda", plot_arch = True):
     
     with tqdm(train_loader, unit="batch") as tepoch:
                     
@@ -39,7 +39,7 @@ def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, mo
                         Y_hat = model(X, Z, W, X_mask)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        loss = loss_masked(Y_hat,
+                        loss = loss_masked_mse(Y_hat,
                                           Y,
                                           Y_mask)
                         
@@ -53,18 +53,23 @@ def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, mo
                     # Plots
                     model.eval()
                     with torch.no_grad():
-                        plot_series_and_maps(dataset, model, device, 
-                        dates_list = dates_list,
-                        tsteps_list= tsteps_list,
-                        teacher_training = teacher_training)
+                        plot_maps_and_time_series(dataset, model, device,
+                              start_dates_plot, twindow_plot,
+                              sensors_to_plot, 
+                              timesteps_to_look)
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
                             wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
-                                                                      sample_input = (dataset[0][0], dataset[0][1],
-                                                                       [dataset[0][2], dataset.weather_coords_dtm],
-                                                                       dataset[0][4]),
-                                                                      device = device)})
+                                                                      sample_input = (dataset[0][0].unsqueeze(0),
+                                                                                    dataset[0][1].unsqueeze(0),
+                                                                                    [dataset[0][2][0].unsqueeze(0),
+                                                                                    dataset[0][2][1].unsqueeze(0)],
+                                                                                    dataset[0][-2].unsqueeze(0)),
+                                                                                    device = device)})
+                            
+                            
+                            
 def multi_task_backprop(losses, optimizer, pcgrad = True):
     
     optimizer = PCGrad(optimizer) 
