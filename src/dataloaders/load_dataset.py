@@ -39,7 +39,7 @@ def get_dataloader(dataset, config):
         test_idx = int(max_ds_elems*test_split_p)
 
     train_idxs, test_idxs = np.arange(train_idx + 1), np.arange(train_idx + config["twindow"],
-                                                            train_idx + config["twindow"] + test_idx)
+                                                            train_idx + test_idx)
 
     # Print info 
     if config["dataset_type"] == "2d":
