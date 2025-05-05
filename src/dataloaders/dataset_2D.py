@@ -58,14 +58,14 @@ class Dataset_2D(Dataset):
         if config["normalization"] is True:
             
             self.normalize(date_max = np.datetime64(config["date_max_norm"]))
-            
-        # Usefull in training 
-        self.weather_coords_dtm = self.get_weather_coords(dtm = True)
-
-        # Transform
-        # if config["densification_dropout"]:
-        #     self.densification_dropout = partial(self.densification_dropout, perc_dropout = config["densification_dropout"])
         
+        self.create_numpy_objects()            
+        
+    def create_numpy_objects(self):
+        "create numpy for dataloader efficiency"
+        self.target_rasterized_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
+        
+
         
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
         
@@ -78,10 +78,10 @@ class Dataset_2D(Dataset):
         target_std = subset_wtd_df[self.target].std()
         dtm_mean = self.dtm_roi.mean()
         dtm_std = self.dtm_roi.std()
-        lat_mean = self.weather_coords.mean(axis=(0,1))[0]
-        lat_std = self.weather_coords.std(axis=(0,1))[0]
-        lon_mean = self.weather_coords.mean(axis=(0,1))[1]
-        lon_std = self.weather_coords.std(axis=(0,1))[1]
+        lat_mean = self.wtd_data_raserized.y.mean()
+        lat_std = self.wtd_data_raserized.y.std()
+        lon_mean = self.wtd_data_raserized.x.mean()
+        lon_std = self.wtd_data_raserized.x.std()
         weather_mean = subset_weather_xr.mean()
         weather_std = subset_weather_xr.std()
         
@@ -116,21 +116,16 @@ class Dataset_2D(Dataset):
         # Normalizations
         self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
             
-        self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-        self.wtd_df["lon"] = (self.wtd_df["lon"] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-        
-        self.wtd_data_raserized = (self.wtd_data_raserized - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
+        self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
+        self.wtd_df["lon"] = (self.wtd_df["lon"] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
+        self.wtd_data_raserized[self.target] = (self.wtd_data_raserized[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
             
         self.dtm_roi = (self.dtm_roi - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
         self.wtd_df["height"] = (self.wtd_df["height"] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
-        self.weather_dtm = (self.weather_dtm - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
-            
-        self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-        self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
         
-        self.dtm_coords[:,:,0] = (self.dtm_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-        self.dtm_coords[:,:,1] = (self.dtm_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-        self.dtm_coords[:,:,2] = (self.dtm_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
+        self.target_rasterized_coords[:,:,0] = (self.target_rasterized_coords[:,:,0] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
+        self.target_rasterized_coords[:,:,1] = (self.target_rasterized_coords[:,:,1] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
+        self.target_rasterized_coords[:,:,2] = (self.target_rasterized_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         self.weather_xr = (self.weather_xr - self.norm_factors["weather_mean"])/self.norm_factors["weather_std"]       
             
@@ -139,12 +134,6 @@ class Dataset_2D(Dataset):
         self.dtm_roi = rioxarray.open_rasterio(self.config["dtm_nc"],
                                                engine='fiona')
         self.dtm_roi = self.dtm_roi.rio.write_crs("epsg:4326")
-        
-        self.dtm_coords = self.coordinates_xr(self.dtm_roi, coord_name = "xy")
-        
-        self.dtm_coords = np.concat([self.dtm_coords,
-                                     np.moveaxis(self.dtm_roi.values, 0,-1)],
-                                    axis=-1)
         
     def coordinates_xr(self, xr, coord_name = "latlon"):
         
@@ -168,14 +157,6 @@ class Dataset_2D(Dataset):
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
-        
-        self.weather_coords = self.coordinates_xr(self.weather_xr)
-        
-        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
-                                               engine='fiona')
-        
-        self.weather_dtm = self.weather_dtm.values
-        self.weather_dtm = np.moveaxis(self.weather_dtm, 0,-1)
         
     def rasterize_sparse_measurements(self, downscale_factor):
         # downscaling dtm
@@ -227,7 +208,6 @@ class Dataset_2D(Dataset):
         mask = self.wtd_data_raserized.notnull()
         mask = mask.rename({self.target:'nan_mask'})
         self.wtd_data_raserized = self.wtd_data_raserized.assign(mask = mask["nan_mask"])
-        self.target_rasterized_numpy = self.wtd_data_raserized.to_array().values.astype(np.float32)
         
         self.target_rasterized_dtm = self.dtm_roi.sel(x = self.wtd_data_raserized.x,
                                                          y = self.wtd_data_raserized.y,
@@ -305,7 +285,6 @@ class Dataset_2D(Dataset):
         self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
         
         if fill_value:
-            #self.wtd_df["wtd"] = self.wtd_df["wtd"].fillna(fill_value)
             self.fill_value = fill_value
         else:
             self.fill_value = 0
@@ -318,15 +297,14 @@ class Dataset_2D(Dataset):
         return iloc of last sensor before date_max
         """
         
-        max_idx = np.argmax(self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max])
-        #row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) < date_max].iloc[-1].name)
+        idx_subset = self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max]
+        if idx_subset.size > 0:
+            max_idx = np.argmax(self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max])
+        else:
+            max_idx = 0
         return max_idx
         
     def __len__(self):
-        # data = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= self.input_dates.max(),
-        #                                                :]]
-        # return len(data)
-        
         return len(self.wtd_data_raserized[self.target]) - self.twindow
     
     def __getitem__(self, idx):
@@ -337,16 +315,6 @@ class Dataset_2D(Dataset):
         # Retrieve date and coords for idx instance
         start_date = self.wtd_data_raserized.time.values[idx] #self.wtd_df.iloc[idx, :].name[0]
         end_date = start_date + np.timedelta64(self.twindow, "D")
-        
-        # idx_icon = np.argmin(self.wtd_df.index[self.wtd_df.index.get_level_values(0) == start_date])
-        
-        # sample_lat = self.wtd_df["lat"].iloc[idx:idx_icon+len(self.sensor_id_list)]
-        # sample_lon = self.wtd_df["lon"].iloc[idx_icon:idx_icon+len(self.sensor_id_list)]
-        # sample_dtm = self.wtd_df["height"].iloc[idx_icon:idx_icon+len(self.sensor_id_list)]
-        
-        # Z = [torch.tensor(sample_lat).reshape(1).to(torch.float32),
-        #      torch.tensor(sample_lon).reshape(1).to(torch.float32),
-        #      torch.tensor(sample_dtm).reshape(1).to(torch.float32)]
           
         # Z = torch.stack(Z, dim = -1).squeeze()
         Z = torch.from_numpy(self.target_rasterized_coords).to(torch.float32)
@@ -358,28 +326,9 @@ class Dataset_2D(Dataset):
         W = self.get_weather_video(start_date, end_date)
         
         # Retrieve wtd values from t0+1 to T for the idx instance sensor
-        #Y, Y_mask = self.get_target_series(start_date, end_date, sample_lat, sample_lon)
-        Y = torch.from_numpy(self.target_rasterized_numpy[0,idx+1:idx+1+self.twindow,:,:]).to(torch.float32)
-        Y_mask = torch.from_numpy(self.target_rasterized_numpy[1,idx+1:idx+1+self.twindow,:,:]).to(torch.bool)
-        
-        # if self.densification_dropout:
-        #     X, X_mask = self.densification_dropout([X, X_mask])
+        Y, Y_mask = self.get_target_video(idx, twindow=self.twindow)
         
         return [X, Z, W, Y, X_mask, Y_mask]
-    
-    # def densification_dropout(self, sample, perc_dropout = 0.25):
-        
-    #     """
-    #     Dropout training as in densification of Andrychowicz et al. (2023)
-    #     """
-        
-    #     new_X, new_X_mask = copy.deepcopy(sample)
-    #     dropout_mask = torch.rand(new_X_mask.shape, device=new_X.device) > perc_dropout
-        
-    #     new_X[:,-1] = new_X[:,-1] * dropout_mask
-    #     new_X_mask = torch.logical_and(new_X_mask, dropout_mask)
-        
-    #     return new_X, new_X_mask
     
     def get_icon_target_data(self, date):
         
@@ -401,17 +350,10 @@ class Dataset_2D(Dataset):
         
         return X, X_mask
     
-    def get_target_series(self, start_date, end_date, lat, lon):
-        target_t1_T = self.wtd_df[[self.target, "nan_mask"]].loc[(self.wtd_df.index.get_level_values(0) > start_date) &
-                                          (self.wtd_df.index.get_level_values(0) <= end_date)  & 
-                                          (self.wtd_df["lat"] == lat) &
-                                          (self.wtd_df["lon"] == lon)]
+    def get_target_video(self, idx, twindow):
         
-        target_t1_T_values =  target_t1_T[self.target].values
-        target_t1_T_mask =  target_t1_T["nan_mask"].values        
-        
-        Y = torch.from_numpy(target_t1_T_values).to(torch.float32)
-        Y_mask = torch.from_numpy(target_t1_T_mask).to(torch.bool)
+        Y = torch.from_numpy(self.target_rasterized_numpy[0,idx+1:idx+1+twindow,:,:]).to(torch.float32)
+        Y_mask = torch.from_numpy(self.target_rasterized_numpy[1,idx+1:idx+1+twindow,:,:]).to(torch.bool)
         
         return Y, Y_mask
     
@@ -431,204 +373,6 @@ class Dataset_2D(Dataset):
         W_date = torch.stack([W_doy, W_years], dim = -1)
         
         return [W_video, W_date]
-    
-    def get_weather_dtm(self):
-        return torch.from_numpy(self.weather_dtm).to(torch.float32)
-        
-    def get_weather_coords(self, dtm = False):
-        
-        output = torch.from_numpy(self.weather_coords).to(torch.float32)
-        
-        if dtm is True:
-            dtm = self.get_weather_dtm()
-            output = torch.cat([output, dtm], dim = -1)
-
-        return output
-    
-    def control_points_generator(self,
-                                 bbox = None,
-                                 mode = "even",
-                                 num_lon_point = 100,
-                                 num_lat_point = 100,
-                                 step = None, 
-                                 normalized = True,
-                                 flatten = True):
-        """
-        output: normalized cpoints
-        """
-
-        if bbox is None:
-            bbox = [self.dtm_roi.x.min().values,
-                    self.dtm_roi.x.max().values,
-                    self.dtm_roi.y.min().values,
-                    self.dtm_roi.y.max().values]
-            
-        if mode == "even":
-            
-            # create one-dimensional arrays for x and y
-            x = np.linspace(bbox[0], bbox[1], num_lon_point)
-            y = np.linspace(bbox[2], bbox[3], num_lat_point)[::-1]
-            # create the mesh based on these arrays
-            X, Y = np.meshgrid(x, y)
-            coords = np.stack([Y, X], axis = -1)
-            
-            
-            dtm_xy = self.dtm_roi.sel(x = x, y = y,
-                            method = "nearest").values
-            
-            if normalized is True:
-                coords[:,:,0] = (coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                coords[:,:,1] = (coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            else:
-                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-            
-            coords = np.concat([coords, np.moveaxis(dtm_xy, 0, -1)], axis=-1)
-            
-            if flatten is True:
-                coords = coords.reshape(coords.shape[0]*coords.shape[1], coords.shape[2])
-            
-            return coords
-            
-        elif mode == "urandom":
-            
-            if(num_lon_point != num_lat_point):
-                warnings.warn("number of lat cpoints not equal to lon cpoints... the min is considered in the following")
-            num_cpoints = min(num_lon_point, num_lat_point)
-            
-            x = np.random.uniform(low=bbox[0], high=bbox[1], size=num_cpoints)
-            y = np.random.uniform(low=bbox[2], high=bbox[3], size=num_cpoints)
-            
-            dtm_xy = np.array([self.dtm_roi.sel(x = x[i], y = y[i],
-                            method = "nearest").values for i in range(num_cpoints)])
-            
-            if normalized is True:
-                y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-            else:
-                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-            
-            coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
-            
-            return coords
-            
-        elif mode == "urandom+nb":
-            
-            if(num_lon_point != num_lat_point):
-                warnings.warn("number of lat cpoints not equal to lon cpoints... the min is considered in the following")
-            num_cpoints = min(num_lon_point, num_lat_point)
-            
-            margin = 1.2 * step
-            x = np.random.uniform(low=bbox[0]+margin, high=bbox[1]-margin, size=num_cpoints)
-            y = np.random.uniform(low=bbox[2]+margin, high=bbox[3]-margin, size=num_cpoints)
-            
-            x_right = x + step
-            x_two_right = x + 2*step
-            
-            x_left = x - step
-            x_two_left = x - 2*step
-            
-            y_up = y + step
-            y_two_up = y + 2*step
-            
-            y_down = y - step
-            y_two_down = y - 2*step
-            
-            dtm_xy = []
-            dtm_xy_right = []
-            dtm_xy_two_right = []
-            dtm_xy_left = []
-            dtm_xy_two_left = []
-            dtm_xy_up = []
-            dtm_xy_two_up = []
-            dtm_xy_down = []
-            dtm_xy_two_down = []
-            
-            for i in range(num_cpoints):
-                dtm_xy.append(self.dtm_roi.sel(x = x[i], y = y[i],
-                                method = "nearest").values)
-                
-                dtm_xy_right.append(self.dtm_roi.sel(x = x_right[i], y = y[i],
-                                method = "nearest").values)
-                dtm_xy_two_right.append(self.dtm_roi.sel(x = x_two_right[i], y = y[i],
-                                method = "nearest").values)
-                
-                dtm_xy_left.append(self.dtm_roi.sel(x = x_left[i], y = y[i],
-                                method = "nearest").values)
-                dtm_xy_two_left.append(self.dtm_roi.sel(x = x_two_left[i], y = y[i],
-                                method = "nearest").values)
-                
-                dtm_xy_up.append(self.dtm_roi.sel(x = x[i], y = y_up[i],
-                                method = "nearest").values)
-                dtm_xy_two_up.append(self.dtm_roi.sel(x = x[i], y = y_two_up[i],
-                                method = "nearest").values)
-                
-                dtm_xy_down.append(self.dtm_roi.sel(x = x[i], y = y_down[i],
-                                method = "nearest").values)
-                dtm_xy_two_down.append(self.dtm_roi.sel(x = x[i], y = y_two_down[i],
-                                method = "nearest").values)
-            
-            # Normalization
-            if normalized is True:
-                x = (x - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-                x_right = (x_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-                x_two_right = (x_two_right - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-                x_left = (x_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-                x_two_left = (x_two_left - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-                
-                y = (y - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                y_up = (y_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                y_two_up = (y_two_up - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                y_down = (y_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-                y_two_down = (y_two_down - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-            
-            else:
-                dtm_xy = (dtm_xy * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                
-                dtm_xy_right = (dtm_xy_right * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                dtm_xy_two_right = (dtm_xy_two_right * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                
-                dtm_xy_left = (dtm_xy_left * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                dtm_xy_two_left = (dtm_xy_two_left * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                
-                dtm_xy_up = (dtm_xy_up * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                dtm_xy_two_up = (dtm_xy_two_up * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                
-                dtm_xy_down = (dtm_xy_down * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-                dtm_xy_two_down = (dtm_xy_two_down * self.norm_factors["dtm_std"].values) + self.norm_factors["dtm_mean"].values
-    
-            dtm_xy = np.array(dtm_xy)
-            
-            dtm_xy_right = np.array(dtm_xy_right)
-            dtm_xy_two_right = np.array(dtm_xy_two_right)
-            
-            dtm_xy_left = np.array(dtm_xy_left)
-            dtm_xy_two_left = np.array(dtm_xy_two_left)
-            
-            dtm_xy_up = np.array(dtm_xy_up)
-            dtm_xy_two_up = np.array(dtm_xy_two_up)
-            
-            dtm_xy_down = np.array(dtm_xy_down)
-            dtm_xy_two_down = np.array(dtm_xy_two_down)
-            
-            coords = np.concat([np.expand_dims(y, 1), np.expand_dims(x, 1), dtm_xy], axis=-1)
-            
-            coords_right = np.concat([np.expand_dims(y, 1), np.expand_dims(x_right, 1), dtm_xy_right], axis=-1)
-            coords_two_right = np.concat([np.expand_dims(y, 1), np.expand_dims(x_two_right, 1), dtm_xy_two_right], axis=-1)
-            
-            coords_left = np.concat([np.expand_dims(y, 1), np.expand_dims(x_left, 1), dtm_xy_left], axis=-1)
-            coords_two_left = np.concat([np.expand_dims(y, 1), np.expand_dims(x_two_left, 1), dtm_xy_two_left], axis=-1)
-            
-            coords_up = np.concat([np.expand_dims(y_up, 1), np.expand_dims(x, 1), dtm_xy_up], axis=-1)
-            coords_two_up = np.concat([np.expand_dims(y_two_up, 1), np.expand_dims(x, 1), dtm_xy_two_up], axis=-1)
-            
-            coords_down = np.concat([np.expand_dims(y_down, 1), np.expand_dims(x, 1), dtm_xy_down], axis=-1)
-            coords_two_down = np.concat([np.expand_dims(y_two_down, 1), np.expand_dims(x, 1), dtm_xy_two_down], axis=-1)
-            
-            all_coords = np.stack([coords, coords_right, coords_left, coords_up, coords_down,
-                coords_two_right, coords_two_left, coords_two_up, coords_two_down], axis=-1)
-            
-            return all_coords
-    
      
     
 if __name__ == "__main__":

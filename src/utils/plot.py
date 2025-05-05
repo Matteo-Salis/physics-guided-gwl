@@ -285,7 +285,7 @@ def plot_series_and_maps(ds, model, device, dates_list, tsteps_list, hydro_cond 
 
 
 ################
-##### 2-D ######
+##### 2d ######
 ################
 
 def plot_random_station_time_series(y, y_hat, i, save_dir = None, model_name = None, title = None, mode = "training",
@@ -342,7 +342,162 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
     if wandb_log is True:
         wandb.log({
             f"{mode}_image_prediction" :  wandb.Image(fig, caption=f"Prediction image ep{i} t{timestep} {mode}")
-        })    
+        })
+        
+################
+#### 2D ########
+################
+
+def test_data_prediction(start_date, twindow, dataset, model, device, eval = True):
+    
+    X, X_mask = dataset.get_icon_target_data(start_date)
+    Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
+    W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, "D"))
+    Y, Y_mask = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
+    
+    if eval is True:
+        model.eval()
+    
+    Y_hat_test = model(X = X.unsqueeze(0).to(device),
+                    Z = Z.unsqueeze(0).to(device),
+                    W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
+                    X_mask = X_mask.unsqueeze(0).to(device))
+    
+    return [Y.detach().cpu(),
+            Y_hat_test.detach().cpu()]
+    
+def build_xarray(norm_data, dataset, start_date, twindow):
+    
+    denorm_data = (norm_data * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+    xr_ds = xarray.DataArray(data = denorm_data,
+                            coords = dict(
+                                        lat=("lat", dataset.wtd_data_raserized.y.values),
+                                        lon=("lon", dataset.wtd_data_raserized.x.values),
+                                        time=pd.date_range(np.datetime64(start_date) + np.timedelta64(1, "D"),
+                                                        np.datetime64(start_date) + np.timedelta64(twindow, "D"),
+                                                        freq = "D")),
+                            dims = ["time","lat", "lon"]
+                            )
+    return xr_ds
+    
+
+def plot_h_wtd_maps(sample_h, sample_wtd, 
+                 sample_date, pred_timestep,
+                 save_dir = None, 
+                 print_plot = False):
+    
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(1,2, figsize = (10,4))
+    fig.suptitle(f"t0: {sample_date} - Prediction Timestep {pred_timestep}")
+
+    sample_h[pred_timestep,:,:].plot(ax = ax[0])
+    ax[0].set_title("Piezometric head")
+
+
+    sample_wtd[pred_timestep,:,:].plot(ax = ax[1], vmin = sample_wtd.min().values,
+                            vmax = sample_wtd.max().values)
+    ax[1].set_title("WTD")
+
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+    
+    if print_plot is True:
+        plt.tight_layout()
+        
+    else:
+        return fig 
+    
+def plot_sensor_ts(sensor_ds, title,
+                   save_dir = None,
+                   print_plot = False):
+    
+    fig, ax = plt.subplots()
+    ax.plot(sensor_ds, label = sensor_ds.columns, marker = "o", lw = 0.7, markersize = 2)
+
+    ax.set_title(title)
+
+    ax.legend()
+    
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+        
+    if print_plot is True:
+        plt.show()
+        
+    else:
+        return fig
+    
+    
+def find_munic_lat_lon_sensor(dataset, sensor_id):
+    
+    municipality = dataset.wtd_names.loc[dataset.wtd_names["sensor_id"] == sensor_id, "munic"].values[0]
+    lat = dataset.wtd_names.loc[dataset.wtd_names["sensor_id"] == sensor_id].geometry.y.values[0]
+    lon = dataset.wtd_names.loc[dataset.wtd_names["sensor_id"] == sensor_id].geometry.x.values[0]
+    
+    return municipality, lat, lon
+
+def find_sensor_pred_in_xr(true_xr, pred_xr, lat, lon):
+    ts_pred = pd.DataFrame({"True": true_xr.sel(lon  = lon, lat = lat, method = "nearest"),
+                       "Predicted": pred_xr.sel(lon  = lon, lat = lat, method = "nearest").values,
+                       },
+                       index = pred_xr.sel(lon  = lon, lat = lat, method = "nearest").time.values)
+    
+    return ts_pred
+
+def plot_maps_and_time_series(dataset, model, device,
+                              start_dates, twindow,
+                              sensors_to_plot, 
+                              timesteps_to_look):
+    
+        
+        for date in start_dates:
+        
+            Y_test, Y_hat_test = test_data_prediction(start_date = np.datetime64(date),
+                                                                            twindow = twindow,
+                                                                            model = model,
+                                                                            device = device,
+                                                                            dataset = dataset)
+            
+            
+            Y_hat_test_xr_denorm = build_xarray(norm_data = Y_hat_test,
+                         dataset = dataset,
+                         start_date = date,
+                         twindow = twindow)
+            
+            WTD_hat_test_xr_denorm = dataset.target_rasterized_dtm.values - Y_hat_test_xr_denorm
+            
+            Y_test_xr_denorm = build_xarray(norm_data = Y_test,
+                         dataset = dataset,
+                         start_date = date,
+                         twindow = twindow)
+            
+            
+            for timestep in timesteps_to_look:
+                    
+                wandb.log({f"pred_map_{date}-t{timestep}":wandb.Image(plot_h_wtd_maps(Y_hat_test_xr_denorm,
+                                                                                        WTD_hat_test_xr_denorm,
+                                                                                        date, timestep,
+                                                                                        save_dir = None, 
+                                                                                        print_plot = False))})
+                              
+            for sensor_id in sensors_to_plot:
+                
+                municipality, lat, lon = find_munic_lat_lon_sensor(dataset, sensor_id)
+                sensor_pred_ds = find_sensor_pred_in_xr(Y_test_xr_denorm, Y_hat_test_xr_denorm,
+                                                        lat = lat,
+                                                        lon = lon,
+                                                        )
+                
+                wandb.log({f"{municipality}_ts_{date} -":wandb.Image(plot_sensor_ts(sensor_pred_ds,
+                                                                            title = f"{sensor_id} - {municipality} - from {date}",
+                                                                            save_dir = None,
+                                                                            print_plot = False))})
+                
+                
+                
+                
+        
 
 ################
 #### COMMON ####

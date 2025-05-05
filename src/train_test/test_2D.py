@@ -11,43 +11,43 @@ import wandb
 
 from torchview import draw_graph
 
-from dataloaders.dataset_1d import *
 from utils.plot import *
-from loss.losses_1d import *
+from loss.losses_2D import *
     
     
-def test_dl_model_1d(epoch, dataset, model, test_loader,
-                     dates_list, tsteps_list, device = "cuda"):
+def test_dl_model(epoch, dataset, model, test_loader,
+                    start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
+                    device = "cuda"):
     
     with torch.no_grad():
                 with tqdm(test_loader, unit="batch") as tepoch:
                             
-                            for batch_idx, (x, z, w_values, y, x_mask, y_mask) in enumerate(tepoch):
+                            for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                                 tepoch.set_description(f"Epoch {epoch}")
 
-                                x = x.to(device)
-                                x_mask = x_mask.to(device)
-                                z = z.to(device)
-                                weather_coords_batch = dataset.weather_coords_dtm.unsqueeze(0).expand(w_values.shape[0], -1, -1, -1)
-                                w = [w_values.to(device), weather_coords_batch.to(device)]
-                                y = y.to(device)
-                                y_mask = y_mask.to(device)
+                                X = X.to(device)
+                                X_mask = X_mask.to(device)
+                                Z = Z.to(device)
+                                W = [W[0].to(device), W[1].to(device)]
+                                Y = Y.to(device)
+                                Y_mask = Y_mask.to(device)
                                 #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                                y_hat = model(x, z, w, x_mask)
+                                Y_hat = model(X, Z, W, X_mask)
                                 
                                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                                loss = masked_mse(y_hat,
-                                              y,
-                                              y_mask)
+                                loss = loss_masked_mse(Y_hat,
+                                          Y,
+                                          Y_mask)
                                 
                                 print("Test_data_loss: ", loss.item())
                                 wandb.log({"Test_data_loss":loss.item()})
-                                
-                            plot_series_and_maps(dataset, model, device, 
-                                    dates_list = dates_list,
-                                    tsteps_list= tsteps_list)
+                            
+                            plot_maps_and_time_series(dataset, model, device,
+                              start_dates_plot, twindow_plot,
+                              sensors_to_plot, 
+                              timesteps_to_look)
                             
                             
 def test_dl_pde_model_1d(epoch, dataset, model, test_loader,

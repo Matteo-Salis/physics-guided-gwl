@@ -3,34 +3,36 @@ import torch
 import torch.nn.functional as F
 
 
-def loss_masked(Y_hat, Y, Y_mask):
+def loss_masked_mse(Y_hat, Y, Y_mask):
+    
+    if len(Y_hat.size()) < 4:
+        #Y = Y.unsqueeze(0)
+        Y_hat = Y_hat.unsqueeze(0)
+        #Y_mask = Y_mask.unsqueeze(0)
+        
     return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
 
-# def masked_mse(y_hat, y, loss_focal_weights = False, offset_perc = 0.35):
-#         """
-#         last element of y is assumed to be the mask
-#         """
-
-#         true_pred = y[:,:,:-1]
-#         if len(true_pred.shape) == 2:
-#             true_pred = true_pred.unsqueeze(1)
-#         mask = y[:,:,-1].unsqueeze(-1).expand(-1,-1,y_hat.shape[-1])
-#         mask = mask.to(torch.bool)
+def loss_masked_focal_mse(Y_hat, Y, Y_mask, offset_perc = 0):
+        """
         
-#         if loss_focal_weights is True:
-#             offset = round(true_pred.shape[1] * offset_perc)
-#             focal_weights = torch.arange(true_pred.shape[1]+offset,offset,-1).to(true_pred.device)/(true_pred.shape[1] + offset)
-#             focal_weights = focal_weights[None,:,None].expand(y_hat.shape[0], -1, y_hat.shape[-1])
-#             squared_errors = ((y_hat-true_pred)**2.0)
-            
-#             squared_errors = torch.where(mask, squared_errors, torch.nan)
-#             focal_weights = torch.where(mask, focal_weights, torch.nan)
-            
-#             lead_time_mse = torch.nansum(squared_errors * focal_weights, dim = 1)/torch.nansum(focal_weights, dim = 1)
-#             total_mse = torch.nanmean(lead_time_mse)
-#             return total_mse
-#         else:
-#             return torch.sum((y_hat[mask]-true_pred[mask])**2.0)  / torch.sum(mask)
+        """
+        if len(Y.size()) < 4:
+            Y = Y.unsqueeze(0)
+            Y_hat = Y_hat.unsqueeze(0)
+            Y_mask = Y_mask.unsqueeze(0)
+        
+        offset = round(Y.shape[1] * offset_perc)
+        focal_weights = torch.arange(Y.shape[1]+offset,offset,-1).to(Y.device)/(Y.shape[1] + offset)
+        
+        focal_weights = focal_weights[None,:,None, None].expand(Y.shape[0], -1, Y.shape[2], Y.shape[3])
+        squared_errors = ((Y_hat-Y)**2.0)
+        
+        squared_errors = torch.where(Y_mask, squared_errors, torch.nan)
+        focal_weights = torch.where(Y_mask, focal_weights, torch.nan)
+        
+        lead_time_mse = torch.nansum(squared_errors * focal_weights, dim = 1)/torch.nansum(focal_weights, dim = 1)
+        total_mse = torch.nanmean(lead_time_mse)
+        return total_mse
 
 
 def masked_mse(y_hat, y, mask):

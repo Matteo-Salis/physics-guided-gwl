@@ -156,7 +156,7 @@ def load_model(config):
                 convlstm_input_units = config["convlstm_input_units"],
                 convlstm_units = config["convlstm_units"],
                 densification_dropout = config["densification_dropout"],
-                upsampling_dim = [104, 150])
+                upsampling_dim = [104, 150]), model_name
     
     else:
         raise Exception("Model name unknown.")
