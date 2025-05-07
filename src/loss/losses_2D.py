@@ -19,19 +19,31 @@ def loss_masked_focal_mse(Y_hat, Y, Y_mask, offset_perc = 0):
         """
         
         """
-        if len(Y.size()) < 4:
+        if len(Y_hat.size()) < 4:
             Y_hat = Y_hat.unsqueeze(0)
         
-        offset = round(Y.shape[1] * offset_perc)
-        focal_weights = torch.arange(Y.shape[1]+offset,offset,-1).to(Y.device)/(Y.shape[1] + offset)
+        offset = round(Y_hat.shape[1] * offset_perc)
+        focal_weights = torch.arange(Y_hat.shape[1]+offset,offset,-1).to(Y_hat.device)/(Y_hat.shape[1] + offset)
         
-        focal_weights = focal_weights[None,:,None, None].expand(Y.shape[0], -1, Y.shape[2], Y.shape[3])
+        focal_weights = focal_weights[None,:,None,None].expand(Y_hat.shape[0], -1, Y_hat.shape[2], Y_hat.shape[3])
+        print("BF mask")
+        print(focal_weights.shape)
+        print(focal_weights[0,:,0,0])
+        print(focal_weights[0,:,1,1])
         squared_errors = ((Y_hat-Y)**2.0)
         
         squared_errors = torch.where(Y_mask, squared_errors, torch.nan)
         focal_weights = torch.where(Y_mask, focal_weights, torch.nan)
+        print("AF mask")
+        print(focal_weights.shape)
+        print(focal_weights[0,:,0,0])
+        print(focal_weights[0,:,1,1])
+        print(focal_weights.isnan().all())
         
         lead_time_mse = torch.nansum(squared_errors * focal_weights, dim = 1)/torch.nansum(focal_weights, dim = 1)
+        print(focal_weights.requires_grad)
+        print(torch.nansum(focal_weights, dim = 1))
+        print(lead_time_mse.shape)
         total_mse = torch.nanmean(lead_time_mse)
         return total_mse
     

@@ -1,4 +1,5 @@
 import json
+from functools import partial
 
 import torch
 from torch.utils.data import Dataset
@@ -9,6 +10,37 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from dataloaders.dataset_1d import Dataset_1D
 
 ##### Blocks ######
+
+class MoveAxis(nn.Module):
+    
+    def __init__(self, source, destination):
+        super().__init__()
+        
+        self.moveaxis = partial(torch.moveaxis, source = source, destination = destination)
+    
+    def forward(self, x):
+        return self.moveaxis(x)
+
+class LayerNorm_MA(torch.nn.LayerNorm):
+    
+    def __init__(self, normalized_shape, norm_dim = None ,eps = 0.00001, elementwise_affine = True, bias = True, device=None, dtype=None):
+        super(LayerNorm_MA, self).__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
+        
+        self.norm = []
+        self.norm.append(nn.LayerNorm(normalized_shape))
+        
+        if norm_dim is not None:
+            self.norm.insert(0, MoveAxis(norm_dim, -1)) #partial(torch.moveaxis, source = norm_dim, destination = -1)
+            self.norm.append(MoveAxis(-1, norm_dim)) #partial(torch.moveaxis, source = -1, destination = norm_dim)
+            
+        self.norm = nn.Sequential(*self.norm)
+        
+    def forward(self, input):
+            
+        norm_output = self.norm(input)
+        return norm_output
+        
+        
 
 class CausalConv1d(torch.nn.Conv1d):
     # inspired by https://github.com/pytorch/pytorch/issues/1333
@@ -893,16 +925,24 @@ class Weather_Upsampling_Block(nn.Module):
         super().__init__()
         
         self.layers = []
-        self.layers.append(nn.ConvTranspose3d(input_channles, int(hidden_channels/2), (1,5,5), stride=(1,1,1), dtype=torch.float32))
+        self.layers.append(nn.Conv3d(input_channles, hidden_channels, (1,5,5), dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(hidden_channels))
+        self.layers.append(nn.LeakyReLU())
+        
+        self.layers.append(nn.AdaptiveAvgPool3d((None,int(output_dim[0]/4),int(output_dim[1]/4)))) #padding='same'
+        
+        self.layers.append(nn.ConvTranspose3d(hidden_channels, int(hidden_channels/2), (1,3,3), stride=(1,1,1), dtype=torch.float32))
         # N, C, D, H, W
         self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))# [C, H, W]
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,3,3), stride=(1,1,1), dtype=torch.float32))
         self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,3,3), stride=(1,3,3), dtype=torch.float32))
+        self.layers.append(nn.AdaptiveAvgPool3d((None,int(output_dim[0]/2),int(output_dim[1]/2)))) #padding='same'
+        
+        self.layers.append(nn.ConvTranspose3d(int(hidden_channels/2), int(hidden_channels/2), (1,5,5), stride=(1,1,1), dtype=torch.float32))
         self.layers.append(nn.BatchNorm3d(int(hidden_channels/2)))
         self.layers.append(nn.LeakyReLU())
         
@@ -911,6 +951,10 @@ class Weather_Upsampling_Block(nn.Module):
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.AdaptiveAvgPool3d((None,output_dim[0],output_dim[1]))) #padding='same'
+        
+        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
+        self.layers.append(nn.BatchNorm3d(hidden_channels))
+        self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.Conv3d(hidden_channels, output_channels, (1,5,5), padding='same', dtype=torch.float32))
         self.layers.append(nn.BatchNorm3d(output_channels))
@@ -1077,7 +1121,7 @@ class ConvLSTMBlock(nn.Module):
         self.conv = self._make_layer(input_channles+hidden_channels, hidden_channels*4,
                                        kernel_size, padding, stride)
         
-        self.value_activation = nn.Tanh()
+        self.value_activation = nn.LeakyReLU()
         
 
     def _make_layer(self, input_channles, out_channels, kernel_size, padding, stride):
@@ -1199,7 +1243,9 @@ class AttCB_ConvLSTM(nn.Module):
                  hidden_channels = self.convlstm_units,
                  kernel_size=3)
         
-        self.linear = nn.Linear(self.convlstm_units, 1)
+        self.linear_1 = nn.Sequential(nn.Linear(self.convlstm_units, int(self.convlstm_units/4)),
+                                      nn.LeakyReLU()) 
+        self.linear_2 = nn.Linear(int(self.convlstm_units/4), 1)
         
     def forward(self, X, Z, W, X_mask):
         
@@ -1232,9 +1278,12 @@ class AttCB_ConvLSTM(nn.Module):
         
         Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
         
-        Output = self.convLSTM_2(Output)
+        Output = self.convLSTM_2(Output,
+                                 target_Icond,
+                                 target_Icond)
         
-        Output = self.linear(torch.moveaxis(Output, 1, -1))
+        Output = self.linear_1(torch.moveaxis(Output, 1, -1))
+        Output = self.linear_2(Output)
         
         Output = torch.moveaxis(Output, -1, 1)
         
