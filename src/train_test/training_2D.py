@@ -39,7 +39,7 @@ def train_dl_model(epoch, dataset, model, train_loader, optimizer, model_dir, mo
                         Y_hat = model(X, Z, W, X_mask)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        loss = loss_masked_focal_mse(Y_hat,
+                        loss = loss_masked_mse(Y_hat,
                                           Y,
                                           Y_mask)
                         
