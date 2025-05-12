@@ -77,7 +77,7 @@ def training_model(config):
     
     ######## 2D Approach ########
     elif config["dataset_type"] == "2D":
-        if config["loss"] == "data":
+        if config["physics"] is False:
             
             print("Training Approach: 2D-Pure DL")
             

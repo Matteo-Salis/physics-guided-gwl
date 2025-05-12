@@ -17,6 +17,7 @@ from models.load_model import load_model
 from train_test.load_train import training_model
 from train_test.load_test import test_model
 from optimizer.load_optimizer import load_optimizer
+from loss.load_losses import load_loss
 
 wandb.login()
 
@@ -79,8 +80,7 @@ def main(config):
     print(f"Start time: {timestamp}")
     # optimization parameters
     optimizer = load_optimizer(config, model)
-    
-    
+    loss_fn = load_loss(config)
 
     # loop training and test
     for epoch in range(config["epochs"]):
@@ -89,7 +89,9 @@ def main(config):
         start_time = time.time()
 
         train(epoch = epoch, dataset = dataset, model = model, train_loader = train_loader,
-              optimizer = optimizer, model_dir = model_dir, model_name = model_name, device = device)
+              loss_fn = loss_fn, optimizer = optimizer, model_dir = model_dir,
+              model_name = model_name,
+              device = device)
 
         end_time = time.time()
         exec_time = end_time-start_time
@@ -103,7 +105,7 @@ def main(config):
         start_time = time.time()
 
         test(epoch = epoch, dataset = dataset, model = model, test_loader = test_loader,
-             device = device)
+             loss_fn = loss_fn, device = device)
 
         end_time = time.time()
         exec_time = end_time-start_time
