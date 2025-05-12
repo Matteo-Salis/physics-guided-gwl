@@ -197,7 +197,7 @@ class Dataset_2D(Dataset):
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
             rasterized_ds_list.append(rasterized_ds)
-        print("Rasterized groundwater dataframe.")
+        print("Rasterization complete!")
 
         self.wtd_data_raserized = xarray.concat(rasterized_ds_list, dim = "time")
         self.wtd_data_raserized = self.wtd_data_raserized.assign_coords({"time": self.dates})
