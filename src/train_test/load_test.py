@@ -65,7 +65,7 @@ def test_model(config):
                         timesteps = timesteps)
         
     ######## 2D Approach ########
-    elif config["dataset_type"] == "2D":
+    elif config["dataset_type"] == "2D_VideoCond":
         if config["physics"] is False:
             
             print("Training Approach: 2D-Pure DL")

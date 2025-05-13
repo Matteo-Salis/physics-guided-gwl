@@ -3,7 +3,8 @@ import torch
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 
 from dataloaders.dataset_1d import Dataset_1D
-from dataloaders.dataset_2D import Dataset_2D
+from dataloaders.dataset_2D import Dataset_2D_ImageCond
+from dataloaders.dataset_2D import Dataset_2D_VideoCond
 from dataloaders.dataset_2d import DiscreteDataset
 
 
@@ -13,8 +14,10 @@ def load_dataset(config):
         return DiscreteDataset(config)
     elif config["dataset_type"] == "1d":
         return Dataset_1D(config)
-    elif config["dataset_type"] == "2D":
-        return Dataset_2D(config)
+    elif config["dataset_type"] == "2D_ImageCond":
+        return Dataset_2D_ImageCond(config)
+    elif config["dataset_type"] == "2D_VideoCond":
+        return Dataset_2D_VideoCond(config)
     else:
         raise Exception("Model name unknown.")
     
@@ -46,7 +49,7 @@ def get_dataloader(dataset, config):
         print(f"Traing size: {train_idx}, Test size: {test_idx - config['twindow']}")
     elif config["dataset_type"] == "1d":
         print(f"Traing size: {train_idx} - {dataset.wtd_df.index.get_level_values(0)[train_idxs[-1]].astype('datetime64[D]')}, Test size: {test_idx} - {dataset.wtd_df.index.get_level_values(0)[test_idxs[-1]].astype('datetime64[D]')}")
-    elif config["dataset_type"] == "2D":
+    elif config["dataset_type"] == "2D_VideoCond":
         print(f"Traing size: {train_idx} - Start: {dataset.wtd_data_raserized.time.values[train_idxs[0]].astype('datetime64[D]')} - End: {dataset.wtd_data_raserized.time.values[train_idxs[-1]].astype('datetime64[D]')};\nTest size: {test_idx} - Start: {dataset.wtd_data_raserized.time.values[test_idxs[0]].astype('datetime64[D]')} - End: {dataset.wtd_data_raserized.time.values[test_idxs[-1]].astype('datetime64[D]')}")
 
 

@@ -16,12 +16,15 @@ from loss.losses_2D import *
 
 from loss.PytorchPCGrad.pcgrad import PCGrad
 
+from torch import autograd
+
 
 def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
                       start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
     
     with tqdm(train_loader, unit="batch") as tepoch:
+        with autograd.detect_anomaly():
                     
                     for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")

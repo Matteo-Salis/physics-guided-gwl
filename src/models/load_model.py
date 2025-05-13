@@ -159,6 +159,22 @@ def load_model(config):
                 convlstm_kernel = config["convlstm_kernel"],
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = [104, 150]), model_name
+        
+    elif config["model"] == "VideoCB_ConvLSTM":
+        
+        model_name = "VideoCB_ConvLSTM"
+        print(f"Model: {model_name}")
+        
+        return VideoCB_ConvLSTM(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                cb_emb_dim = config["cb_emb_dim"],
+                cb_heads = config["cb_heads"],
+                channels_cb_wb = config["channels_cb_wb"],
+                convlstm_input_units = config["convlstm_input_units"],
+                convlstm_units = config["convlstm_units"],
+                convlstm_kernel = config["convlstm_kernel"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = [104, 150]), model_name
     
     else:
         raise Exception("Model name unknown.")
