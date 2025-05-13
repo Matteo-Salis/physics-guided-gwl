@@ -25,8 +25,8 @@ def test_dl_model(epoch, dataset, model, test_loader, loss_fn,
                             for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                                 tepoch.set_description(f"Epoch {epoch}")
 
-                                X = X.to(device)
-                                X_mask = X_mask.to(device)
+                                X = X[:,0,:,:].to(device)
+                                X_mask = X_mask[:,0,:].to(device)
                                 Z = Z.to(device)
                                 W = [W[0].to(device), W[1].to(device)]
                                 Y = Y.to(device)

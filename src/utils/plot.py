@@ -350,7 +350,9 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
 
 def test_data_prediction(start_date, twindow, dataset, model, device, eval = True):
     
-    X, X_mask = dataset.get_icon_target_data(start_date)
+    X, X_mask = dataset.get_icon_target_data(start_date, start_date)
+    X = X.squeeze()
+    X_mask = X_mask.squeeze()
     Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
     W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, "D"))
     Y, Y_mask = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
