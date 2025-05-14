@@ -17,7 +17,9 @@ def densification_dropout(sample, p = 0.25):
         Dropout training as in densification of Andrychowicz et al. (2023)
         """
         
-        new_X, new_X_mask = copy.deepcopy(sample)
+        new_X = sample[0].clone()
+        new_X_mask = sample[1].clone()
+        
         for batch in range(new_X.shape[0]):
             avail_X = new_X_mask[batch,:].nonzero().squeeze()
             dropout = torch.randint(0, len(avail_X), [int(len(avail_X)*p)])
@@ -114,18 +116,18 @@ class Weather_Upsampling_Block(nn.Module):
         
         self.layers = []
         self.layers.append(nn.Conv3d(input_dimensions[0], hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
-        self.layers.append(LayerNorm_MA([hidden_channels,
-                                        input_dimensions[1],
-                                        input_dimensions[2]], move_dim_in = 1, move_dim_out = 2))
+        # self.layers.append(LayerNorm_MA([hidden_channels,
+        #                                 input_dimensions[1],
+        #                                 input_dimensions[2]], move_dim_in = 1, move_dim_out = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.ConvTranspose3d(hidden_channels, int(hidden_channels), (1,3,3), stride=(1,1,1), dtype=torch.float32))
         
         self.layers.append(nn.AdaptiveAvgPool3d((None,int(output_dim[0]/4),int(output_dim[1]/4)))) #padding='same'
         
-        self.layers.append(LayerNorm_MA([hidden_channels, 
-                                         int(output_dim[0]/4),
-                                         int(output_dim[1]/4)], move_dim_in = 1, move_dim_out = 2))
+        # self.layers.append(LayerNorm_MA([hidden_channels, 
+        #                                  int(output_dim[0]/4),
+        #                                  int(output_dim[1]/4)], move_dim_in = 1, move_dim_out = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.ConvTranspose3d(int(hidden_channels), int(hidden_channels), (1,3,3), stride=(1,1,1), dtype=torch.float32))
@@ -144,8 +146,8 @@ class Weather_Upsampling_Block(nn.Module):
         new_H = self.compute_3dTrConv_out_dim(int(output_dim[0]/2), 5)
         new_W = self.compute_3dTrConv_out_dim(int(output_dim[1]/2), 5)
         
-        self.layers.append(LayerNorm_MA([int(hidden_channels),
-                                         new_H, new_W], move_dim_in = 1, move_dim_out = 2))
+        # self.layers.append(LayerNorm_MA([int(hidden_channels),
+        #                                  new_H, new_W], move_dim_in = 1, move_dim_out = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.Conv3d(int(hidden_channels), hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
@@ -156,8 +158,8 @@ class Weather_Upsampling_Block(nn.Module):
         self.layers.append(nn.AdaptiveAvgPool3d((None,output_dim[0],output_dim[1]))) #padding='same'
         
         self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
-        self.layers.append(LayerNorm_MA([hidden_channels,
-                                         output_dim[0], output_dim[1]], move_dim_in = 1, move_dim_out = 2))
+        # self.layers.append(LayerNorm_MA([hidden_channels,
+        #                                  output_dim[0], output_dim[1]], move_dim_in = 1, move_dim_out = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.Conv3d(hidden_channels, output_channels, (1,5,5), padding='same', dtype=torch.float32))
@@ -199,14 +201,14 @@ class Conditioning_Attention_Block(nn.Module):
                                     # nn.LayerNorm(normalized_shape = embedding_dim),
                                     # nn.LeakyReLU(),
                                     nn.Linear(embedding_dim, hidden_channels),
-                                    nn.LayerNorm(normalized_shape = hidden_channels, elementwise_affine=False),
+                                    nn.LayerNorm(normalized_shape = hidden_channels),
                                     nn.LeakyReLU())
         
         self.cb_conv = nn.Sequential(nn.Conv2d(hidden_channels,
                                                hidden_channels,
                                                5,
                                                padding='same'),
-                                     LayerNorm_MA((hidden_channels, *query_HW_dim)),
+                                     #LayerNorm_MA((hidden_channels, *query_HW_dim)),
                                      #nn.BatchNorm2d(hidden_channels),
                                      nn.LeakyReLU(),
                                      nn.Conv2d(hidden_channels,
@@ -214,7 +216,7 @@ class Conditioning_Attention_Block(nn.Module):
                                                5,
                                                padding='same'),
                                      #nn.BatchNorm2d(hidden_channels),
-                                     LayerNorm_MA((hidden_channels, *query_HW_dim)),
+                                     #LayerNorm_MA((hidden_channels, *query_HW_dim)),
                                      nn.LeakyReLU(),
                                      #nn.AvgPool2d(kernel_size = 5, padding=2, stride = 1),
                                      nn.Conv2d(hidden_channels,
@@ -311,7 +313,7 @@ class ConvLSTMBlock(nn.Module):
         self.conv = self._make_layer(input_channles+hidden_channels, hidden_channels*4,
                                        kernel_size, padding, stride)
         
-        self.value_activation = nn.Tanh() #nn.LeakyReLU()
+        self.value_activation = nn.LeakyReLU() #nn.Tanh() #nn.LeakyReLU()
         
 
     def _make_layer(self, input_channles, out_channels, kernel_size, padding, stride):
@@ -351,108 +353,6 @@ class ConvLSTMBlock(nn.Module):
             outputs.append(hy)
             h_0 = hy
             c_0 = cy
-
-        return torch.stack(outputs, dim = 2) # (N, C, D, H, W)
-    
-
-class ConvLSTMBlock_TF(nn.Module):
-    def __init__(self, 
-                 input_channles,
-                 hidden_channels,
-                 HW_dimensions,
-                 kernel_size=5,
-                 padding="same",
-                 stride=1):
-        super().__init__()
-        self.hidden_channels = hidden_channels
-        self.HW_dimensions = HW_dimensions
-        self.conv = nn.Conv2d(input_channles+hidden_channels, hidden_channels*4,
-                      kernel_size=kernel_size, padding=padding, stride=stride, bias=True)
-        
-        self.linear = nn.Linear(hidden_channels, 1)
-        
-        self.value_activation = nn.Tanh() #nn.LeakyReLU()
-
-    def forward(self, inputs, h_0 = None, c_0 = None):
-        '''
-
-        :param inputs: (N, C, D, H, W)
-        :param hidden_state: (h_0: (N, C_out, H, W), c_0: (N, C_out, H, W))
-        :return:
-        '''
-        outputs = []
-        N, C, D, H, W = inputs.shape
-        
-        if h_0 is None:
-            h_0 = torch.zeros(N, self.hidden_channels, H, W).to(inputs.device)
-        if c_0 is None:
-            c_0 = torch.zeros(N, self.hidden_channels, H, W).to(inputs.device)
-        
-        for t in range(D):
-            combined = torch.cat([inputs[:,:,t,:,:], # (N, C, H, W)
-                                  h_0], dim=1)
-            gates = self.conv(combined)
-            ingate, forgetgate, cellgate, outgate = torch.split(gates, self.hidden_channels, dim=1)
-            ingate = torch.sigmoid(ingate)
-            forgetgate = torch.sigmoid(forgetgate)
-            outgate = torch.sigmoid(outgate)
-
-            cy = (forgetgate * c_0) + (ingate * self.value_activation(cellgate))
-            hy = outgate * self.value_activation(cy)
-            outputs.append(hy)
-            h_0 = hy
-            c_0 = cy
-        
-        ### FROM Previous TL
-        # for tstep in range(self.timestep):
-            
-        #     lstm_output, lstm_hidden = self.weather_lstm(
-        #                                         torch.cat([weather_block_out[:,tstep,:].unsqueeze(1),
-        #                                                     h_lstm_input], dim = -1),
-        #                                         lstm_hidden)
-        #     lstm_output = self.fc(lstm_output)            
-        #     lstm_outputs.append(lstm_output)
-            
-        #     if y is not None: 
-        #         h_lstm_input = y[0][:,tstep][:,None, None]
-                
-        #         h_lstm_input_mask = ~y[1][:,tstep][:,None, None]
-        #         if (h_lstm_input_mask).any():
-        #             h_lstm_input[h_lstm_input_mask] = lstm_output.detach()[h_lstm_input_mask]
-        #     else:
-        #         h_lstm_input = lstm_output.detach()
-                
-                
-        # lstm_outputs = torch.cat(lstm_outputs, dim=1)
-        
-        ### FROM Soil Moisture
-        # lstm_input = x[:,0,:].unsqueeze(1) # initial condition must be provided
-        #     lstm_outputs = []
-        #     lstm_hidden = None
-            
-        #     for tstep in range(0, x.shape[1]):
-                
-        #         lstm_output, lstm_hidden = self.lstm(lstm_input,
-        #                                              lstm_hidden)
-        #         lstm_output = self.linear(lstm_output)
-        #         lstm_outputs.append(lstm_output)
-                
-                
-        #         if tstep < x.shape[1]-1:
-        #             if self.training is True:
-        #                 nan_instances = x[:,tstep+1,self.noutputs].isnan()
-        #                 lstm_input = torch.where(nan_instances[:,None,None],
-        #                                           torch.concat([lstm_output.detach(),
-        #                                                         x[:,tstep+1,(self.noutputs):].unsqueeze(1)], dim = -1),
-        #                                           x[:,tstep+1,:].unsqueeze(1))
-                        
-                        
-        #             else:
-        #                 lstm_input = torch.concat([lstm_output.detach(), 
-        #                                         x[:,tstep+1,(self.noutputs):].unsqueeze(1)],
-        #                                         dim = -1)
-        #         else:    
-        #             break
 
         return torch.stack(outputs, dim = 2) # (N, C, D, H, W)
     
@@ -678,8 +578,8 @@ class VideoCB_ConvLSTM(nn.Module):
                  HW_dimensions = self.upsampling_dim,
                  kernel_size=self.convlstm_kernel)
         
-        self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
-        self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
+        #self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
+        #self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
         
         self.convLSTM_2 =ConvLSTMBlock(input_channles = self.convlstm_units,
                  hidden_channels = self.convlstm_units,
@@ -698,17 +598,17 @@ class VideoCB_ConvLSTM(nn.Module):
         
         
         
-    def forward(self, X, Z, W, X_mask):
+    def forward(self, X, Z, W, X_mask, teacher_forcing = False):
         
         ### Weather module ### 
             
         Weaether_seq = self.Weather_Module(W[0]) # N, C, D, H, W
         date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # N, C, D, 2
-        date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
+        #date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
         
         ### Conditioning modules ###
         
-        if self.training is True:
+        if self.training is True and teacher_forcing is True:
             Target_VideoCond = []
             
             for timestep in range(X.shape[1]):
@@ -745,28 +645,28 @@ class VideoCB_ConvLSTM(nn.Module):
                                     #  target_Icond
                                     )
             
-            date_conditioning_sm = date_conditioning_sm[:,:,:,None, None,:].expand(-1, -1, -1,
-                                                                            Output.shape[3],
-                                                                            Output.shape[4],
-                                                                            -1)
+            # date_conditioning_sm = date_conditioning_sm[:,:,:,None, None,:].expand(-1, -1, -1,
+            #                                                                 Output.shape[3],
+            #                                                                 Output.shape[4],
+            #                                                                 -1)
             
-            Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
-            Output = self.Layer_Norm(Output)
+            # Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
+            #Output = self.Layer_Norm(Output)
             
             Output = self.convLSTM_2(Output,
                                     #  target_Icond,
                                     #  target_Icond
                                     )
             
-            Output = self.convLSTM_3(Output,
-                                    #  target_Icond,
-                                    #  target_Icond
-                                    )
+            # Output = self.convLSTM_3(Output,
+            #                         #  target_Icond,
+            #                         #  target_Icond
+            #                         )
             
             Output = self.linear(torch.moveaxis(Output, 1, -1))
             Output = self.output_layer(Output)
             
-            Output = torch.moveaxis(Output, -1, 1)
+            #Output = torch.moveaxis(Output, -1, 1)
             
             return Output.squeeze()
         
@@ -784,49 +684,52 @@ class VideoCB_ConvLSTM(nn.Module):
                 
                 Joint_Image = self.Conv_1x1(Joint_Image)
                 
-                date_conditioning_wm = date_conditioning_wm[:,:,timestep,:]
-                date_conditioning_wm = date_conditioning_wm[:,:,None,None,None,:].expand(-1, -1, -1,
+                date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
+                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,None,:].expand(-1, -1, -1,
                                                                             Joint_Image.shape[3],
                                                                             Joint_Image.shape[4],
                                                                             -1)
             
-                Joint_Image = (Joint_Image * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
+                Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,:,1]
             
-                Target_ImageCond = self.convLSTM_1(Joint_Image,
+                Output_Image = self.convLSTM_1(Joint_Image,
                                     #  target_Icond,
                                     #  target_Icond
                                     )
                 
-                date_conditioning_sm = date_conditioning_sm[:,:,timestep,:]
-                date_conditioning_sm = date_conditioning_sm[:,:,None,None, None,:].expand(-1, -1, -1,
-                                                                            Target_ImageCond.shape[3],
-                                                                            Target_ImageCond.shape[4],
-                                                                            -1)
+                # date_conditioning_sm_Image = date_conditioning_sm[:,:,timestep,:]
+                # date_conditioning_sm_Image = date_conditioning_sm_Image[:,:,None,None, None,:].expand(-1, -1, -1,
+                #                                                             Output_Image.shape[3],
+                #                                                             Output_Image.shape[4],
+                #                                                             -1)
                 
                 
-                Target_ImageCond = (Target_ImageCond * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
-                Target_ImageCond = self.Layer_Norm(Target_ImageCond)
+                # Output_Image = (Output_Image * date_conditioning_sm_Image[:,:,:,:,:,0]) + date_conditioning_sm_Image[:,:,:,:,:,1]
+                # Output_Image = self.Layer_Norm(Output_Image)
             
-                Target_ImageCond = self.convLSTM_2(Target_ImageCond,
+                Output_Image = self.convLSTM_2(Output_Image,
                                         #  target_Icond,
                                         #  target_Icond
                                         )
             
-                Target_ImageCond = self.convLSTM_3(Target_ImageCond,
+                Output_Image = self.convLSTM_3(Output_Image,
                                         #  target_Icond,
                                         #  target_Icond
                                         )
             
-                Target_ImageCond = self.linear(torch.moveaxis(Target_ImageCond, 1, -1))
+                Output_Image = self.linear(torch.moveaxis(Output_Image, 1, -1))
+                #print(Output_Image.shape, end = " - ")
+                Target_ImageCond = torch.moveaxis(Output_Image, -1, 1)[:,:,0,:,:]
+                #print(Target_ImageCond.shape)
                 
             
-            Target_ImageCond = self.output_layer(Target_ImageCond)
+                Output_Image = self.output_layer(Output_Image)
+                Output_Image = torch.moveaxis(Output_Image, -1, 1)
             
-            Output_Image = torch.moveaxis(Output_Image, -1, 1)
-            
-            Output.append(Output_Image)
+                Output.append(Output_Image)
+                
         
-        Output = torch.tensor(Output, device = X.device)
+        Output = torch.cat(Output, dim=2).squeeze()
             
         return Output
         
