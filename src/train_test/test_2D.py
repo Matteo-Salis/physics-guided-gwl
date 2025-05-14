@@ -47,5 +47,6 @@ def test_dl_model(epoch, dataset, model, test_loader, loss_fn,
                             plot_maps_and_time_series(dataset, model, device,
                               start_dates_plot, twindow_plot,
                               sensors_to_plot, 
-                              timesteps_to_look)
+                              timesteps_to_look,
+                              eval_mode=True)
                             

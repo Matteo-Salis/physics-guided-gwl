@@ -82,6 +82,13 @@ def main(config):
     optimizer = load_optimizer(config, model)
     loss_fn = load_loss(config)
 
+    if config["teacher_forcing_scheduling"] == "linear":
+        # 1 always TF
+        teacher_forcing_scheduling = torch.arange(0,config["epochs"]).to(device)/(config["epochs"])
+        
+    elif isinstance(config["teacher_forcing_scheduling"], float):
+        teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]
+
     # loop training and test
     for epoch in range(config["epochs"]):
         print(f"############### Training epoch {epoch} ###############")
@@ -91,7 +98,7 @@ def main(config):
         train(epoch = epoch, dataset = dataset, model = model, train_loader = train_loader,
               loss_fn = loss_fn, optimizer = optimizer, model_dir = model_dir,
               model_name = model_name,
-              device = device)
+              device = device, teacher_forcing_factor = teacher_forcing_scheduling[epoch])
 
         end_time = time.time()
         exec_time = end_time-start_time

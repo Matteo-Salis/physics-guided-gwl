@@ -20,7 +20,7 @@ from torch import autograd
 
 
 def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
-                      start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
+                      start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look, teacher_forcing_factor = 1,
                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
     
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -29,8 +29,18 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                     for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")
                         
-                        X = X.to(device)
-                        X_mask = X_mask.to(device)
+                        teacher_forcing = torch.rand(1).item()
+                        if teacher_forcing > teacher_forcing_factor:
+                            teacher_forcing = False
+                            X = X[:,0,:,:].to(device)
+                            X_mask = X_mask[:,0,:].to(device)
+                            
+                        else:
+                            teacher_forcing = True
+                            print("Teacher Forcing Mode!", end = " - ")
+                            X = X.to(device)
+                            X_mask = X_mask.to(device)
+                            
                         Z = Z.to(device)
                         W = [W[0].to(device), W[1].to(device)]
                         Y = Y.to(device)
@@ -39,7 +49,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask)
+                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                         loss = loss_fn(Y_hat,
@@ -61,7 +71,8 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                         plot_maps_and_time_series(dataset, model, device,
                               start_dates_plot, twindow_plot,
                               sensors_to_plot, 
-                              timesteps_to_look)
+                              timesteps_to_look,
+                              eval_mode = True)
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
@@ -70,6 +81,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                                                                                     dataset[0][1].unsqueeze(0),
                                                                                     [dataset[0][2][0].unsqueeze(0),
                                                                                     dataset[0][2][1].unsqueeze(0)],
-                                                                                    dataset[0][-2].unsqueeze(0)),
+                                                                                    dataset[0][-2].unsqueeze(0),
+                                                                                    True),
                                                                                     device = device)})
                             
