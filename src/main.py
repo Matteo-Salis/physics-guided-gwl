@@ -84,7 +84,7 @@ def main(config):
 
     if config["teacher_forcing_scheduling"] == "linear":
         # 1 always TF
-        teacher_forcing_scheduling = torch.arange(0,config["epochs"]).to(device)/(config["epochs"])
+        teacher_forcing_scheduling = torch.arange(config["epochs"]-1,-1,-1).to(device)/(config["epochs"]+int(config["epochs"]*0.7))
         
     elif isinstance(config["teacher_forcing_scheduling"], float):
         teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]
@@ -92,6 +92,7 @@ def main(config):
     # loop training and test
     for epoch in range(config["epochs"]):
         print(f"############### Training epoch {epoch} ###############")
+        print(f"TF factor: {teacher_forcing_scheduling[epoch]}")
         model.train(True)
         start_time = time.time()
 

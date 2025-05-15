@@ -51,8 +51,8 @@ class Dataset_2D_VideoCond(Dataset):
             self.target = "wtd"
             
         # Rasterizing groundwater dataset 
-        self.rasterize_sparse_measurements(downscale_factor = config["target_downscale_factor"])
-        # 0.0437 around 2km resolution
+        self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"])
+        # around 2.5km
         
         if config["normalization"] is True:
             
@@ -157,11 +157,12 @@ class Dataset_2D_VideoCond(Dataset):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
         
-    def rasterize_sparse_measurements(self, downscale_factor):
+    def rasterize_sparse_measurements(self, new_dimensions):
         # downscaling dtm
         
-        new_width = round(self.dtm_roi.rio.width * downscale_factor)
-        new_height = round(self.dtm_roi.rio.height * downscale_factor)
+        new_height, new_width = new_dimensions
+        # new_width = round(self.dtm_roi.rio.width * downscale_factor)
+        # new_height = round(self.dtm_roi.rio.height * downscale_factor)
 
         self.dtm_roi_downsampled = self.dtm_roi.rio.reproject(
             self.dtm_roi.rio.crs,

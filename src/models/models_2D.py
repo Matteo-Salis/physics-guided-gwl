@@ -123,11 +123,11 @@ class Weather_Upsampling_Block(nn.Module):
         
         self.layers.append(nn.ConvTranspose3d(hidden_channels, int(hidden_channels), (1,3,3), stride=(1,1,1), dtype=torch.float32))
         
-        self.layers.append(nn.AdaptiveAvgPool3d((None,int(output_dim[0]/4),int(output_dim[1]/4)))) #padding='same'
+        self.layers.append(nn.AdaptiveAvgPool3d((None,int(output_dim[0]/3),int(output_dim[1]/3)))) #padding='same'
         
         # self.layers.append(LayerNorm_MA([hidden_channels, 
-        #                                  int(output_dim[0]/4),
-        #                                  int(output_dim[1]/4)], move_dim_in = 1, move_dim_out = 2))
+        #                                  int(output_dim[0]/3),
+        #                                  int(output_dim[1]/3)], move_dim_in = 1, move_dim_out = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.ConvTranspose3d(int(hidden_channels), int(hidden_channels), (1,3,3), stride=(1,1,1), dtype=torch.float32))
@@ -313,7 +313,7 @@ class ConvLSTMBlock(nn.Module):
         self.conv = self._make_layer(input_channles+hidden_channels, hidden_channels*4,
                                        kernel_size, padding, stride)
         
-        self.value_activation = nn.LeakyReLU() #nn.Tanh() #nn.LeakyReLU()
+        self.value_activation = nn.Tanh() #nn.Tanh() #nn.LeakyReLU()
         
 
     def _make_layer(self, input_channles, out_channels, kernel_size, padding, stride):
@@ -367,11 +367,11 @@ class Date_Conditioning_Block(nn.Module):
         for i in range(n_channels):
             
             setattr(self, f"fc_0_{i}",
-                    nn.Linear(2, 16))
+                    nn.Linear(2, 32))
             setattr(self, f"activation_0_{i}",
                     nn.LeakyReLU()),
             setattr(self, f"fc_1_{i}",
-                    nn.Linear(16, 2))
+                    nn.Linear(32, 2))
             setattr(self, f"activation_1_{i}",
                     nn.LeakyReLU()),
             
@@ -528,6 +528,7 @@ class VideoCB_ConvLSTM(nn.Module):
                  channels_cb_wb = 32,
                  convlstm_input_units = 16,
                  convlstm_units = 32,
+                 convlstm_nlayer = 3,
                  convlstm_kernel = 5,
                  densification_dropout = 0.5,
                  upsampling_dim = [104, 150]):
@@ -535,9 +536,9 @@ class VideoCB_ConvLSTM(nn.Module):
         super().__init__()
         
         self.input_dimension = weather_CHW_dim
-        self.convlstm_input_units = convlstm_input_units
         self.convlstm_units = convlstm_units
         self.convlstm_kernel = convlstm_kernel
+        self.convlstm_nlayer = convlstm_nlayer
         self.cb_emb_dim = cb_emb_dim
         self.cb_heads = cb_heads
         self.channels_cb_wb = channels_cb_wb
@@ -549,10 +550,10 @@ class VideoCB_ConvLSTM(nn.Module):
         self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.cb_emb_dim,
                  heads = self.cb_heads,
                  hidden_channels = self.channels_cb_wb,
-                 output_channels = self.convlstm_input_units, #self.convlstm_units,
+                 output_channels = int(self.convlstm_units/2), #self.convlstm_units,
                  query_HW_dim = self.upsampling_dim)
         
-        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(self.convlstm_input_units)
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.convlstm_units/2))
         
         ### Weather module ### 
         
@@ -561,40 +562,65 @@ class VideoCB_ConvLSTM(nn.Module):
         
         self.Weather_Module = Weather_Upsampling_Block(input_dimensions = self.input_dimension,
                  hidden_channels = self.channels_cb_wb,
-                 output_channels = self.convlstm_input_units,
+                 output_channels = int(self.convlstm_units/2),
                  output_dim = self.upsampling_dim)
         
         ### Join Modoule ### 
         
-        self.Conv_1x1 = nn.Sequential(nn.Conv3d(int(self.convlstm_input_units*2),
-                                                self.convlstm_input_units,
-                                                kernel_size=(1,1,1), padding="same"),
+        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(self.convlstm_units,
+                                                int(self.convlstm_units/2),
+                                                kernel_size=(1,3,3), padding="same"),
                                       nn.LeakyReLU())
         
-        ### Sequential module ###
+        # Residual connection
         
-        self.convLSTM_1 = ConvLSTMBlock(input_channles = self.convlstm_input_units,
-                 hidden_channels = self.convlstm_units,
-                 HW_dimensions = self.upsampling_dim,
-                 kernel_size=self.convlstm_kernel)
+        ### Sequential module ###
         
         #self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
         #self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
         
-        self.convLSTM_2 =ConvLSTMBlock(input_channles = self.convlstm_units,
-                 hidden_channels = self.convlstm_units,
-                 HW_dimensions= self.upsampling_dim,
-                 kernel_size=self.convlstm_kernel)
+        input_features = int(self.convlstm_units/2)
+        hidden_units = self.convlstm_units
         
-        self.convLSTM_3 =ConvLSTMBlock(input_channles = self.convlstm_units,
-                 hidden_channels = self.convlstm_units,
-                 HW_dimensions= self.upsampling_dim,
-                 kernel_size=self.convlstm_kernel)
+        for i in range(self.convlstm_nlayer):
+            
+                
+            setattr(self, f"convLSTM_{i}",
+                    ConvLSTMBlock(input_channles = input_features,
+                                    hidden_channels = hidden_units,
+                                    HW_dimensions = self.upsampling_dim,
+                                    kernel_size=self.convlstm_kernel))
+            
+            input_features = hidden_units
+                    # if (i == self.convlstm_nlayer-2):
+                    #     hidden_units = int(input_features/2)
         
-        self.linear = nn.Sequential(nn.Linear(self.convlstm_units, self.convlstm_input_units),
+        # self.convLSTM_1 = ConvLSTMBlock(input_channles = self.convlstm_input_units,
+        #          hidden_channels = self.convlstm_units,
+        #          HW_dimensions = self.upsampling_dim,
+        #          kernel_size=self.convlstm_kernel)
+        
+        # self.convLSTM_2 =ConvLSTMBlock(input_channles = self.convlstm_units,
+        #          hidden_channels = self.convlstm_units,
+        #          HW_dimensions= self.upsampling_dim,
+        #          kernel_size=self.convlstm_kernel)
+        
+        # self.convLSTM_3 =ConvLSTMBlock(input_channles = self.convlstm_units,
+        #          hidden_channels = self.convlstm_units,
+        #          HW_dimensions= self.upsampling_dim,
+        #          kernel_size=self.convlstm_kernel)
+        
+        self.Linear = nn.Sequential(nn.Linear(self.convlstm_units, int(self.convlstm_units/2)),
                                     nn.LeakyReLU())
         
-        self.output_layer = nn.Linear(self.convlstm_input_units, 1)
+        # Add Residual connection
+        
+        self.Output_layer = nn.Sequential(nn.Conv3d(int(self.convlstm_units/2),
+                                                int(self.convlstm_units/2),
+                                                kernel_size=(1,3,3), padding="same"),
+                                      nn.LeakyReLU(),
+                                      MoveAxis(1,-1),
+                                      nn.Linear(int(self.convlstm_units/2), 1))
         
         
         
@@ -629,7 +655,8 @@ class VideoCB_ConvLSTM(nn.Module):
                                     Target_VideoCond], 
                                     dim = 1)
             
-            Joint_seq = self.Conv_1x1(Joint_seq)
+            Joint_seq = self.Joint_Conv3d(Joint_seq)
+            
             
             date_conditioning_wm = date_conditioning_wm[:,:,:,None, None,:].expand(-1, -1, -1,
                                                                             Joint_seq.shape[3],
@@ -639,32 +666,48 @@ class VideoCB_ConvLSTM(nn.Module):
             Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
             ### Sequential module ### 
+            Output_seq = Joint_seq
+            for i in range(self.convlstm_nlayer):
+                Output_seq = getattr(self, f"convLSTM_{i}")(Output_seq)
+                
             
-            Output = self.convLSTM_1(Joint_seq,
-                                    #  target_Icond,
-                                    #  target_Icond
-                                    )
+            Output_seq = self.Linear(torch.moveaxis(Output_seq, 1, -1))
+            Output_seq = torch.moveaxis(Output_seq, -1, 1)
             
-            # date_conditioning_sm = date_conditioning_sm[:,:,:,None, None,:].expand(-1, -1, -1,
-            #                                                                 Output.shape[3],
-            #                                                                 Output.shape[4],
-            #                                                                 -1)
+            ## Skip connection 
+            Output_seq = Output_seq + Joint_seq
             
-            # Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
-            #Output = self.Layer_Norm(Output)
+            Output = self.Output_layer(Output_seq)
             
-            Output = self.convLSTM_2(Output,
-                                    #  target_Icond,
-                                    #  target_Icond
-                                    )
+            
+                
+                
+            
+            # Output = self.convLSTM_1(Joint_seq,
+            #                         #  target_Icond,
+            #                         #  target_Icond
+            #                         )
+            
+            # # date_conditioning_sm = date_conditioning_sm[:,:,:,None, None,:].expand(-1, -1, -1,
+            # #                                                                 Output.shape[3],
+            # #                                                                 Output.shape[4],
+            # #                                                                 -1)
+            
+            # # Output = (Output * date_conditioning_sm[:,:,:,:,:,0]) + date_conditioning_sm[:,:,:,:,:,1]
+            # #Output = self.Layer_Norm(Output)
+            
+            # Output = self.convLSTM_2(Output,
+            #                         #  target_Icond,
+            #                         #  target_Icond
+            #                         )
             
             # Output = self.convLSTM_3(Output,
             #                         #  target_Icond,
             #                         #  target_Icond
             #                         )
             
-            Output = self.linear(torch.moveaxis(Output, 1, -1))
-            Output = self.output_layer(Output)
+            #Output = self.linear(torch.moveaxis(Output, 1, -1))
+            #Output = self.output_layer(torch.moveaxis(Output, 1, -1))
             
             #Output = torch.moveaxis(Output, -1, 1)
             
@@ -672,17 +715,20 @@ class VideoCB_ConvLSTM(nn.Module):
         
         else:
             
-            Target_ImageCond = self.Icondition_Module(X, Z, X_mask)
+            ImageCond = X
+            ImageCond_mask = X_mask
             Output = []
             
             for timestep in range(W[0].shape[2]):
                 
+                Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
+                
                 
                 Joint_Image = torch.cat([Weaether_seq[:,:,timestep,:,:],
-                                    Target_ImageCond], 
+                                    Upsampled_ImageCond], 
                                     dim = 1).unsqueeze(2)
                 
-                Joint_Image = self.Conv_1x1(Joint_Image)
+                Joint_Image = self.Joint_Conv3d(Joint_Image)
                 
                 date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
                 date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,None,:].expand(-1, -1, -1,
@@ -692,10 +738,15 @@ class VideoCB_ConvLSTM(nn.Module):
             
                 Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,:,1]
             
-                Output_Image = self.convLSTM_1(Joint_Image,
-                                    #  target_Icond,
-                                    #  target_Icond
-                                    )
+                ### Sequential module ### 
+                Output_image = Joint_Image
+                for i in range(self.convlstm_nlayer):
+                    Output_image = getattr(self, f"convLSTM_{i}")(Output_image)
+                
+                # Output_Image = self.convLSTM_1(Joint_Image,
+                #                     #  target_Icond,
+                #                     #  target_Icond
+                #                     )
                 
                 # date_conditioning_sm_Image = date_conditioning_sm[:,:,timestep,:]
                 # date_conditioning_sm_Image = date_conditioning_sm_Image[:,:,None,None, None,:].expand(-1, -1, -1,
@@ -707,29 +758,42 @@ class VideoCB_ConvLSTM(nn.Module):
                 # Output_Image = (Output_Image * date_conditioning_sm_Image[:,:,:,:,:,0]) + date_conditioning_sm_Image[:,:,:,:,:,1]
                 # Output_Image = self.Layer_Norm(Output_Image)
             
-                Output_Image = self.convLSTM_2(Output_Image,
-                                        #  target_Icond,
-                                        #  target_Icond
-                                        )
+                # Output_Image = self.convLSTM_2(Output_Image,
+                #                         #  target_Icond,
+                #                         #  target_Icond
+                #                         )
             
-                Output_Image = self.convLSTM_3(Output_Image,
-                                        #  target_Icond,
-                                        #  target_Icond
-                                        )
+                # Output_Image = self.convLSTM_3(Output_Image,
+                #                         #  target_Icond,
+                #                         #  target_Icond
+                #                         )
             
-                Output_Image = self.linear(torch.moveaxis(Output_Image, 1, -1))
+                #Output_Image = self.linear(torch.moveaxis(Output_Image, 1, -1))
+                
                 #print(Output_Image.shape, end = " - ")
-                Target_ImageCond = torch.moveaxis(Output_Image, -1, 1)[:,:,0,:,:]
+                #ImageCond = torch.moveaxis(Output_Image, -1, 1)[:,:,0,:,:]
                 #print(Target_ImageCond.shape)
                 
+                
+                Output_image = self.Linear(torch.moveaxis(Output_image, 1, -1))
+                Output_image = torch.moveaxis(Output_image, -1, 1)
+                
+                ## Skip connection 
+                Output_image = Output_image + Joint_Image
+                
+                Output_image = self.Output_layer(Output_image)
             
-                Output_Image = self.output_layer(Output_Image)
-                Output_Image = torch.moveaxis(Output_Image, -1, 1)
+                # Output_Image = self.output_layer(torch.moveaxis(Output_Image, 1, -1))
+                ImageCond = torch.cat([Z.clone(),
+                                       Output_image[:,0,:,:,:]],
+                                      dim=-1)
+                ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
+                ImageCond_mask = torch.ones((ImageCond[:,:,0].shape)).to(torch.bool).to(ImageCond.device)
             
-                Output.append(Output_Image)
+                Output.append(Output_image)
                 
         
-        Output = torch.cat(Output, dim=2).squeeze()
+        Output = torch.cat(Output, dim=1).squeeze()
             
         return Output
         
