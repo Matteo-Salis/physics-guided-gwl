@@ -348,22 +348,33 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
 #### 2D ########
 ################
 
+from functools import partial
+
 def test_data_prediction(start_date, twindow, dataset, model, device, eval = True):
     
-    X, X_mask = dataset.get_icon_target_data(start_date, start_date)
-    X = X.squeeze()
-    X_mask = X_mask.squeeze()
+    if eval is True:
+        model.eval()                                                    
+        X, X_mask = dataset.get_icon_target_data(start_date, start_date)    
+        X = X.squeeze()
+        X_mask = X_mask.squeeze()
+        teacher_forcing = False
+        
+    else:
+        X, X_mask = dataset.get_icon_target_data(start_date, start_date + np.timedelta64(twindow-1, "D"))
+        model.train()
+        teacher_forcing = True
+        
     Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
     W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, "D"))
     Y, Y_mask = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
     
-    if eval is True:
-        model.eval()
+    
     
     Y_hat_test = model(X = X.unsqueeze(0).to(device),
                     Z = Z.unsqueeze(0).to(device),
                     W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
-                    X_mask = X_mask.unsqueeze(0).to(device))
+                    X_mask = X_mask.unsqueeze(0).to(device),
+                    teacher_forcing = teacher_forcing)
     
     return [Y.detach().cpu(),
             Y_hat_test.detach().cpu()]
@@ -450,7 +461,8 @@ def find_sensor_pred_in_xr(true_xr, pred_xr, lat, lon):
 def plot_maps_and_time_series(dataset, model, device,
                               start_dates, twindow,
                               sensors_to_plot, 
-                              timesteps_to_look):
+                              timesteps_to_look,
+                              eval_mode):
     
         
         for date in start_dates:
@@ -459,7 +471,8 @@ def plot_maps_and_time_series(dataset, model, device,
                                                                             twindow = twindow,
                                                                             model = model,
                                                                             device = device,
-                                                                            dataset = dataset)
+                                                                            dataset = dataset,
+                                                                            eval = eval_mode)
             
             
             Y_hat_test_xr_denorm = build_xarray(norm_data = Y_hat_test,
@@ -508,7 +521,7 @@ def plot_maps_and_time_series(dataset, model, device,
                             
 def plot_model_graph(file_path, file_name, model, sample_input, device, depth = 1):
     
-    model_graph = draw_graph(model, input_data=sample_input, device=device, depth = depth)
+    model_graph = draw_graph(model, input_data=sample_input, device=device, depth = depth, mode = "train")
     model_graph.visual_graph.render(format='png', filename = file_name, directory= f"{file_path}/")
     model_arch = wandb.Image(f"{file_path}/{file_name}.png", caption="model's architecture")
     
