@@ -170,9 +170,10 @@ def load_model(config):
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
                 channels_cb_wb = config["channels_cb_wb"],
-                convlstm_input_units = config["convlstm_input_units"],
-                convlstm_units = config["convlstm_units"],
+                convlstm_IO_units = config["convlstm_IO_units"],
+                convlstm_hidden_units = config["convlstm_hidden_units"],
                 convlstm_kernel = config["convlstm_kernel"],
+                convlstm_nlayer = config["convlstm_nlayer"],
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"]), model_name
     
