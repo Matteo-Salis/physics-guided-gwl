@@ -111,13 +111,15 @@ class Weather_Upsampling_Block(nn.Module):
                  input_dimensions = [10, 9, 12],
                  hidden_channels = 32,
                  output_channels = 16,
-                 output_dim = [104, 150]):
+                 output_dim = [104, 150],
+                 padding_mode = "replicate",
+                 layernorm_affine = False):
         super().__init__()
         
         self.layers = []
-        self.layers.append(nn.Conv3d(input_dimensions[0], hidden_channels, (1,3,3), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(input_dimensions[0], hidden_channels, (1,3,3), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         self.layers.append(nn.LeakyReLU())
-        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         self.layers.append(nn.LeakyReLU())
         # self.layers.append(LayerNorm_MA([hidden_channels,
         #                                 input_dimensions[1],
@@ -130,11 +132,11 @@ class Weather_Upsampling_Block(nn.Module):
         
         #hidden_channels
         
-        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1))
+        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1, elementwise_affine = layernorm_affine))
         
-        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         self.layers.append(nn.LeakyReLU())
-        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,3,3), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         self.layers.append(nn.LeakyReLU())
         
         #self.layers.append(nn.ConvTranspose3d(int(hidden_channels), int(hidden_channels), (1,3,3), stride=(1,1,1), dtype=torch.float32))
@@ -153,30 +155,30 @@ class Weather_Upsampling_Block(nn.Module):
         # new_H = self.compute_3dTrConv_out_dim(int(output_dim[0]/2), 5)
         # new_W = self.compute_3dTrConv_out_dim(int(output_dim[1]/2), 5)
         
-        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1))
+        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1, elementwise_affine = layernorm_affine))
         #self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.Conv3d(int(hidden_channels), hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(int(hidden_channels), hidden_channels, (1,5,5), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         self.layers.append(nn.LeakyReLU())
-        self.layers.append(nn.Conv3d(int(hidden_channels), hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(int(hidden_channels), hidden_channels, (1,5,5), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         # self.layers.append(LayerNorm_MA([hidden_channels,
         #                                  new_H, new_W], move_dim_from = 1, move_dim_to = 2))
         self.layers.append(nn.LeakyReLU())
         
         self.layers.append(nn.AdaptiveAvgPool3d((None,output_dim[0],output_dim[1]))) #padding='same'
         
-        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1))
+        self.layers.append(LayerNorm_MA(hidden_channels, move_dim_from = 1, move_dim_to = -1, elementwise_affine = layernorm_affine))
         
-        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,5,5), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(hidden_channels, hidden_channels, (1,5,5), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         # self.layers.append(LayerNorm_MA([hidden_channels,
         #                                  output_dim[0], output_dim[1]], move_dim_from = 1, move_dim_to = 2))
         self.layers.append(nn.LeakyReLU())
         
-        self.layers.append(nn.Conv3d(hidden_channels, output_channels, (1,5,5), padding='same', dtype=torch.float32))
+        self.layers.append(nn.Conv3d(hidden_channels, output_channels, (1,5,5), padding='same', padding_mode = padding_mode, dtype=torch.float32))
         # self.layers.append(LayerNorm_MA([output_channels,
         #                                  output_dim[0], output_dim[1]], move_dim_from = 1, move_dim_to = 2))
         
-        self.layers.append(LayerNorm_MA(output_channels, move_dim_from = 1, move_dim_to = -1))
+        self.layers.append(LayerNorm_MA(output_channels, move_dim_from = 1, move_dim_to = -1, elementwise_affine = layernorm_affine))
         
         self.layers.append(nn.LeakyReLU())
         
@@ -194,7 +196,8 @@ class Conditioning_Attention_Block(nn.Module):
                  heads,
                  hidden_channels,
                  output_channels,
-                 query_HW_dim
+                 padding_mode = "replicate",
+                 layernorm_affine = False,
                  ):
         super().__init__()
         
@@ -213,7 +216,7 @@ class Conditioning_Attention_Block(nn.Module):
         
         self.cb_affine_and_norm = nn.Sequential(
                                     
-                                    nn.LayerNorm(normalized_shape = embedding_dim),
+                                    #nn.LayerNorm(normalized_shape = embedding_dim),
                                     nn.Linear(embedding_dim, hidden_channels),
                                     nn.LayerNorm(normalized_shape = hidden_channels),
                                     nn.LeakyReLU()
@@ -222,10 +225,11 @@ class Conditioning_Attention_Block(nn.Module):
         self.cb_conv = nn.Sequential(nn.Conv2d(hidden_channels,
                                                hidden_channels,
                                                5,
-                                               padding='same'),
+                                               padding='same',
+                                               padding_mode = padding_mode),
                                      #LayerNorm_MA((hidden_channels, *query_HW_dim)),
                                      #nn.BatchNorm2d(hidden_channels),
-                                    LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1),
+                                    LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
                                     nn.LeakyReLU(),
                                     #  nn.Conv2d(hidden_channels,
                                     #            hidden_channels,
@@ -237,8 +241,9 @@ class Conditioning_Attention_Block(nn.Module):
                                     nn.Conv2d(hidden_channels,
                                                output_channels,
                                                5,
-                                               padding='same'),
-                                    LayerNorm_MA(output_channels, move_dim_from=1, move_dim_to=-1),
+                                               padding='same',
+                                               padding_mode = padding_mode),
+                                    LayerNorm_MA(output_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
                                     nn.LeakyReLU())
         
     def forward(self, X, Z, X_mask):
@@ -461,7 +466,8 @@ class AttCB_ConvLSTM(nn.Module):
                  convlstm_units = 32,
                  convlstm_kernel = 5,
                  densification_dropout = 0.5,
-                 upsampling_dim = [104, 150]):
+                 upsampling_dim = [104, 150],
+                 layernorm_affine = False):
         
         super().__init__()
         
@@ -481,7 +487,6 @@ class AttCB_ConvLSTM(nn.Module):
                  heads = self.cb_heads,
                  hidden_channels = self.channels_cb_wb,
                  output_channels = self.convlstm_units, #self.convlstm_units,
-                 query_HW_dim = self.upsampling_dim,
                  densification_dropout_p = self.densification_dropout_p)
         
         self.Date_Conditioning_Module_wm = Date_Conditioning_Block(self.convlstm_input_units)
@@ -504,7 +509,7 @@ class AttCB_ConvLSTM(nn.Module):
                  kernel_size=self.convlstm_kernel)
         
         self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
-        self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
+        self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2, elementwise_affine = layernorm_affine)
         
         self.convLSTM_2 =ConvLSTMBlock(input_channles = self.convlstm_units,
                  hidden_channels = self.convlstm_units,
@@ -588,7 +593,8 @@ class VideoCB_ConvLSTM(nn.Module):
                  convlstm_nlayer = 3,
                  convlstm_kernel = 5,
                  densification_dropout = 0.5,
-                 upsampling_dim = [104, 150]):
+                 upsampling_dim = [104, 150],
+                 layernorm_affine = False):
         
         super().__init__()
         
@@ -602,6 +608,7 @@ class VideoCB_ConvLSTM(nn.Module):
         self.channels_cb_wb = channels_cb_wb
         self.densification_dropout_p = densification_dropout
         self.upsampling_dim = upsampling_dim
+        self.layernorm_affine = layernorm_affine
         
         ### Conditioning module - Transofrmer like architecture ###
         
@@ -609,7 +616,7 @@ class VideoCB_ConvLSTM(nn.Module):
                  heads = self.cb_heads,
                  hidden_channels = self.channels_cb_wb,
                  output_channels = self.convlstm_IO_units, #self.convlstm_units,
-                 query_HW_dim = self.upsampling_dim)
+                 layernorm_affine = self.layernorm_affine)
         
         self.Date_Conditioning_Module_wm = Date_Conditioning_Block_alt(self.convlstm_IO_units)
         
@@ -621,14 +628,16 @@ class VideoCB_ConvLSTM(nn.Module):
         self.Weather_Module = Weather_Upsampling_Block(input_dimensions = self.input_dimension,
                  hidden_channels = self.channels_cb_wb,
                  output_channels = self.convlstm_IO_units,
-                 output_dim = self.upsampling_dim)
+                 output_dim = self.upsampling_dim,
+                 layernorm_affine = self.layernorm_affine)
         
         ### Join Modoule ### 
         
         self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*3),
                                                 self.convlstm_IO_units,
                                                 kernel_size=(1,3,3), padding="same"),
-                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1),
+                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
+                                                 elementwise_affine = self.layernorm_affine),
                                     nn.LeakyReLU())
         
         # Residual connection
@@ -681,7 +690,8 @@ class VideoCB_ConvLSTM(nn.Module):
         self.Output_layer = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*2),
                                                 self.convlstm_IO_units,
                                                 kernel_size=(1,3,3), padding="same"),
-                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1),
+                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
+                                                 elementwise_affine = self.layernorm_affine),
                                     nn.LeakyReLU(),
                                     MoveAxis(1,-1),
                                     nn.Linear(self.convlstm_IO_units, 1))
@@ -693,7 +703,7 @@ class VideoCB_ConvLSTM(nn.Module):
         ### Weather module ### 
             
         Weaether_seq = self.Weather_Module(W[0]) # N, C, D, H, W
-        date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # N, C, D, 2
+        date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # alt N, D, C  # N, C, D, 2
         #date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
         
         ### Conditioning modules ###
@@ -715,17 +725,24 @@ class VideoCB_ConvLSTM(nn.Module):
                 
             Target_VideoCond = torch.stack(Target_VideoCond, dim = 2)
             
-            Joint_seq = torch.cat([Weaether_seq,
-                                    Target_VideoCond], 
-                                    dim = 1)
-            
-            Joint_seq = self.Joint_Conv3d(Joint_seq)
-            
-            
+            date_conditioning_wm = torch.moveaxis(date_conditioning_wm, -1, 1)[:,:,:,None,None].expand(-1,-1,-1,
+                                                                                                       Weaether_seq.shape[-2],
+                                                                                                       Weaether_seq.shape[-1])
             # date_conditioning_wm = date_conditioning_wm[:,:,:,None, None,:].expand(-1, -1, -1,
             #                                                                 Joint_seq.shape[3],
             #                                                                 Joint_seq.shape[4],
             #                                                                 -1)
+            
+            Joint_seq = torch.cat([Weaether_seq,
+                                    Target_VideoCond,
+                                    date_conditioning_wm], 
+                                    dim = 1)
+            
+            
+            Joint_seq = self.Joint_Conv3d(Joint_seq)
+            
+            
+            
             
             # Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
@@ -787,20 +804,28 @@ class VideoCB_ConvLSTM(nn.Module):
                 
                 Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
                 
+                # date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
+                # date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,None,:].expand(-1, -1, -1,
+                #                                                             Joint_Image.shape[3],
+                #                                                             Joint_Image.shape[4],
+                #                                                             -1)
+                
+                date_conditioning_wm_Image = date_conditioning_wm[:,timestep,:]
+                
+                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None].expand(-1,-1,
+                                                                        Weaether_seq.shape[-2],
+                                                                        Weaether_seq.shape[-1])
                 
                 Joint_Image = torch.cat([Weaether_seq[:,:,timestep,:,:],
-                                    Upsampled_ImageCond], 
+                                    Upsampled_ImageCond,
+                                    date_conditioning_wm_Image], 
                                     dim = 1).unsqueeze(2)
                 
                 Joint_Image = self.Joint_Conv3d(Joint_Image)
                 
-                date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
-                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,None,:].expand(-1, -1, -1,
-                                                                            Joint_Image.shape[3],
-                                                                            Joint_Image.shape[4],
-                                                                            -1)
+                
             
-                Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,:,1]
+                #Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,:,1]
             
                 ### Sequential module ### 
                 Output_image = Joint_Image
