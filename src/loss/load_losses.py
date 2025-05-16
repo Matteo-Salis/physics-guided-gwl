@@ -6,3 +6,6 @@ def load_loss(config):
 
     if config["loss"] == "focal-mse":
         return loss_masked_focal_mse
+    
+    if config["loss"] == "focal-mae":
+        return loss_masked_focal_mae
