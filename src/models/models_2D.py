@@ -340,7 +340,7 @@ class ConvLSTMBlock(nn.Module):
     def _make_layer(self, input_channles, out_channels, kernel_size, padding, stride):
         return nn.Sequential(
             nn.Conv2d(input_channles, out_channels,
-                      kernel_size=kernel_size, padding=padding, stride=stride, bias=True),
+                      kernel_size=kernel_size, padding=padding, stride=stride, bias=True, padding_mode="replicate"),
             #LayerNorm_MA((out_channels,*self.HW_dimensions))
             #nn.BatchNorm2d(out_channels)
             )
@@ -647,6 +647,8 @@ class VideoCB_ConvLSTM(nn.Module):
         #self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
         #self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
         
+        self.Dropout = torch.nn.Dropout(p=0.5)
+        
         input_features = self.convlstm_IO_units
         hidden_units = self.convlstm_hidden_units
         kernel_size = self.convlstm_kernel
@@ -747,7 +749,8 @@ class VideoCB_ConvLSTM(nn.Module):
             # Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
             ### Sequential module ### 
-            Output_seq = Joint_seq
+            Output_seq = self.Dropout(Joint_seq)
+            
             for i in range(self.convlstm_nlayer):
                 Output_seq = getattr(self, f"convLSTM_{i}")(Output_seq)
                 
@@ -828,7 +831,8 @@ class VideoCB_ConvLSTM(nn.Module):
                 #Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,:,1]
             
                 ### Sequential module ### 
-                Output_image = Joint_Image
+                Output_image = self.Dropout(Joint_Image) 
+                
                 for i in range(self.convlstm_nlayer):
                     Output_image = getattr(self, f"convLSTM_{i}")(Output_image)
                 
