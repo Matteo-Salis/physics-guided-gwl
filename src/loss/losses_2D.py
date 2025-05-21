@@ -29,7 +29,7 @@ def loss_masked_focal_mse(Y_hat, Y, Y_mask, offset_perc = 0):
         focal_weights = torch.where(Y_mask, focal_weights, 0)
         
         Y_filled = torch.where(Y_mask, Y, Y_hat)
-        squared_errors = ((Y_hat-Y_filled)**2.0)
+        squared_errors = (Y_hat-Y_filled)**2.0
         
         focal_weights_sum = torch.sum(focal_weights, dim = 1)
         lead_time_mse = torch.sum(squared_errors * focal_weights, dim = 1)/(focal_weights_sum+1e-7)
@@ -52,7 +52,7 @@ def loss_masked_focal_mae(Y_hat, Y, Y_mask, offset_perc = 0):
         focal_weights = torch.where(Y_mask, focal_weights, 0)
         
         Y_filled = torch.where(Y_mask, Y, Y_hat)
-        squared_errors = (torch.abs(Y_hat-Y_filled))
+        squared_errors = torch.abs(Y_hat-Y_filled)
         
         focal_weights_sum = torch.sum(focal_weights, dim = 1)
         lead_time_mse = torch.sum(squared_errors * focal_weights, dim = 1)/(focal_weights_sum+1e-7)
@@ -62,96 +62,68 @@ def loss_masked_focal_mae(Y_hat, Y, Y_mask, offset_perc = 0):
         return total_mse
 
 
-def masked_mse(y_hat, y, mask):
-    # y_hat = y_hat.to(device)
-    # y = y.to(device)
-    # mask = mask.to(device)
-    return torch.sum((y_hat[mask]-y[mask])**2.0)  / torch.sum(mask)
-
-
-# Gradient computation with autograd - more efficient
-def jacobian_batches(output, input, create_graph = True):
+def Fdiff_conv(x, mode = "first_lon"):
+    if mode == "first_lon":
+        kernel = torch.Tensor([[0.,0.,0.],
+                               [0.,-1.,1.],
+                               [0.,0.,0.]])
+    elif mode == "first_lat":
+        kernel = torch.Tensor([[0.,1.,0.],
+                               [0.,-1.,0.],
+                               [0.,0.,0.]])
         
-    grad_outputs = torch.eye(output.shape[-1])[:,None,:].expand(-1, output.shape[0], -1).to(output.device)
-    return torch.autograd.grad(output, input, grad_outputs = grad_outputs,
-                               create_graph  = create_graph,
-                               retain_graph = True,
-                               is_grads_batched=True)
-
-def physics_loss(y_hat, coord_input, g = torch.tensor([0]),
-                 k_lat = torch.tensor([1]),
-                 k_lon = torch.tensor([1]),
-                 S_y = torch.tensor([1]),
-                 create_graph_lastj = True):
-    # compute gradients
-    jacobian_lat_lon_dtm = jacobian_batches(output = y_hat,
-                 input = coord_input)[0]
+    elif mode == "first_all":
+        kernel = torch.Tensor([[1.,1.,1.],
+                               [1.,-8.,1.],
+                               [1.,1.,1.]])
+        
+    elif mode == "second":
+        
+        # TODO
+        pass
+        # kernel = torch.Tensor([[0.,0.,0.],
+        #                        [-1,0,1],
+        #                        [0.,0.,0.]])
+        
+    kernel = kernel.view(1,1,3,3).to(x.device) #(out_channels, in_channels, kH, KW)
     
-    h_dlat = torch.moveaxis(jacobian_lat_lon_dtm[:,:,0], 0, 1)
-    h_dlat = -k_lat * h_dlat #* y_hat
+    # Padding 
+    # (padding_left, padding_right, padding_top, padding_bottom)
+    x_padded = F.pad(x, pad = (1,1,1,1), mode = "replicate")
     
-    h_dlon = torch.moveaxis(jacobian_lat_lon_dtm[:,:,1], 0, 1)
-    h_dlon = -k_lon * h_dlon #* y_hat
-    
-    
-    h_d2lat = jacobian_batches(output = h_dlat,
-                 input = coord_input,
-                 create_graph = create_graph_lastj)[0][:,:,0]
-    h_d2lat = torch.moveaxis(h_d2lat, 0, 1)
-    
-    h_d2lon = jacobian_batches(output = h_dlon,
-                 input = coord_input,
-                 create_graph = create_graph_lastj)[0][:,:,1]
-    h_d2lon = torch.moveaxis(h_d2lon, 0, 1)
-    
-    
-    h_dt = y_hat[:,1:] - y_hat[:,:-1] # first diff
-    
-    pde_res = (S_y * h_dt) + h_d2lat[:,:-1] + h_d2lon[:,:-1] - g
-    loss_pde = torch.sum(pde_res**2)
-    
-    return loss_pde
-
-def fdiff_fprime_soa(f_ahead, f_behind, delta):
-    fprime = (f_ahead - f_behind)/(2*delta)
-    return fprime
-
-def fdiff_fsecond_soa(f, f_ahead, f_behind, delta):
-    fsecond = (f_ahead + f_behind -2*f)/(delta**2)
-    return fsecond
-
-def disc_physics_loss(y_hat,
-                      y_hat_two_right, y_hat_two_left, y_hat_two_up, y_hat_two_down,
-                      k_lat_up, k_lat_down,
-                      k_lon_right, k_lon_left,
-                      step = torch.tensor([1]),
-                      g =  torch.tensor([0]), S_y =  torch.tensor([1])):
-    
-    
-    #first_lon_diff = - k_lon * fdiff_fprime_soa(y_hat_right, y_hat_left, delta = step)
-    first_lon_diff_right = - k_lon_right * fdiff_fprime_soa(y_hat_two_right, y_hat, delta = step) # negative for inc wr
-    first_lon_diff_left = - k_lon_left * fdiff_fprime_soa(y_hat, y_hat_two_left, delta = step) # negative for dec wr
-    
-    #first_lat_diff = - k_lat * fdiff_fprime_soa(y_hat_up, y_hat_down, delta = step)
-    first_lat_diff_up = - k_lat_up * fdiff_fprime_soa(y_hat_two_up, y_hat, delta = step) # negative for inc wr
-    first_lat_diff_down = - k_lat_down * fdiff_fprime_soa(y_hat, y_hat_two_down, delta = step) # negative for dec wr
-
-    second_lon_diff = fdiff_fprime_soa(first_lon_diff_right, first_lon_diff_left, delta = step) # negative for inc wr
-    second_lat_diff = fdiff_fprime_soa(first_lat_diff_up, first_lat_diff_down, delta = step)
-
-    first_time_diff = S_y * (y_hat[:,:,1:] - y_hat[:,:,:-1]) # positive for inc wr
-    
-    residuals = first_time_diff + second_lon_diff[:,:,:-1] + second_lat_diff[:,:,:-1] + g
-    loss_physics = torch.mean(residuals**2)
-    return loss_physics
-
-def fdif_conv(f, filter):
-    
-    filter = filter[None, None, :, :] # f(minibatch,in_channels,iH,iW)
-    output = F.conv2d(f, filter)
+    output = F.conv2d(x_padded, kernel, padding = "valid")
     
     return output
 
+def physics_loss(Y_hat, K_lat = 1., K_lon = 1., G = 0.):
+    
+    spatial_grads = []
+    
+    for t in range(Y_hat.shape[1]-1):
+    
+        Y_hat_t = Y_hat[:,t,:,:].unsqueeze(1)
+        dh_dy = Fdiff_conv(Y_hat_t, mode = "first_lat")
+        dh_dx = Fdiff_conv(Y_hat_t, mode = "first_lon")
+        
+        dh_dy = dh_dy * K_lat
+        dh_dx = dh_dx * K_lon
+        
+        dh_dydy = Fdiff_conv(dh_dy, mode = "first_lat")
+        dh_dxdx = Fdiff_conv(dh_dx, mode = "first_lon")
+    
+        spatial_grad = dh_dydy + dh_dxdx
+        
+        spatial_grads.append(spatial_grad)
+        
+    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Y_hat.device)
+    
+    temporal_grad = Y_hat[:,1:,:,:] - Y_hat[:,:-1,:,:]
+    
+    residuals = temporal_grad - spatial_grads - G
+    
+    residuals = torch.mean(torch.abs(residuals))
+        
+    return residuals
 
 if __name__ == "__main__":
     pass
