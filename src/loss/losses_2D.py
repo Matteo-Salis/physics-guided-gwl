@@ -121,7 +121,7 @@ def physics_loss(Y_hat, K_lat = 1., K_lon = 1., G = 0.):
     
     residuals = temporal_grad - spatial_grads - G
     
-    residuals = torch.mean(torch.abs(residuals))
+    residuals = torch.mean(residuals**2)
         
     return residuals
 
