@@ -24,7 +24,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
     
     with tqdm(train_loader, unit="batch") as tepoch:
-        with autograd.detect_anomaly():
+        #with autograd.detect_anomaly():
                     
                     for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")
@@ -92,7 +92,7 @@ def train_pinns_model(epoch, dataset, model, train_loader, loss_fn, loss_physics
                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
     
     with tqdm(train_loader, unit="batch") as tepoch:
-        with autograd.detect_anomaly():
+        #with autograd.detect_anomaly():
                     
                     for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
                         tepoch.set_description(f"Epoch {epoch}")
