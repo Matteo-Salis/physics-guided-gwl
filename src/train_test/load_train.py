@@ -4,6 +4,8 @@ from train_test.training_1d import *
 from train_test.training_2d import *
 from train_test.training_2D import *
 
+from loss.losses_2D import *
+
 def training_model(config):
 
     if  config["dataset_type"] == "1d":
@@ -93,6 +95,26 @@ def training_model(config):
                            sensors_to_plot = sensors_to_plot,
                            timesteps_to_look = timesteps_to_look,
                            plot_arch = plot_arch)
+            
+        else:
+            
+            print("Training Approach: 2D-Physics Informed")
+            
+            start_dates_plot_training = config["start_dates_plot_training"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            timesteps_to_look = config["timesteps_to_look"]
+            plot_arch = config["plot_arch"]
+            losses_coeff = config["losses_coeff"]
+            
+            return partial(train_pinns_model, 
+                           start_dates_plot = start_dates_plot_training,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           timesteps_to_look = timesteps_to_look,
+                           plot_arch = plot_arch,
+                           loss_physics_fn = physics_loss,
+                           losses_coeff = losses_coeff)
         
 if __name__ == "__main__":
     pass

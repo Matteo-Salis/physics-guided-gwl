@@ -84,7 +84,7 @@ def main(config):
 
     if config["teacher_forcing_scheduling"] == "linear":
         # 1 always TF
-        teacher_forcing_scheduling = torch.arange(config["epochs"]-1,-1,-1).to(device)/(config["epochs"]+int(config["epochs"]*0.4))
+        teacher_forcing_scheduling = torch.arange(config["epochs"]-1,-1,-1).to(device)/(config["epochs"]-1)
         
     elif isinstance(config["teacher_forcing_scheduling"], float):
         teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]

@@ -177,7 +177,8 @@ def load_model(config):
                 convlstm_nlayer = config["convlstm_nlayer"],
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"]), model_name
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"]), model_name
     
     else:
         raise Exception("Model name unknown.")

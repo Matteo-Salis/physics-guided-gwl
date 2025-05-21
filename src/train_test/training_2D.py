@@ -85,3 +85,76 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                                                                                     True),
                                                                                     device = device)})
                             
+                            
+def train_pinns_model(epoch, dataset, model, train_loader, loss_fn, loss_physics_fn, losses_coeff,
+                      optimizer, model_dir, model_name,
+                      start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look, teacher_forcing_factor = 1,
+                      device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
+    
+    with tqdm(train_loader, unit="batch") as tepoch:
+        with autograd.detect_anomaly():
+                    
+                    for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
+                        tepoch.set_description(f"Epoch {epoch}")
+                        
+                        teacher_forcing = torch.rand(1).item()
+                        if teacher_forcing > teacher_forcing_factor:
+                            teacher_forcing = False
+                            X = X[:,0,:,:].to(device)
+                            X_mask = X_mask[:,0,:].to(device)
+                            
+                        else:
+                            teacher_forcing = True
+                            print("Teacher Forcing Mode!", end = " - ")
+                            X = X.to(device)
+                            X_mask = X_mask.to(device)
+                            
+                        Z = Z.to(device)
+                        W = [W[0].to(device), W[1].to(device)]
+                        Y = Y.to(device)
+                        Y_mask = Y_mask.to(device)
+                        #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                        
+                        optimizer.zero_grad()
+                        
+                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing)
+                        
+                        #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                        loss_data = loss_fn(Y_hat,
+                                          Y,
+                                          Y_mask)
+                        
+                        loss_physics = loss_physics_fn(Y_hat)
+                        
+                        #loss += l2_alpha * loss_l2_regularization(model)
+                        
+                        print(f"Training_data_loss: {loss_data.item()} --- Training_physics_loss: {loss_physics.item()}")
+                        
+                        loss = losses_coeff[0]*loss_data + losses_coeff[1]*loss_physics
+                        
+                        loss.backward()
+                        optimizer.step()
+                        
+                        wandb.log({"Training_data_loss":loss.item()})   
+                        wandb.log({"Training_physics_loss":loss_physics.item()})
+                        
+                    # Plots
+                    model.eval()
+                    with torch.no_grad():
+                        plot_maps_and_time_series(dataset, model, device,
+                              start_dates_plot, twindow_plot,
+                              sensors_to_plot, 
+                              timesteps_to_look,
+                              eval_mode = True)
+                        
+                        if epoch == 0 and plot_arch is True:
+                            print("Saving plot of the model's architecture...")
+                            wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
+                                                                      sample_input = (dataset[0][0].unsqueeze(0),
+                                                                                    dataset[0][1].unsqueeze(0),
+                                                                                    [dataset[0][2][0].unsqueeze(0),
+                                                                                    dataset[0][2][1].unsqueeze(0)],
+                                                                                    dataset[0][-2].unsqueeze(0),
+                                                                                    True),
+                                                                                    device = device)})
+                            

@@ -68,19 +68,35 @@ def test_model(config):
     elif config["dataset_type"] == "2D_VideoCond":
         if config["physics"] is False:
             
-            print("Training Approach: 2D-Pure DL")
+            print("Test Approach: 2D-Pure DL")
             
             start_dates_plot_test = config["start_dates_plot_test"]
             twindow_plot = config["twindow_plot"]
             sensors_to_plot = config["sensors_to_plot"]
             timesteps_to_look = config["timesteps_to_look"]
-            plot_arch = config["plot_arch"]
             
             return partial(test_dl_model, 
                            start_dates_plot = start_dates_plot_test,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,
                            timesteps_to_look = timesteps_to_look)
+            
+        else:
+            
+            print("Test Approach: 2D-Physics Informed")
+            
+            start_dates_plot_test = config["start_dates_plot_test"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            timesteps_to_look = config["timesteps_to_look"]
+            losses_coeff = config["losses_coeff"]
+            
+            return partial(test_pinns_model, 
+                           start_dates_plot = start_dates_plot_test,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           timesteps_to_look = timesteps_to_look,
+                           loss_physics_fn = physics_loss)
         
         
 if __name__ == "__main__":
