@@ -86,10 +86,14 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                                                                                     device = device)})
                             
                             
-def train_pinns_model(epoch, dataset, model, train_loader, loss_fn, loss_physics_fn, losses_coeff,
+def train_pinns_model(epoch, dataset, model, train_loader,
+                      loss_fn, loss_physics_fn, losses_coeff, physics_guide_alpha,
                       optimizer, model_dir, model_name,
                       start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look, teacher_forcing_factor = 1,
                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
+    
+    physics_guide_alpha = physics_guide_alpha.to(device)
+    print(f"Physics Guide Alpha: {physics_guide_alpha[epoch]}")
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -119,24 +123,33 @@ def train_pinns_model(epoch, dataset, model, train_loader, loss_fn, loss_physics
                         
                         Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing)
                         
-                        #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        loss_data = loss_fn(Y_hat,
-                                          Y,
-                                          Y_mask)
+                        data_loss = loss_fn(Y_hat,
+                                            Y,
+                                            Y_mask)
                         
-                        loss_physics = loss_physics_fn(Y_hat)
+                        wandb.log({"Training_data_loss":data_loss.item()})
                         
-                        #loss += l2_alpha * loss_l2_regularization(model)
+                        physics_guide = torch.rand(1).item()
                         
-                        print(f"Training_data_loss: {loss_data.item()} --- Training_physics_loss: {loss_physics.item()}")
-                        
-                        loss = losses_coeff[0]*loss_data + losses_coeff[1]*loss_physics
+                        if physics_guide < physics_guide_alpha[epoch]:
+                            
+                            physics_loss = loss_physics_fn(Y_hat)
+                            print(f"Training_data_loss: {data_loss.item()} --- Training_physics_loss: {physics_loss.item()}")
+                            loss = losses_coeff[0]*data_loss + losses_coeff[1]*physics_loss
+                            
+                            wandb.log({"Training_physics_loss":physics_loss.item()})
+                            
+                        else:
+                            
+                            print(f"Training_data_loss: {data_loss.item()}")
+                            loss = data_loss
+                            
                         
                         loss.backward()
                         optimizer.step()
                         
-                        wandb.log({"Training_data_loss":loss.item()})   
-                        wandb.log({"Training_physics_loss":loss_physics.item()})
+                          
+                        
                         
                     # Plots
                     model.eval()
