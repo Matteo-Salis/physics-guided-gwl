@@ -107,6 +107,14 @@ def training_model(config):
             plot_arch = config["plot_arch"]
             losses_coeff = config["losses_coeff"]
             
+            if config["physics_scheduling"] == "linear":
+                physics_scheduling = torch.arange(0,config["epochs"])/(config["epochs"]-1)
+                print(f"Physics Scheduling: {physics_scheduling}")
+            
+            elif isinstance(config["physics_scheduling"], float):
+                physics_scheduling = torch.ones(config["epochs"]) * config["physics_scheduling"]
+        
+            
             return partial(train_pinns_model, 
                            start_dates_plot = start_dates_plot_training,
                            twindow_plot = twindow_plot,
@@ -114,7 +122,8 @@ def training_model(config):
                            timesteps_to_look = timesteps_to_look,
                            plot_arch = plot_arch,
                            loss_physics_fn = physics_loss,
-                           losses_coeff = losses_coeff)
+                           losses_coeff = losses_coeff,
+                           physics_guide_alpha = physics_scheduling)
         
 if __name__ == "__main__":
     pass

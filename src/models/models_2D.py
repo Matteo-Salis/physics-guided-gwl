@@ -375,7 +375,7 @@ class ConvLSTMBlock(nn.Module):
             h_0 = hy
             c_0 = cy
 
-        return torch.stack(outputs, dim = 2) # (N, C, D, H, W)
+        return [torch.stack(outputs, dim = 2), (hy, cy)] # (N, C, D, H, W)
     
     
 class Date_Conditioning_Block(nn.Module):
@@ -420,33 +420,10 @@ class Date_Conditioning_Block_alt(nn.Module):
         self.hidden_dimension = hidden_dimension
         
         self.date_conditioning = nn.Sequential(nn.Linear(2, self.hidden_dimension),
-                                            #    nn.LeakyReLU(),
-                                            #    nn.Linear(self.hidden_dimension, self.hidden_dimension),
                                                nn.LeakyReLU())
-        
-        # for i in range(n_channels):
-            
-        #     setattr(self, f"fc_0_{i}",
-        #             nn.Linear(2, 32))
-        #     setattr(self, f"activation_0_{i}",
-        #             nn.LeakyReLU()),
-        #     setattr(self, f"fc_1_{i}",
-        #             nn.Linear(32, 2))
-        #     setattr(self, f"activation_1_{i}",
-        #             nn.LeakyReLU()),
             
             
     def forward(self, input):
-        # outputs = []
-        # for i in range(self.n_channels):
-        #     output = getattr(self, f"fc_0_{i}")(input)
-        #     output = getattr(self, f"activation_0_{i}")(output)
-        #     output = getattr(self, f"fc_1_{i}")(output)
-        #     output = getattr(self, f"activation_1_{i}")(output)
-            
-        #     outputs.append(output)
-        
-        # outputs = torch.stack(outputs, dim = 1)
         
         output = self.date_conditioning(input)
         
@@ -740,7 +717,7 @@ class VideoCB_ConvLSTM(nn.Module):
             Output_seq = Joint_seq.clone()
             
             for i in range(self.convlstm_nlayer):
-                Output_seq = getattr(self, f"convLSTM_{i}")(Output_seq)
+                Output_seq, _ = getattr(self, f"convLSTM_{i}")(Output_seq)
                 
             
             Output_seq = self.Linear(torch.moveaxis(Output_seq, 1, -1))
@@ -760,6 +737,8 @@ class VideoCB_ConvLSTM(nn.Module):
             ImageCond = X
             ImageCond_mask = X_mask
             Output = []
+            convlstm_h_state = [None for i in range(self.convlstm_nlayer)]
+            convlstm_c_state = [None for i in range(self.convlstm_nlayer)]
             
             for timestep in range(W[0].shape[2]):
                 
@@ -788,7 +767,9 @@ class VideoCB_ConvLSTM(nn.Module):
                 Output_image = Joint_Image.clone() #self.Dropout(Joint_Image) 
                 
                 for i in range(self.convlstm_nlayer):
-                    Output_image = getattr(self, f"convLSTM_{i}")(Output_image)
+                    Output_image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Output_image,
+                                                                                                              convlstm_h_state[i],
+                                                                                                              convlstm_c_state[i])
                 
                 
                 Output_image = self.Linear(torch.moveaxis(Output_image, 1, -1))
