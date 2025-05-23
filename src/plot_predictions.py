@@ -64,7 +64,7 @@ saving_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_2D/plots"
 saving_path_maps = f"{saving_path}/maps"
 saving_path_ts = f"{saving_path}/time_series"
 
-sample_date = "2019-01-01"
+sample_date = "2019-01-02"
 twindow = 365
 
 # %%
