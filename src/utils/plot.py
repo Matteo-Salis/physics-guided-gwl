@@ -8,6 +8,7 @@ import random
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.animation as animation
 
 from rasterio.enums import Resampling
 
@@ -511,6 +512,54 @@ def plot_maps_and_time_series(dataset, model, device,
                 
                 
                 
+                
+###### GIF #######
+
+def generate_gif_h_wtd(start_date, twindow,
+                       sample_h, sample_wtd,
+                       save_dir = None,
+                       print_plot = False):
+
+    fig, ax = plt.subplots(1,2, figsize = (10,4))
+
+    ax[0].set_title("Piezometric head")
+    ax[1].set_title("WTD")
+
+
+    fig.suptitle(f"t0: {start_date} - Prediction Timestep {0}")
+    piezo_image = sample_h[0,:,:].plot(ax = ax[0], animated=True)
+    wtd_image = sample_wtd[0,:,:].plot(ax = ax[1], animated=True, 
+                                                vmin = sample_wtd.min().values,
+                                                vmax = sample_wtd.max().values)
+
+
+    def update_h_wtd_maps(i):
+        
+        sample_date_i = np.datetime64(start_date) + np.timedelta64(i+1)
+        fig.suptitle(f"t0: {start_date} - Prediction Timestep {i}: {sample_date_i} ")
+        
+        ax[0].set_title("Piezometric head")
+        ax[1].set_title("WTD")
+        
+        piezo_image.set_array(sample_h[i,:,:])
+        wtd_image.set_array(sample_wtd[i,:,:])
+        
+        return (piezo_image, wtd_image)
+        
+        ## Plot the maps
+        
+        
+    ani = animation.FuncAnimation(fig, update_h_wtd_maps, repeat=True, frames=twindow, interval=1)
+
+    writer = animation.PillowWriter(fps=5,
+                                    metadata=dict(artist='Me'),
+                                    bitrate=1800)
+    
+    if save_dir:
+        ani.save(f'{save_dir}.gif', writer=writer)
+        
+    if print_plot is True:
+        plt.show()
                 
         
 

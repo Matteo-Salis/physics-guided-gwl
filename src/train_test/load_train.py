@@ -110,6 +110,11 @@ def training_model(config):
             if config["physics_scheduling"] == "linear":
                 physics_scheduling = torch.arange(0,config["epochs"])/(config["epochs"]-1)
                 print(f"Physics Scheduling: {physics_scheduling}")
+                
+            if config["physics_scheduling"] == "affine":
+                physics_scheduling = torch.zeros(config["epochs"])
+                physics_scheduling[config["physics_scheduling_offset"]:] = torch.linspace(0,config["epochs"],config["epochs"]-config["physics_scheduling_offset"])/config["epochs"]
+                print(f"Physics Scheduling: {physics_scheduling}")
             
             elif isinstance(config["physics_scheduling"], float):
                 physics_scheduling = torch.ones(config["epochs"]) * config["physics_scheduling"]
