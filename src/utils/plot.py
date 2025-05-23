@@ -527,10 +527,14 @@ def generate_gif_h_wtd(start_date, twindow,
 
 
     fig.suptitle(f"t0: {start_date} - Prediction Timestep {0}")
-    piezo_image = sample_h[0,:,:].plot(ax = ax[0], animated=True)
+    piezo_image = sample_h[0,:,:].plot(ax = ax[0], animated=True,
+                                                vmin = sample_h.min().values,
+                                                vmax = sample_h.max().values,
+                                                cmap = "Blues")
     wtd_image = sample_wtd[0,:,:].plot(ax = ax[1], animated=True, 
                                                 vmin = sample_wtd.min().values,
-                                                vmax = sample_wtd.max().values)
+                                                vmax = sample_wtd.max().values,
+                                                cmap = "Blues")
 
 
     def update_h_wtd_maps(i):

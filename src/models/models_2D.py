@@ -634,6 +634,13 @@ class VideoCB_ConvLSTM(nn.Module):
         
         for i in range(self.convlstm_nlayer):
             
+            setattr(self, f"Conv_1x1_HS_{i}",
+                    nn.Sequential(
+                        nn.Conv2d(self.convlstm_IO_units,
+                            self.convlstm_hidden_units[i],
+                            kernel_size=1, padding="same", padding_mode="replicate"))
+                    )
+            
                 
             setattr(self, f"convLSTM_{i}",
                     ConvLSTMBlock(input_channles = input_features,
@@ -695,10 +702,6 @@ class VideoCB_ConvLSTM(nn.Module):
             date_conditioning_wm = torch.moveaxis(date_conditioning_wm, -1, 1)[:,:,:,None,None].expand(-1,-1,-1,
                                                                                                        Weaether_seq.shape[-2],
                                                                                                        Weaether_seq.shape[-1])
-            # date_conditioning_wm = date_conditioning_wm[:,:,:,None, None,:].expand(-1, -1, -1,
-            #                                                                 Joint_seq.shape[3],
-            #                                                                 Joint_seq.shape[4],
-            #                                                                 -1)
             
             Joint_seq = torch.cat([Weaether_seq,
                                     Target_VideoCond,
@@ -715,9 +718,15 @@ class VideoCB_ConvLSTM(nn.Module):
             
             ### Sequential module ### 
             Output_seq = Joint_seq.clone()
+            #ConvLSTM_hidden_state = Output_seq[:,:,0,:,:].clone()
             
             for i in range(self.convlstm_nlayer):
-                Output_seq, _ = getattr(self, f"convLSTM_{i}")(Output_seq)
+                
+                ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Target_VideoCond[:,:,0,:,:])
+                
+                Output_seq, _ = getattr(self, f"convLSTM_{i}")(Output_seq,
+                                                               ConvLSTM_hidden_state,
+                                                               ConvLSTM_hidden_state)
                 
             
             Output_seq = self.Linear(torch.moveaxis(Output_seq, 1, -1))
@@ -737,6 +746,7 @@ class VideoCB_ConvLSTM(nn.Module):
             ImageCond = X
             ImageCond_mask = X_mask
             Output = []
+            
             convlstm_h_state = [None for i in range(self.convlstm_nlayer)]
             convlstm_c_state = [None for i in range(self.convlstm_nlayer)]
             
@@ -744,11 +754,6 @@ class VideoCB_ConvLSTM(nn.Module):
                 
                 Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
                 
-                # date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
-                # date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,None,:].expand(-1, -1, -1,
-                #                                                             Joint_Image.shape[3],
-                #                                                             Joint_Image.shape[4],
-                #                                                             -1)
                 
                 date_conditioning_wm_Image = date_conditioning_wm[:,timestep,:]
                 
@@ -764,9 +769,21 @@ class VideoCB_ConvLSTM(nn.Module):
                 Joint_Image = self.Joint_Conv3d(Joint_Image)
             
                 ### Sequential module ### 
-                Output_image = Joint_Image.clone() #self.Dropout(Joint_Image) 
+                Output_image = Joint_Image.clone() #self.Dropout(Joint_Image)
                 
+                # if timestep == 0:
+                #         ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Upsampled_ImageCond)
+                #         convlstm_h_state = [ConvLSTM_hidden_state for i in range(self.convlstm_nlayer)]
+                #         convlstm_c_state = [ConvLSTM_hidden_state for i in range(self.convlstm_nlayer)]
+                        
+                        
                 for i in range(self.convlstm_nlayer):
+                    
+                    if timestep == 0:
+                        ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Upsampled_ImageCond)
+                        convlstm_h_state[i] = ConvLSTM_hidden_state
+                        convlstm_c_state[i] = ConvLSTM_hidden_state
+                    
                     Output_image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Output_image,
                                                                                                               convlstm_h_state[i],
                                                                                                               convlstm_c_state[i])
