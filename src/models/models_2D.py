@@ -219,7 +219,7 @@ class Conditioning_Attention_Block(nn.Module):
                                     #nn.Dropout(p=0.25),
                                     )
         
-        self.skip_affine = nn.Linear(embedding_dim, hidden_channels)
+        #self.skip_affine = nn.Linear(embedding_dim, hidden_channels)
         
         self.cb_conv = nn.Sequential(
                                     nn.Conv2d(embedding_dim,
@@ -269,11 +269,11 @@ class Conditioning_Attention_Block(nn.Module):
             target_Icond = torch.reshape(target_Icond, (*target_Icond.shape[:2],
                                          Z.shape[1], Z.shape[2]))
             
-            target_Icond_skip = self.skip_affine(torch.moveaxis(target_Icond, 1, -1))
+            #target_Icond_skip = self.skip_affine(torch.moveaxis(target_Icond, 1, -1))
             
             target_Icond = self.cb_conv(target_Icond)
             
-            target_Icond = target_Icond + torch.moveaxis(target_Icond_skip, -1, 1)
+            #target_Icond = target_Icond + torch.moveaxis(target_Icond_skip, -1, 1)
             
             target_Icond = self.output(target_Icond)
 
@@ -388,13 +388,13 @@ class Date_Conditioning_Block(nn.Module):
         for i in range(n_channels):
             
             setattr(self, f"fc_0_{i}",
-                    nn.Linear(2, 32))
+                    nn.Linear(2, 16))
             setattr(self, f"activation_0_{i}",
                     nn.LeakyReLU()),
             setattr(self, f"fc_1_{i}",
-                    nn.Linear(32, 2))
-            setattr(self, f"activation_1_{i}",
-                    nn.LeakyReLU()),
+                    nn.Linear(16, 2))
+            # setattr(self, f"activation_1_{i}",
+            #         nn.LeakyReLU()),
             
             
     def forward(self, input):
@@ -403,7 +403,7 @@ class Date_Conditioning_Block(nn.Module):
             output = getattr(self, f"fc_0_{i}")(input)
             output = getattr(self, f"activation_0_{i}")(output)
             output = getattr(self, f"fc_1_{i}")(output)
-            output = getattr(self, f"activation_1_{i}")(output)
+            # output = getattr(self, f"activation_1_{i}")(output)
             
             outputs.append(output)
         
@@ -599,7 +599,7 @@ class VideoCB_ConvLSTM(nn.Module):
                  output_channels = self.convlstm_IO_units, #self.convlstm_units,
                  layernorm_affine = self.layernorm_affine)
         
-        self.Date_Conditioning_Module_wm = Date_Conditioning_Block_alt(self.convlstm_IO_units)
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.convlstm_IO_units*2))
         
         ### Weather module ### 
         
@@ -614,33 +614,16 @@ class VideoCB_ConvLSTM(nn.Module):
         
         ### Join Modoule ### 
         
-        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*3),
+        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*2),
                                                 self.convlstm_IO_units,
                                                 kernel_size=(1,5,5), padding="same", padding_mode="replicate"),
                                     LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
                                                  elementwise_affine = self.layernorm_affine),
                                     nn.LeakyReLU())
         
-        # Residual connection
-        
-        ### Sequential module ###
-        
-        #self.Date_Conditioning_Module_sm = Date_Conditioning_Block(self.convlstm_units)
-        #self.Layer_Norm = LayerNorm_MA([self.convlstm_units,*self.upsampling_dim], 1, 2)
-        
-        #self.Dropout = torch.nn.Dropout(p=0.5)
-        
         input_features = self.convlstm_IO_units
         
         for i in range(self.convlstm_nlayer):
-            
-            setattr(self, f"Conv_1x1_HS_{i}",
-                    nn.Sequential(
-                        nn.Conv2d(self.convlstm_IO_units,
-                            self.convlstm_hidden_units[i],
-                            kernel_size=1, padding="same", padding_mode="replicate"))
-                    )
-            
                 
             setattr(self, f"convLSTM_{i}",
                     ConvLSTMBlock(input_channles = input_features,
@@ -648,26 +631,14 @@ class VideoCB_ConvLSTM(nn.Module):
                                     kernel_size=self.convlstm_kernel[i]))
             
             input_features = self.convlstm_hidden_units[i]
-            # if i == (self.convlstm_nlayer - 2):
-            #     kernel_size = 1
-            #     hidden_units = int(hidden_units*2)
-                
-                    # if (i == self.convlstm_nlayer-2):
-                    #     hidden_units = int(input_features/2)
+            
         
-        self.Linear = nn.Sequential(nn.Linear(int(self.convlstm_hidden_units[-1]), self.convlstm_IO_units),
-                                    nn.LeakyReLU())
-        
-        # Add Residual connection
-        
-        self.Output_layer = nn.Sequential( 
-                                        nn.Conv3d(int(self.convlstm_IO_units*2),
-                                                self.convlstm_IO_units,
-                                                kernel_size=(1,5,5), padding="same", padding_mode="replicate"),
-                                        LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
-                                                    elementwise_affine = self.layernorm_affine),
-                                        nn.LeakyReLU(),
+        self.Output_layer = nn.Sequential(
                                         MoveAxis(1,-1),
+                                        nn.Linear(self.convlstm_hidden_units[-1], self.convlstm_IO_units),
+                                        LayerNorm_MA(self.convlstm_IO_units,
+                                                     elementwise_affine = self.layernorm_affine),
+                                        nn.LeakyReLU(),
                                         nn.Linear(self.convlstm_IO_units, 1))
         
         
@@ -699,43 +670,32 @@ class VideoCB_ConvLSTM(nn.Module):
                 
             Target_VideoCond = torch.stack(Target_VideoCond, dim = 2)
             
-            date_conditioning_wm = torch.moveaxis(date_conditioning_wm, -1, 1)[:,:,:,None,None].expand(-1,-1,-1,
-                                                                                                       Weaether_seq.shape[-2],
-                                                                                                       Weaether_seq.shape[-1])
+            date_conditioning_wm = date_conditioning_wm[:,:,:,None,None,:].expand(-1,-1,-1,
+                                                                                Weaether_seq.shape[-2],
+                                                                                Weaether_seq.shape[-1],
+                                                                                -1)
             
             Joint_seq = torch.cat([Weaether_seq,
-                                    Target_VideoCond,
-                                    date_conditioning_wm], 
+                                    Target_VideoCond], 
                                     dim = 1)
+            
+            Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
             
             Joint_seq = self.Joint_Conv3d(Joint_seq)
             
-            
-            
-            
-            # Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
+            #Joint_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)
             
             ### Sequential module ### 
-            Output_seq = Joint_seq.clone()
-            #ConvLSTM_hidden_state = Output_seq[:,:,0,:,:].clone()
             
             for i in range(self.convlstm_nlayer):
                 
-                ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Target_VideoCond[:,:,0,:,:])
-                
-                Output_seq, _ = getattr(self, f"convLSTM_{i}")(Output_seq,
-                                                               ConvLSTM_hidden_state,
-                                                               ConvLSTM_hidden_state)
-                
+                Joint_seq, _ = getattr(self, f"convLSTM_{i}")(Joint_seq,
+                                                               #ConvLSTM_hidden_state,
+                                                               #ConvLSTM_hidden_state
+                                                               )
             
-            Output_seq = self.Linear(torch.moveaxis(Output_seq, 1, -1))
-            Output_seq = torch.moveaxis(Output_seq, -1, 1)
-            
-            ## Skip connection 
-            Output_seq = torch.cat([Output_seq,Joint_seq], dim = 1) 
-            
-            Output_seq = nn.functional.dropout3d(Output_seq, p = self.spatial_dropout, training= True)
+            Output_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)          
             
             Output = self.Output_layer(Output_seq)
             
@@ -755,52 +715,39 @@ class VideoCB_ConvLSTM(nn.Module):
                 Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
                 
                 
-                date_conditioning_wm_Image = date_conditioning_wm[:,timestep,:]
+                date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
                 
-                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None].expand(-1,-1,
-                                                                        Weaether_seq.shape[-2],
-                                                                        Weaether_seq.shape[-1])
+                
+                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,:].expand(-1,-1,
+                                                                                Weaether_seq.shape[-2],
+                                                                                Weaether_seq.shape[-1],
+                                                                                -1)
                 
                 Joint_Image = torch.cat([Weaether_seq[:,:,timestep,:,:],
-                                    Upsampled_ImageCond,
-                                    date_conditioning_wm_Image], 
-                                    dim = 1).unsqueeze(2)
+                                    Upsampled_ImageCond], 
+                                    dim = 1)
+                
+                Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,1]
+                Joint_Image = Joint_Image.unsqueeze(2)
                 
                 Joint_Image = self.Joint_Conv3d(Joint_Image)
-            
-                ### Sequential module ### 
-                Output_image = Joint_Image.clone() #self.Dropout(Joint_Image)
                 
-                # if timestep == 0:
-                #         ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Upsampled_ImageCond)
-                #         convlstm_h_state = [ConvLSTM_hidden_state for i in range(self.convlstm_nlayer)]
-                #         convlstm_c_state = [ConvLSTM_hidden_state for i in range(self.convlstm_nlayer)]
-                        
-                        
+                # Spatial Dropout
+                #Joint_Image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+            
+                ### Sequential module ###         
                 for i in range(self.convlstm_nlayer):
                     
-                    if timestep == 0:
-                        ConvLSTM_hidden_state = getattr(self, f"Conv_1x1_HS_{i}")(Upsampled_ImageCond)
-                        convlstm_h_state[i] = ConvLSTM_hidden_state
-                        convlstm_c_state[i] = ConvLSTM_hidden_state
-                    
-                    Output_image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Output_image,
+                    Joint_Image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Joint_Image,
                                                                                                               convlstm_h_state[i],
                                                                                                               convlstm_c_state[i])
                 
                 
-                Output_image = self.Linear(torch.moveaxis(Output_image, 1, -1))
-                Output_image = torch.moveaxis(Output_image, -1, 1)
-                
-                ## Skip connection 
-                Output_image = torch.cat([Output_image,Joint_Image], dim = 1)
-                
                 # Spatial Dropout
-                Output_image =  nn.functional.dropout3d(Output_image, p = self.spatial_dropout, training = mc_dropout) 
+                Output_image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
                 
                 Output_image = self.Output_layer(Output_image)
             
-                # Output_Image = self.output_layer(torch.moveaxis(Output_Image, 1, -1))
                 ImageCond = torch.cat([Z.clone(),
                                        Output_image[:,0,:,:,:]],
                                       dim=-1)

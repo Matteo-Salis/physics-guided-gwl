@@ -33,7 +33,7 @@ def test_dl_model(epoch, dataset, model, test_loader, loss_fn,
                                 Y_mask = Y_mask.to(device)
                                 #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                                Y_hat = model(X, Z, W, X_mask)
+                                Y_hat = model(X, Z, W, X_mask, mc_dropout = False)
                                 
                                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
@@ -69,7 +69,7 @@ def test_pinns_model(epoch, dataset, model, test_loader, loss_fn, loss_physics_f
                                 Y_mask = Y_mask.to(device)
                                 #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 
-                                Y_hat = model(X, Z, W, X_mask)
+                                Y_hat = model(X, Z, W, X_mask, mc_dropout = False)
                                 
                                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
 

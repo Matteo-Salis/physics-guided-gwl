@@ -49,7 +49,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing)
+                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                         loss = loss_fn(Y_hat,
@@ -121,7 +121,7 @@ def train_pinns_model(epoch, dataset, model, train_loader,
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing)
+                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
                         
                         data_loss = loss_fn(Y_hat,
                                             Y,
