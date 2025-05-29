@@ -165,6 +165,6 @@ cython_debug/
 src/runs/
 src/configs/
 src/deprecated/
-
+src/notebooks/*.nc
 src/*.csv
 src/*.nc
