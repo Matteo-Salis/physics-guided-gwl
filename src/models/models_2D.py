@@ -213,36 +213,36 @@ class Conditioning_Attention_Block(nn.Module):
         self.cb_affine_and_norm = nn.Sequential(
                                     
                                     #nn.LayerNorm(normalized_shape = embedding_dim),
-                                    nn.Linear(embedding_dim, embedding_dim),
-                                    nn.LayerNorm(normalized_shape = embedding_dim),
+                                    nn.Linear(embedding_dim, output_channels),
+                                    #nn.LayerNorm(normalized_shape = embedding_dim),
                                     nn.LeakyReLU(),
                                     #nn.Dropout(p=0.25),
                                     )
         
-        #self.skip_affine = nn.Linear(embedding_dim, hidden_channels)
+        # self.skip_affine = nn.Linear(embedding_dim, hidden_channels)
         
-        self.cb_conv = nn.Sequential(
-                                    nn.Conv2d(embedding_dim,
-                                               hidden_channels,
-                                               5,
-                                               padding='same',
-                                               padding_mode = padding_mode),
-                                    LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
-                                    nn.LeakyReLU(),
-                                    nn.Conv2d(hidden_channels,
-                                               hidden_channels,
-                                               5,
-                                               padding='same'),
-                                    )
+        # self.cb_conv = nn.Sequential(
+        #                             nn.Conv2d(embedding_dim,
+        #                                        hidden_channels,
+        #                                        5,
+        #                                        padding='same',
+        #                                        padding_mode = padding_mode),
+        #                             LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
+        #                             nn.LeakyReLU(),
+        #                             nn.Conv2d(hidden_channels,
+        #                                        hidden_channels,
+        #                                        5,
+        #                                        padding='same'),
+        #                             )
         
-        self.output = nn.Sequential(LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
-                                    nn.LeakyReLU(),
-                                    nn.Conv2d(hidden_channels,
-                                               output_channels,
-                                               5,
-                                               padding='same',
-                                               padding_mode = padding_mode),
-                                    nn.LeakyReLU())
+        # self.output = nn.Sequential(LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
+        #                             nn.LeakyReLU(),
+        #                             nn.Conv2d(hidden_channels,
+        #                                        output_channels,
+        #                                        5,
+        #                                        padding='same',
+        #                                        padding_mode = padding_mode),
+        #                             nn.LeakyReLU())
         
     def forward(self, X, Z, X_mask):
             
@@ -269,13 +269,13 @@ class Conditioning_Attention_Block(nn.Module):
             target_Icond = torch.reshape(target_Icond, (*target_Icond.shape[:2],
                                          Z.shape[1], Z.shape[2]))
             
-            #target_Icond_skip = self.skip_affine(torch.moveaxis(target_Icond, 1, -1))
+            # target_Icond_skip = self.skip_affine(torch.moveaxis(target_Icond, 1, -1))
             
-            target_Icond = self.cb_conv(target_Icond)
+            # target_Icond = self.cb_conv(target_Icond)
             
-            #target_Icond = target_Icond + torch.moveaxis(target_Icond_skip, -1, 1)
+            # target_Icond = target_Icond + torch.moveaxis(target_Icond_skip, -1, 1)
             
-            target_Icond = self.output(target_Icond)
+            # target_Icond = self.output(target_Icond)
 
             return target_Icond
     
@@ -674,7 +674,8 @@ class VideoCB_ConvLSTM(nn.Module):
                                                                                 Weaether_seq.shape[-2],
                                                                                 Weaether_seq.shape[-1],
                                                                                 -1)
-            
+            # print(Weaether_seq.shape)
+            # print(Target_VideoCond.shape)
             Joint_seq = torch.cat([Weaether_seq,
                                     Target_VideoCond], 
                                     dim = 1)
