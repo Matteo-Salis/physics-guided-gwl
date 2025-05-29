@@ -156,6 +156,7 @@ class Dataset_2D_VideoCond(Dataset):
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
+        self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
         
     def rasterize_sparse_measurements(self, new_dimensions):
         # downscaling dtm
