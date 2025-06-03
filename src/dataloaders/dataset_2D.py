@@ -58,7 +58,7 @@ class Dataset_2D_VideoCond(Dataset):
             
             self.normalize(date_max = np.datetime64(config["date_max_norm"]))
         
-        self.create_numpy_objects()            
+        self.create_numpy_objects()
         
     def create_numpy_objects(self):
         "create numpy for dataloader efficiency"
@@ -127,6 +127,10 @@ class Dataset_2D_VideoCond(Dataset):
         self.target_rasterized_coords[:,:,2] = (self.target_rasterized_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         self.weather_xr = (self.weather_xr - self.norm_factors["weather_mean"])/self.norm_factors["weather_std"]       
+        
+        self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
+        self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
+        self.weather_coords[:,:,2] = (self.weather_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         
     def loading_dtm(self):
@@ -157,6 +161,19 @@ class Dataset_2D_VideoCond(Dataset):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
         self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
+        
+        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
+                                               engine='fiona')
+        self.weather_coords = self.coordinates_xr(self.weather_dtm, coord_name = "xy")
+        
+        self.weather_coords = np.concat([self.weather_coords,
+                                    np.moveaxis(self.weather_dtm.values, 0,-1)],
+                                    axis=-1)
+        
+        if self.config["weather_get_coords"] is True:
+            self.weather_get_coords = True
+        else:
+            self.weather_get_coords = False
         
     def rasterize_sparse_measurements(self, new_dimensions):
         # downscaling dtm
@@ -363,16 +380,23 @@ class Dataset_2D_VideoCond(Dataset):
         weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, "D"),
                                                     end_date)) #slice include extremes
         
+        W_video = weather_video.to_array().values
+        W_video = torch.from_numpy(W_video).to(torch.float32)
+        
+        if self.weather_get_coords is True:
+            weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+            W_video = torch.cat([weather_coords,
+                                       W_video], axis=0)
+        
         weather_doy = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
         weather_years = weather_video.time.dt.year.values
-        
-        weather_video = weather_video.to_array().values
-        
-        W_video = torch.from_numpy(weather_video).to(torch.float32)
         
         W_doy = torch.from_numpy(weather_doy).to(torch.float32)
         W_years = torch.from_numpy(weather_years).to(torch.float32)
         W_date = torch.stack([W_doy, W_years], dim = -1)
+        
+        
         
         return [W_video, W_date]
 
@@ -394,11 +418,11 @@ class Dataset_2D_ImageCond(Dataset):
         self.config = config
         self.twindow = self.config["twindow"]
 
-        # Meteorological data loading 
-        self.loading_weather()
-        
         # Digital Terrain Model data loading
         self.loading_dtm()
+        
+        # Meteorological data loading 
+        self.loading_weather()
         
         # Water Table Depth data loading 
         self.loading_point_wtd(fill_value = config["fill_value"])
@@ -486,6 +510,10 @@ class Dataset_2D_ImageCond(Dataset):
         self.target_rasterized_coords[:,:,2] = (self.target_rasterized_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         self.weather_xr = (self.weather_xr - self.norm_factors["weather_mean"])/self.norm_factors["weather_std"]       
+        
+        self.weather_dtm_coords[:,:,0] = (self.weather_dtm_coords[:,:,0] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
+        self.weather_dtm_coords[:,:,1] = (self.weather_dtm_coords[:,:,1] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
+        self.weather_dtm_coords[:,:,2] = (self.weather_dtm_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
             
         
     def loading_dtm(self):
@@ -515,6 +543,22 @@ class Dataset_2D_ImageCond(Dataset):
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
+        
+        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
+                                               engine='fiona')
+        
+        # self.weather_dtm = self.weather_dtm.values
+        # self.weather_dtm = np.moveaxis(self.weather_dtm, 0,-1)
+        
+        #
+        # self.target_rasterized_dtm = self.dtm_roi.sel(x = self.wtd_data_raserized.x,
+        #                                                  y = self.wtd_data_raserized.y,
+        #                                                  method = "nearest")
+        self.weather_dtm_coords = self.coordinates_xr(self.weather_dtm, coord_name = "xy")
+        
+        self.weather_dtm_coords = np.concat([self.weather_dtm_coords,
+                                    np.moveaxis(self.weather_dtm.values, 0,-1)],
+                                    axis=-1)
         
     def rasterize_sparse_measurements(self, downscale_factor):
         # downscaling dtm

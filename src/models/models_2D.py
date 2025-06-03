@@ -184,17 +184,68 @@ class Weather_Upsampling_Block(nn.Module):
     
     def forward(self, input):
         return self.block(input)
+    
+class Weather_Attention_Block(nn.Module):
+    
+    def __init__(self,
+                 embedding_dim,
+                 input_channles,
+                 heads,
+                 output_dims):
+        super().__init__()
+        
+        self.output_dims = output_dims
+        
+        cb_topo_emb = []
+        cb_topo_emb.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+        cb_topo_emb.append(nn.LeakyReLU())
+        self.cb_topo_emb = nn.Sequential(*cb_topo_emb)
+        
+        cb_value_emb = []
+        cb_value_emb.append(nn.Linear(input_channles, embedding_dim))
+        cb_value_emb.append(nn.LeakyReLU())
+        self.cb_value_emb = nn.Sequential(*cb_value_emb)
+        
+        self.cb_multihead_att = nn.MultiheadAttention(embedding_dim, heads,
+                                                   batch_first=True)
+        
+        self.cb_affine_and_norm = nn.Sequential(
+                                    nn.Linear(embedding_dim, output_dims[0]),
+                                    nn.LeakyReLU(),
+                                    )
+        
+    def forward(self, K, V, Q):
+            
+            coords = torch.cat([K,
+                                Q],
+                               dim = 1)
+            
+            topographical_embedding = self.cb_topo_emb(coords)
+            
+            keys = topographical_embedding[:,:K.shape[1],:]
+            queries = topographical_embedding[:,K.shape[1]:,:]
+            values = self.cb_value_emb(V)
+            
+            weather_out, _ = self.cb_multihead_att(
+                                            query = queries, #(N,L,E)
+                                            key = keys,
+                                            value = values
+                                            )
+            
+            weather_out = self.cb_affine_and_norm(weather_out)
+            
+            weather_out = torch.moveaxis(weather_out, -1, 1)
+            weather_out = torch.reshape(weather_out, (*weather_out.shape[:2],
+                                         self.output_dims[1], self.output_dims[2]))
+
+            return weather_out
 
 class Conditioning_Attention_Block(nn.Module):
     
     def __init__(self,
                  embedding_dim,
                  heads,
-                 hidden_channels,
-                 output_channels,
-                 padding_mode = "replicate",
-                 layernorm_affine = False,
-                 ):
+                 output_channels):
         super().__init__()
         
         cb_topo_emb = []
@@ -218,31 +269,6 @@ class Conditioning_Attention_Block(nn.Module):
                                     nn.LeakyReLU(),
                                     #nn.Dropout(p=0.25),
                                     )
-        
-        # self.skip_affine = nn.Linear(embedding_dim, hidden_channels)
-        
-        # self.cb_conv = nn.Sequential(
-        #                             nn.Conv2d(embedding_dim,
-        #                                        hidden_channels,
-        #                                        5,
-        #                                        padding='same',
-        #                                        padding_mode = padding_mode),
-        #                             LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
-        #                             nn.LeakyReLU(),
-        #                             nn.Conv2d(hidden_channels,
-        #                                        hidden_channels,
-        #                                        5,
-        #                                        padding='same'),
-        #                             )
-        
-        # self.output = nn.Sequential(LayerNorm_MA(hidden_channels, move_dim_from=1, move_dim_to=-1, elementwise_affine = layernorm_affine),
-        #                             nn.LeakyReLU(),
-        #                             nn.Conv2d(hidden_channels,
-        #                                        output_channels,
-        #                                        5,
-        #                                        padding='same',
-        #                                        padding_mode = padding_mode),
-        #                             nn.LeakyReLU())
         
     def forward(self, X, Z, X_mask):
             
@@ -268,14 +294,6 @@ class Conditioning_Attention_Block(nn.Module):
             target_Icond = torch.moveaxis(target_Icond, -1, 1)
             target_Icond = torch.reshape(target_Icond, (*target_Icond.shape[:2],
                                          Z.shape[1], Z.shape[2]))
-            
-            # target_Icond_skip = self.skip_affine(torch.moveaxis(target_Icond, 1, -1))
-            
-            # target_Icond = self.cb_conv(target_Icond)
-            
-            # target_Icond = target_Icond + torch.moveaxis(target_Icond_skip, -1, 1)
-            
-            # target_Icond = self.output(target_Icond)
 
             return target_Icond
     
@@ -763,6 +781,465 @@ class VideoCB_ConvLSTM(nn.Module):
         return Output
         
 
+class VideoCB_ConvLSTM_PI(nn.Module):
+    def __init__(self,
+                 weather_CHW_dim = [10, 9, 12],
+                 cb_emb_dim = 16,
+                 cb_heads = 4,
+                 channels_cb = 32,
+                 channels_wb = 32,
+                 convlstm_IO_units = 16,
+                 convlstm_hidden_units = 32,
+                 convlstm_nlayer = 3,
+                 convlstm_kernel = 5,
+                 densification_dropout = 0.5,
+                 upsampling_dim = [104, 150],
+                 spatial_dropout = 0.35,
+                 layernorm_affine = False):
+        
+        super().__init__()
+        
+        self.input_dimension = weather_CHW_dim
+        self.convlstm_IO_units = convlstm_IO_units
+        self.convlstm_hidden_units = convlstm_hidden_units
+        self.convlstm_kernel = convlstm_kernel
+        self.convlstm_nlayer = convlstm_nlayer
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_heads = cb_heads
+        self.channels_cb = channels_cb
+        self.channels_wb = channels_wb
+        self.densification_dropout_p = densification_dropout
+        self.upsampling_dim = upsampling_dim
+        self.layernorm_affine = layernorm_affine
+        self.spatial_dropout = spatial_dropout
+        
+        ### Conditioning module - Transofrmer like architecture ###
+        
+        self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.cb_emb_dim,
+                 heads = self.cb_heads,
+                 output_channels = self.convlstm_IO_units, #self.convlstm_units
+                 )
+        
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.convlstm_IO_units*2))
+        
+        ### Weather module ### 
+        
+        # TODO 
+        # input_dimensions = 
+        
+        self.Weather_Module = Weather_Upsampling_Block(input_dimensions = self.input_dimension,
+                 hidden_channels = self.channels_wb,
+                 output_channels = self.convlstm_IO_units,
+                 output_dim = self.upsampling_dim,
+                 layernorm_affine = self.layernorm_affine)
+        
+        ### Join Modoule ### 
+        
+        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*2),
+                                                self.convlstm_IO_units,
+                                                kernel_size=(1,5,5), padding="same", padding_mode="replicate"),
+                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
+                                                 elementwise_affine = self.layernorm_affine),
+                                    nn.LeakyReLU())
+        
+        input_features = self.convlstm_IO_units
+        
+        for i in range(self.convlstm_nlayer):
+                
+            setattr(self, f"convLSTM_{i}",
+                    ConvLSTMBlock(input_channles = input_features,
+                                    hidden_channels = self.convlstm_hidden_units[i],
+                                    kernel_size=self.convlstm_kernel[i]))
+            
+            input_features = self.convlstm_hidden_units[i]
+            
+        
+        self.Output_layer = nn.Sequential(
+                                        MoveAxis(1,-1),
+                                        nn.Linear(self.convlstm_hidden_units[-1], self.convlstm_IO_units),
+                                        LayerNorm_MA(self.convlstm_IO_units,
+                                                     elementwise_affine = self.layernorm_affine),
+                                        nn.LeakyReLU(),
+                                        nn.Linear(self.convlstm_IO_units, 1))
+        
+        self.K_layer = nn.Sequential(
+                                    MoveAxis(-1,1),
+                                    nn.Conv2d(3,
+                                                32,
+                                                kernel_size=5, padding="same", padding_mode="replicate"),
+                                    LayerNorm_MA(32, move_dim_from=1, move_dim_to=-1,
+                                                 elementwise_affine = self.layernorm_affine),
+                                    nn.LeakyReLU(),
+                                    nn.Conv2d(32,
+                                                2,
+                                                kernel_size=1))
+        
+        
+        
+    def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False, K_out = False):
+        
+        ### Weather module ### 
+            
+        Weaether_seq = self.Weather_Module(W[0]) # N, C, D, H, W
+        date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # alt N, D, C  # N, C, D, 2
+        #date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
+        
+        ### Conditioning modules ###
+        
+        if self.training is True and teacher_forcing is True:
+            Target_VideoCond = []
+            
+            for timestep in range(X.shape[1]):
+                
+                if self.densification_dropout_p>0:
+                    X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
+                                                           X_mask[:,timestep,:]],
+                                                        p = self.densification_dropout_p)
+                else:
+                    X_t = X[:,timestep,:,:]
+                    X_mask_t = X_mask[:,timestep,:]
+                    
+                Target_VideoCond.append(self.Icondition_Module(X_t, Z, X_mask_t))
+                
+            Target_VideoCond = torch.stack(Target_VideoCond, dim = 2)
+            
+            date_conditioning_wm = date_conditioning_wm[:,:,:,None,None,:].expand(-1,-1,-1,
+                                                                                Weaether_seq.shape[-2],
+                                                                                Weaether_seq.shape[-1],
+                                                                                -1)
+            # print(Weaether_seq.shape)
+            # print(Target_VideoCond.shape)
+            Joint_seq = torch.cat([Weaether_seq,
+                                    Target_VideoCond], 
+                                    dim = 1)
+            
+            Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
+            
+            
+            Joint_seq = self.Joint_Conv3d(Joint_seq)
+            
+            #Joint_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)
+            
+            ### Sequential module ### 
+            
+            for i in range(self.convlstm_nlayer):
+                
+                Joint_seq, _ = getattr(self, f"convLSTM_{i}")(Joint_seq,
+                                                               #ConvLSTM_hidden_state,
+                                                               #ConvLSTM_hidden_state
+                                                               )
+            
+            Output_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)          
+            
+            Output = self.Output_layer(Output_seq)
+            
+            if K_out is True:
+                
+                    K_lat_lon = self.K_layer(Z)
+                    K_lat_lon = torch.clamp(K_lat_lon,
+                                            min = 1e-2,
+                                            max = 1e2)
+            
+                    return [Output.squeeze(), K_lat_lon]
+                
+            else:
+                return Output.squeeze()
+        
+        else:
+            
+            ImageCond = X
+            ImageCond_mask = X_mask
+            Output = []
+            
+            convlstm_h_state = [None for i in range(self.convlstm_nlayer)]
+            convlstm_c_state = [None for i in range(self.convlstm_nlayer)]
+            
+            for timestep in range(W[0].shape[2]):
+                
+                Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
+                
+                
+                date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
+                
+                
+                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,:].expand(-1,-1,
+                                                                                Weaether_seq.shape[-2],
+                                                                                Weaether_seq.shape[-1],
+                                                                                -1)
+                
+                Joint_Image = torch.cat([Weaether_seq[:,:,timestep,:,:],
+                                    Upsampled_ImageCond], 
+                                    dim = 1)
+                
+                Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,1]
+                Joint_Image = Joint_Image.unsqueeze(2)
+                
+                Joint_Image = self.Joint_Conv3d(Joint_Image)
+                
+                # Spatial Dropout
+                #Joint_Image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+            
+                ### Sequential module ###         
+                for i in range(self.convlstm_nlayer):
+                    
+                    Joint_Image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Joint_Image,
+                                                                                                              convlstm_h_state[i],
+                                                                                                              convlstm_c_state[i])
+                
+                
+                # Spatial Dropout
+                Output_image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+                
+                Output_image = self.Output_layer(Output_image)
+            
+                ImageCond = torch.cat([Z.clone(),
+                                       Output_image[:,0,:,:,:]],
+                                      dim=-1)
+                ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
+                ImageCond_mask = torch.ones((ImageCond[:,:,0].shape)).to(torch.bool).to(ImageCond.device)
+            
+                Output.append(Output_image)
+                
+                
+                #torch.moveaxis(target_Icond, -1, 1)
+        # torch.clamp(hyd_cond,
+        #                         min=self.ph_params["hyd_cond"][1],
+        #                         max=self.ph_params["hyd_cond"][2])
+                
+                
+        
+        Output = torch.cat(Output, dim=1).squeeze()
+        
+        if K_out is True:
+                
+                    K_lat_lon = self.K_layer(Z)
+                    K_lat_lon = torch.clamp(K_lat_lon,
+                                            min = 1e-4,
+                                            max = 1e3)
+            
+                    return [Output, K_lat_lon]
+                
+        else:
+            return Output
+
+
+class FullAttention_ConvLSTM(nn.Module):
+    def __init__(self,
+                 weather_CHW_dim = [10, 9, 12],
+                 cb_emb_dim = 16,
+                 cb_heads = 4,
+                 channels_cb = 32,
+                 channels_wb = 32,
+                 convlstm_IO_units = 16,
+                 convlstm_hidden_units = 32,
+                 convlstm_nlayer = 3,
+                 convlstm_kernel = 5,
+                 densification_dropout = 0.5,
+                 upsampling_dim = [104, 150],
+                 spatial_dropout = 0.35,
+                 layernorm_affine = False):
+        
+        super().__init__()
+        
+        self.input_dimension = weather_CHW_dim
+        self.convlstm_IO_units = convlstm_IO_units
+        self.convlstm_hidden_units = convlstm_hidden_units
+        self.convlstm_kernel = convlstm_kernel
+        self.convlstm_nlayer = convlstm_nlayer
+        self.cb_emb_dim = cb_emb_dim
+        self.cb_heads = cb_heads
+        self.channels_cb = channels_cb
+        self.channels_wb = channels_wb
+        self.densification_dropout_p = densification_dropout
+        self.upsampling_dim = upsampling_dim
+        self.layernorm_affine = layernorm_affine
+        self.spatial_dropout = spatial_dropout
+        
+        ### Conditioning module - Transofrmer like architecture ###
+        
+        self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.cb_emb_dim,
+                 heads = self.cb_heads,
+                 output_channels = self.convlstm_IO_units)
+        
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.convlstm_IO_units*2))
+        
+        ### Weather module ### 
+        
+        # TODO 
+        # input_dimensions = 
+        
+        self.Weather_Module = Weather_Attention_Block(
+                 embedding_dim = self.cb_emb_dim,
+                 input_channles = self.input_dimension[0],
+                 heads = self.cb_heads,
+                 output_dims = [self.convlstm_IO_units, *self.upsampling_dim])
+        
+        ### Join Modoule ### 
+        
+        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*2),
+                                                self.convlstm_IO_units,
+                                                kernel_size=(1,5,5), padding="same", padding_mode="replicate"),
+                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
+                                                 elementwise_affine = self.layernorm_affine),
+                                    nn.LeakyReLU())
+        
+        input_features = self.convlstm_IO_units
+        
+        for i in range(self.convlstm_nlayer):
+                
+            setattr(self, f"convLSTM_{i}",
+                    ConvLSTMBlock(input_channles = input_features,
+                                    hidden_channels = self.convlstm_hidden_units[i],
+                                    kernel_size=self.convlstm_kernel[i]))
+            
+            input_features = self.convlstm_hidden_units[i]
+            
+        
+        self.Output_layer = nn.Sequential(
+                                        MoveAxis(1,-1),
+                                        nn.Linear(self.convlstm_hidden_units[-1], self.convlstm_IO_units),
+                                        LayerNorm_MA(self.convlstm_IO_units,
+                                                     elementwise_affine = self.layernorm_affine),
+                                        nn.LeakyReLU(),
+                                        nn.Linear(self.convlstm_IO_units, 1))
+        
+        
+        
+    def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False):
+        
+        ### Weather module ### 
+            
+        #Weaether_seq = self.Weather_Module(W[0]) # N, C, D, H, W
+        date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # alt N, D, C  # N, C, D, 2
+        #date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
+        
+        ### Conditioning modules ###
+        
+        if self.training is True and teacher_forcing is True:
+            Upsampled_VideoCond = []
+            Upsampled_VideoWeather = []
+            # Target_VideoCond = []
+            # Upsampled_VideoWeather = []
+            
+            for timestep in range(X.shape[1]):
+                
+                if self.densification_dropout_p>0:
+                    X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
+                                                           X_mask[:,timestep,:]],
+                                                        p = self.densification_dropout_p)
+                else:
+                    X_t = X[:,timestep,:,:]
+                    X_mask_t = X_mask[:,timestep,:]
+                    
+                Upsampled_VideoCond.append(self.Icondition_Module(X_t, Z, X_mask_t))
+                
+                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
+                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
+                Upsampled_VideoWeather.append(self.Weather_Module(Weather_Keys,
+                                                                       Weather_Values,
+                                                                       Z.flatten(start_dim = 1, end_dim = 2)
+                                                                       )) # K, V, Q
+                
+            Upsampled_VideoCond = torch.stack(Upsampled_VideoCond, dim = 2)
+            Upsampled_VideoWeather = torch.stack(Upsampled_VideoWeather, dim = 2)
+            
+            date_conditioning_wm = date_conditioning_wm[:,:,:,None,None,:].expand(-1,-1,-1,
+                                                                                self.upsampling_dim[0],
+                                                                                self.upsampling_dim[1],
+                                                                                -1)
+            # print(Weaether_seq.shape)
+            # print(Target_VideoCond.shape)
+            Joint_seq = torch.cat([Upsampled_VideoWeather,
+                                    Upsampled_VideoCond], 
+                                    dim = 1)
+            
+            Joint_seq = (Joint_seq * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
+            
+            
+            Joint_seq = self.Joint_Conv3d(Joint_seq)
+            
+            #Joint_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)
+            
+            ### Sequential module ### 
+            
+            for i in range(self.convlstm_nlayer):
+                
+                Joint_seq, _ = getattr(self, f"convLSTM_{i}")(Joint_seq,
+                                                               #ConvLSTM_hidden_state,
+                                                               #ConvLSTM_hidden_state
+                                                               )
+            
+            Output_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)          
+            
+            Output = self.Output_layer(Output_seq)
+            
+            return Output.squeeze()
+        
+        else:
+            
+            ImageCond = X
+            ImageCond_mask = X_mask
+            Output = []
+            
+            convlstm_h_state = [None for i in range(self.convlstm_nlayer)]
+            convlstm_c_state = [None for i in range(self.convlstm_nlayer)]
+            
+            for timestep in range(W[0].shape[2]):
+                
+                Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask)
+                
+                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
+                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
+                Upsampled_ImageWeather = self.Weather_Module(Weather_Keys,
+                                                        Weather_Values,
+                                                        Z.flatten(start_dim = 1, end_dim = 2)
+                                                        )
+                
+                date_conditioning_wm_Image = date_conditioning_wm[:,:,timestep,:]
+                
+                
+                date_conditioning_wm_Image = date_conditioning_wm_Image[:,:,None,None,:].expand(-1,-1,
+                                                                                self.upsampling_dim[0],
+                                                                                self.upsampling_dim[1],
+                                                                                -1)
+                
+                Joint_Image = torch.cat([Upsampled_ImageWeather,
+                                    Upsampled_ImageCond], 
+                                    dim = 1)
+                
+                Joint_Image = (Joint_Image * date_conditioning_wm_Image[:,:,:,:,0]) + date_conditioning_wm_Image[:,:,:,:,1]
+                Joint_Image = Joint_Image.unsqueeze(2)
+                
+                Joint_Image = self.Joint_Conv3d(Joint_Image)
+                
+                # Spatial Dropout
+                #Joint_Image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+            
+                ### Sequential module ###         
+                for i in range(self.convlstm_nlayer):
+                    
+                    Joint_Image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Joint_Image,
+                                                                                                              convlstm_h_state[i],
+                                                                                                              convlstm_c_state[i])
+                
+                
+                # Spatial Dropout
+                Output_image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+                
+                Output_image = self.Output_layer(Output_image)
+            
+                ImageCond = torch.cat([Z.clone(),
+                                       Output_image[:,0,:,:,:]],
+                                      dim=-1)
+                ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
+                ImageCond_mask = torch.ones((ImageCond[:,:,0].shape)).to(torch.bool).to(ImageCond.device)
+            
+                Output.append(Output_image)
+                
+        
+        Output = torch.cat(Output, dim=1).squeeze()
+            
+        return Output
 
 ###########################################
     
