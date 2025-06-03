@@ -121,7 +121,8 @@ def train_pinns_model(epoch, dataset, model, train_loader,
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
+                        Y_hat, K_lat_lon = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing,
+                                                 mc_dropout = True, K_out = True)
                         
                         data_loss = loss_fn(Y_hat,
                                             Y,
@@ -133,7 +134,9 @@ def train_pinns_model(epoch, dataset, model, train_loader,
                         
                         if physics_guide < physics_guide_alpha[epoch]:
                             
-                            physics_loss = loss_physics_fn(Y_hat)
+                            physics_loss = loss_physics_fn(Y_hat,
+                                                            K_lat = K_lat_lon[:,0,:,:].unsqueeze(1),
+                                                            K_lon = K_lat_lon[:,1,:,:].unsqueeze(1))
                             print(f"Training_data_loss: {data_loss.item()} --- Training_physics_loss: {physics_loss.item()}")
                             loss = losses_coeff[0]*data_loss + losses_coeff[1]*physics_loss
                             
@@ -170,4 +173,7 @@ def train_pinns_model(epoch, dataset, model, train_loader,
                                                                                     dataset[0][-2].unsqueeze(0),
                                                                                     True),
                                                                                     device = device)})
+                            
+                        K_lat_lon = build_xarray(K_lat_lon[0].detach().cpu(), dataset, variable = "K_lat_lon")
+                        wandb.log({"K_maps_train":wandb.Image(plot_K_lat_lon_maps(K_lat_lon))})
                             

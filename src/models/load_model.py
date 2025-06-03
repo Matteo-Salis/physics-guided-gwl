@@ -179,6 +179,46 @@ def load_model(config):
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"]), model_name
+        
+    elif config["model"] == "FullAttention_ConvLSTM":
+        
+        model_name = "FullAttention_ConvLSTM"
+        print(f"Model: {model_name}")
+        
+        return FullAttention_ConvLSTM(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                cb_emb_dim = config["cb_emb_dim"],
+                cb_heads = config["cb_heads"],
+                channels_cb = config["channels_cb"],
+                channels_wb = config["channels_wb"],
+                convlstm_IO_units = config["convlstm_IO_units"],
+                convlstm_hidden_units = config["convlstm_hidden_units"],
+                convlstm_kernel = config["convlstm_kernel"],
+                convlstm_nlayer = config["convlstm_nlayer"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = config["upsampling_dim"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"]), model_name
+        
+    elif config["model"] == "VideoCB_ConvLSTM_PI":
+        
+        model_name = "VideoCB_ConvLSTM"
+        print(f"Model: {model_name}")
+        
+        return VideoCB_ConvLSTM_PI(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                cb_emb_dim = config["cb_emb_dim"],
+                cb_heads = config["cb_heads"],
+                channels_cb = config["channels_cb"],
+                channels_wb = config["channels_wb"],
+                convlstm_IO_units = config["convlstm_IO_units"],
+                convlstm_hidden_units = config["convlstm_hidden_units"],
+                convlstm_kernel = config["convlstm_kernel"],
+                convlstm_nlayer = config["convlstm_nlayer"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = config["upsampling_dim"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"]), model_name
     
     else:
         raise Exception("Model name unknown.")

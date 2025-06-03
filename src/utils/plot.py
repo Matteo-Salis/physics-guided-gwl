@@ -367,7 +367,7 @@ def test_data_prediction(start_date, twindow, dataset, model, device, eval = Tru
         
     Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
     W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, "D"))
-    Y, Y_mask = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
+    Y, _ = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
     
     
     
@@ -380,19 +380,56 @@ def test_data_prediction(start_date, twindow, dataset, model, device, eval = Tru
     return [Y.detach().cpu(),
             Y_hat_test.detach().cpu()]
     
-def build_xarray(norm_data, dataset, start_date, twindow):
+def build_xarray(data, dataset, start_date = None, twindow = None, variable = "piezo_height"):
     
-    denorm_data = (norm_data * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
-    xr_ds = xarray.DataArray(data = denorm_data,
-                            coords = dict(
-                                        lat=("lat", dataset.wtd_data_raserized.y.values),
-                                        lon=("lon", dataset.wtd_data_raserized.x.values),
-                                        time=pd.date_range(np.datetime64(start_date) + np.timedelta64(1, "D"),
-                                                        np.datetime64(start_date) + np.timedelta64(twindow, "D"),
-                                                        freq = "D")),
-                            dims = ["time","lat", "lon"]
-                            )
+    if variable == "piezo_height":
+        denorm_data = (data * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+        xr_ds = xarray.DataArray(data = denorm_data,
+                                coords = dict(
+                                            lat=("lat", dataset.wtd_data_raserized.y.values),
+                                            lon=("lon", dataset.wtd_data_raserized.x.values),
+                                            time=pd.date_range(np.datetime64(start_date) + np.timedelta64(1, "D"),
+                                                            np.datetime64(start_date) + np.timedelta64(twindow, "D"),
+                                                            freq = "D")),
+                                dims = ["time","lat", "lon"]
+                                )
+        
+    elif variable == "K_lat_lon":
+        
+        xr_ds = xarray.DataArray(data = data,
+                                coords = dict(
+                                            lat=("lat", dataset.wtd_data_raserized.y.values),
+                                            lon=("lon", dataset.wtd_data_raserized.x.values),
+                                            bands=["K_lat", "K_lon"]),
+                                dims = ["bands","lat", "lon"]
+                                )
+        
+        
     return xr_ds
+
+def plot_K_lat_lon_maps(K_lat_lon, save_dir = None, print_plot = False):
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(1,2, figsize = (10,4))
+    fig.suptitle(f"Hydraulic Conductivity")
+    
+    vmin = K_lat_lon.min().values
+    vmax = K_lat_lon.min().values
+
+    K_lat_lon.sel(bands = "K_lat").plot(ax = ax[0], vmin = vmin, vmax = vmax)
+    ax[0].set_title("K_lat")
+    
+    K_lat_lon.sel(bands = "K_lon").plot(ax = ax[1], vmin = vmin, vmax = vmax)
+    ax[1].set_title("K_lon")
+
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+    
+    if print_plot is True:
+        plt.tight_layout()
+        
+    else:
+        return fig 
     
 
 def plot_h_wtd_maps(sample_h, sample_wtd, 
@@ -476,14 +513,14 @@ def plot_maps_and_time_series(dataset, model, device,
                                                                             eval = eval_mode)
             
             
-            Y_hat_test_xr_denorm = build_xarray(norm_data = Y_hat_test,
+            Y_hat_test_xr_denorm = build_xarray(data = Y_hat_test,
                          dataset = dataset,
                          start_date = date,
                          twindow = twindow)
             
             WTD_hat_test_xr_denorm = dataset.target_rasterized_dtm.values - Y_hat_test_xr_denorm
             
-            Y_test_xr_denorm = build_xarray(norm_data = Y_test,
+            Y_test_xr_denorm = build_xarray(data = Y_test,
                          dataset = dataset,
                          start_date = date,
                          twindow = twindow)
