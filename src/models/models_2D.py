@@ -1218,8 +1218,8 @@ class FullAttention_ConvLSTM(nn.Module):
 class CausalConv3d(torch.nn.Conv3d):
     # inspired by https://github.com/pytorch/pytorch/issues/1333
     def __init__(self,
-                 in_channels,
-                 out_channels,
+                 input_channels,
+                 output_channels,
                  kernel_size,
                  stride=[1,1,1],
                  dilation=[1,1,1],
@@ -1227,8 +1227,8 @@ class CausalConv3d(torch.nn.Conv3d):
                  bias=True):
 
         super(CausalConv3d, self).__init__(
-            in_channels,
-            out_channels,
+            input_channels,
+            output_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding="valid",
@@ -1247,10 +1247,24 @@ class CausalConv3d(torch.nn.Conv3d):
         
     def temporal_causal_padding(self, video, padding_len, padding_values = None):
         
+        """
+        padding_values (B, C, D, H, W): is not none padding replicate the first element in the D dimension
+        """
+        
         if padding_values is None:
-            padding_values = video[:,:,:padding_len,:,:]
+            padding = video[:,:,0,:,:].unsqueeze(2).expand(-1,-1,padding_len,-1,-1)
+        else:
+            padding = padding_values[:,:,0,:,:].unsqueeze(2).expand(-1,-1,
+                                                                    padding_len-padding_values.shape[2],
+                                                                    -1,-1)
+            padding = torch.cat([padding,
+                                 padding_values], dim = 2)
             
-        padded_video = torch.cat([padding_values,
+        #print(padding)
+            
+            
+            
+        padded_video = torch.cat([padding,
                                   video], dim = 2)
         
         return padded_video
@@ -1290,27 +1304,37 @@ class CausalConv3d(torch.nn.Conv3d):
 
 class FullAttention_CausalConv(nn.Module):
     def __init__(self,
-                 weather_CHW_dim = [10, 9, 12],
-                 cb_emb_dim = 16,
-                 cb_heads = 4,
-                 channels_cb = 32,
-                 channels_wb = 32,
-                 convlstm_IO_units = 16,
-                 convlstm_hidden_units = 32,
-                 convlstm_nlayer = 3,
-                 convlstm_kernel = 5,
-                 densification_dropout = 0.5,
-                 upsampling_dim = [104, 150],
-                 spatial_dropout = 0.35,
-                 layernorm_affine = False):
+                weather_CHW_dim = [10, 9, 12],
+                cb_emb_dim = 16,
+                cb_heads = 4,
+                channels_cb = 32,
+                channels_wb = 32,
+            #  convlstm_IO_units = 16,
+            #  convlstm_hidden_units = 32,
+            #  convlstm_nlayer = 3,
+            #  convlstm_kernel = 5,
+                cconv3d_input_channels = 16,
+                cconv3d_hidden_channels = [32],
+                cconv3d_kernel = (3,5,5),
+                cconv3d_dilation = (1,1,1),
+                cconv3d_layers = 1,
+                densification_dropout = 0.5,
+                upsampling_dim = [104, 150],
+                spatial_dropout = 0.35,
+                layernorm_affine = False):
         
         super().__init__()
         
         self.input_dimension = weather_CHW_dim
-        self.convlstm_IO_units = convlstm_IO_units
-        self.convlstm_hidden_units = convlstm_hidden_units
-        self.convlstm_kernel = convlstm_kernel
-        self.convlstm_nlayer = convlstm_nlayer
+        
+        self.cconv3d_input_channels = cconv3d_input_channels
+        self.cconv3d_hidden_channels = cconv3d_hidden_channels
+        self.cconv3d_kernel = cconv3d_kernel
+        self.cconv3d_dilation = cconv3d_dilation
+        self.cconv3d_layers = cconv3d_layers
+        
+        
+        
         self.cb_emb_dim = cb_emb_dim
         self.cb_heads = cb_heads
         self.channels_cb = channels_cb
@@ -1324,9 +1348,9 @@ class FullAttention_CausalConv(nn.Module):
         
         self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.cb_emb_dim,
                  heads = self.cb_heads,
-                 output_channels = self.convlstm_IO_units)
+                 output_channels = self.cconv3d_input_channels)
         
-        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.convlstm_IO_units*2))
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.cconv3d_input_channels*2))
         
         ### Weather module ### 
         
@@ -1337,36 +1361,37 @@ class FullAttention_CausalConv(nn.Module):
                  embedding_dim = self.cb_emb_dim,
                  input_channles = self.input_dimension[0],
                  heads = self.cb_heads,
-                 output_dims = [self.convlstm_IO_units, *self.upsampling_dim])
+                 output_dims = [self.cconv3d_input_channels, *self.upsampling_dim])
         
         ### Join Modoule ### 
         
-        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.convlstm_IO_units*2),
-                                                self.convlstm_IO_units,
+        self.Joint_Conv3d = nn.Sequential(nn.Conv3d(int(self.cconv3d_input_channels*2),
+                                                self.cconv3d_input_channels,
                                                 kernel_size=(1,5,5), padding="same", padding_mode="replicate"),
-                                    LayerNorm_MA(self.convlstm_IO_units, move_dim_from=1, move_dim_to=-1,
+                                    LayerNorm_MA(self.cconv3d_input_channels, move_dim_from=1, move_dim_to=-1,
                                                  elementwise_affine = self.layernorm_affine),
                                     nn.LeakyReLU())
         
-        input_features = self.convlstm_IO_units
+        input_features = self.cconv3d_input_channels
         
-        for i in range(self.convlstm_nlayer):
+        for i in range(self.cconv3d_layers):
                 
             setattr(self, f"CausalConv3d_{i}",
-                    CausalConv3d(input_channles = input_features,
-                                    hidden_channels = self.convlstm_hidden_units[i],
-                                    kernel_size=self.convlstm_kernel[i]))
+                    CausalConv3d(input_channels = input_features,
+                                output_channels = self.cconv3d_hidden_channels[i],
+                                    kernel_size=self.cconv3d_kernel[i],
+                                    dilation = self.cconv3d_dilation[i]))
             
-            input_features = self.convlstm_hidden_units[i]
+            input_features = self.cconv3d_hidden_channels[i]
             
         
         self.Output_layer = nn.Sequential(
                                         MoveAxis(1,-1),
-                                        nn.Linear(self.convlstm_hidden_units[-1], self.convlstm_IO_units),
-                                        LayerNorm_MA(self.convlstm_IO_units,
+                                        nn.Linear(self.cconv3d_hidden_channels[-1], self.cconv3d_input_channels),
+                                        LayerNorm_MA(self.cconv3d_input_channels,
                                                      elementwise_affine = self.layernorm_affine),
                                         nn.LeakyReLU(),
-                                        nn.Linear(self.convlstm_IO_units, 1))
+                                        nn.Linear(self.cconv3d_input_channels, 1))
         
         
         
@@ -1427,15 +1452,9 @@ class FullAttention_CausalConv(nn.Module):
             
             ### Sequential module ### 
             
-            for i in range(self.convlstm_nlayer):
+            for i in range(self.cconv3d_layers):
                 
-                
-                ConvLSTM_hidden_state = getattr(self, f"HiddenState_convLSTM_{i}")(Upsampled_VideoCond[:,:,0,:,:])
-                
-                Joint_seq, _ = getattr(self, f"convLSTM_{i}")(Joint_seq,
-                                                               ConvLSTM_hidden_state,
-                                                               ConvLSTM_hidden_state
-                                                               )
+                Joint_seq = getattr(self, f"CausalConv3d_{i}")(Joint_seq)
             
             Output_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)          
             
@@ -1447,10 +1466,12 @@ class FullAttention_CausalConv(nn.Module):
             
             ImageCond = X
             ImageCond_mask = X_mask
+            Joint_seq = [[] for i in range(self.cconv3d_layers)]
             Output = []
+            conditional_padding_cache = 0
             
-            convlstm_h_state = [None for i in range(self.convlstm_nlayer)]
-            convlstm_c_state = [None for i in range(self.convlstm_nlayer)]
+            
+            conditional_padding = [None for i in range(self.cconv3d_layers)]
             
             for timestep in range(W[0].shape[2]):
                 
@@ -1480,21 +1501,20 @@ class FullAttention_CausalConv(nn.Module):
                 
                 Joint_Image = self.Joint_Conv3d(Joint_Image)
                 
-                # Spatial Dropout
-                #Joint_Image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
+                
             
                 ### Sequential module ###         
-                for i in range(self.convlstm_nlayer):
+                for i in range(self.cconv3d_layers):
+                    #print(f"{timestep}-{i}")
+
+                    Joint_seq[i].append(Joint_Image)
+                    conditional_padding[i] = torch.cat(Joint_seq[i], dim = 2)
                     
-                    if timestep == 0:
-                        convlstm_h_state = getattr(self, f"HiddenState_convLSTM_{i}")(Upsampled_ImageCond)
-                        convlstm_c_state = convlstm_h_state
-                        
+                    Joint_Image = getattr(self, f"CausalConv3d_{i}")(Joint_Image, conditional_padding[i])
                     
-                    Joint_Image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Joint_Image,
-                                                                                                              convlstm_h_state[i],
-                                                                                                              convlstm_c_state[i])
-                
+                    if len(Joint_seq[i]) == getattr(self, f"CausalConv3d_{i}").compute_padding(Joint_Image.shape[2], 0):
+                        #print(f"Reset-{i}")
+                        Joint_seq[i] = []
                 
                 # Spatial Dropout
                 Output_image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 

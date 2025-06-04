@@ -219,6 +219,27 @@ def load_model(config):
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"]), model_name
+        
+    elif config["model"] == "FullAttention_CausalConv":
+        
+        model_name = "FullAttention_CausalConv"
+        print(f"Model: {model_name}")
+        
+        return FullAttention_CausalConv(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                cb_emb_dim = config["cb_emb_dim"],
+                cb_heads = config["cb_heads"],
+                channels_cb = config["channels_cb"],
+                channels_wb = config["channels_wb"],
+                cconv3d_input_channels = config["cconv3d_input_channels"],
+                cconv3d_hidden_channels = config["cconv3d_hidden_channels"],
+                cconv3d_kernel = config["cconv3d_kernel"],
+                cconv3d_dilation = config["cconv3d_dilation"],
+                cconv3d_layers = config["cconv3d_layers"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = config["upsampling_dim"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"]), model_name
     
     else:
         raise Exception("Model name unknown.")
