@@ -51,7 +51,7 @@ class Dataset_2D_VideoCond(Dataset):
             self.target = "wtd"
             
         # Rasterizing groundwater dataset 
-        self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"])
+        self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"][1:])
         # around 2.5km
         
         if config["normalization"] is True:

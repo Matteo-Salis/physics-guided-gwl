@@ -240,6 +240,25 @@ def load_model(config):
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"]), model_name
+        
+        
+    elif config["model"] == "FullAttention_ViViT":
+        
+        model_name = "FullAttention_ViViT"
+        print(f"Model: {model_name}")
+        
+        return FullAttention_ViViT(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                sparse_emb_dim = config["sparse_emb_dim"],
+                sparse_heads = config["sparse_heads"],
+                dense_emb_dim = config["dense_emb_dim"],
+                dense_heads = config["dense_heads"],
+                patch_size = config["patch_size"],
+                mha_blocks = config["mha_blocks"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = config["upsampling_dim"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"]), model_name
     
     else:
         raise Exception("Model name unknown.")
