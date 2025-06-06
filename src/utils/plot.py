@@ -361,12 +361,12 @@ def test_data_prediction(start_date, twindow, dataset, model, device, eval = Tru
         teacher_forcing = False
         
     else:
-        X, X_mask = dataset.get_icon_target_data(start_date, start_date + np.timedelta64(twindow-1, "D"))
+        X, X_mask = dataset.get_icon_target_data(start_date, start_date + np.timedelta64(twindow-1, dataset.config["frequency"]))
         model.train()
         teacher_forcing = True
         
     Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
-    W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, "D"))
+    W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, dataset.config["frequency"]))
     Y, _ = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
     
     
@@ -388,9 +388,9 @@ def build_xarray(data, dataset, start_date = None, twindow = None, variable = "p
                                 coords = dict(
                                             lat=("lat", dataset.wtd_data_raserized.y.values),
                                             lon=("lon", dataset.wtd_data_raserized.x.values),
-                                            time=pd.date_range(np.datetime64(start_date) + np.timedelta64(1, "D"),
-                                                            np.datetime64(start_date) + np.timedelta64(twindow, "D"),
-                                                            freq = "D")),
+                                            time=pd.date_range(np.datetime64(start_date) + np.timedelta64(1, dataset.config["frequency"]),
+                                                            np.datetime64(start_date) + np.timedelta64(twindow, dataset.config["frequency"]),
+                                                            freq = dataset.config["frequency"])),
                                 dims = ["time","lat", "lon"]
                                 )
         
@@ -465,6 +465,7 @@ def plot_sensor_ts(sensor_ds, title,
     
     fig, ax = plt.subplots()
     ax.plot(sensor_ds, label = sensor_ds.columns, marker = "o", lw = 0.7, markersize = 2)
+    ax.tick_params(axis='x', rotation=50)
 
     ax.set_title(title)
 

@@ -7,8 +7,21 @@ def loss_masked_mse(Y_hat, Y, Y_mask):
     
     if len(Y_hat.size()) < 4:
         Y_hat = Y_hat.unsqueeze(0)
-        
-    return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
+    
+    if torch.sum(Y_mask) != 0:
+        return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
+    else:
+        return 0.
+
+def loss_masked_mae(Y_hat, Y, Y_mask):
+    
+    if len(Y_hat.size()) < 4:
+        Y_hat = Y_hat.unsqueeze(0)
+
+    if torch.sum(Y_mask) != 0:        
+        return torch.sum(torch.abs(Y_hat[Y_mask]-Y[Y_mask]))  / torch.sum(Y_mask)
+    else:
+        return 0
 
 def loss_l2_regularization(model):
     
