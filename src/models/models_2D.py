@@ -2,6 +2,7 @@ from functools import partial
 import copy
 import numpy as np
 import math
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
@@ -1621,7 +1622,7 @@ class MHA_Block(nn.Module):
         return output
         
 
-class FullAttention_ViT(nn.Module):
+class FullAttention_ViViT(nn.Module):
     
     def depatchify(self, batch, patch_size, image_size):
         """
@@ -1671,13 +1672,12 @@ class FullAttention_ViT(nn.Module):
                 sparse_emb_dim = 32,
                 sparse_heads = 2,
                 dense_emb_dim = 128,
-                dense_emb_kernel = (2,2,2),
                 dense_heads = 4,
                 patch_size = (2,2,2),
                 mha_blocks = 3,
                 densification_dropout = 0.5,
                 upsampling_dim = [4,42,62],
-                spatial_dropout = 0.35,
+                spatial_dropout = None, # TODO
                 layernorm_affine = False):
         
         super().__init__()
@@ -1686,7 +1686,6 @@ class FullAttention_ViT(nn.Module):
         self.sparse_emb_dim = sparse_emb_dim
         self.sparse_heads = sparse_heads
         self.patch_size = patch_size
-        self.dense_emb_kernel = dense_emb_kernel
         self.dense_emb_dim = dense_emb_dim
         self.dense_heads = dense_heads
         self.mha_blocks = mha_blocks
@@ -1721,19 +1720,47 @@ class FullAttention_ViT(nn.Module):
         #                             kernel_size=self.dense_emb_kernel)
         
         #instead of patchify:
-        self.dense_embedding = nn.Conv3d(int(self.sparse_emb_dim*2),
+        dense_embedding = []
+            
+        if self.upsampling_dim[1]%self.patch_size[1] != 0 or self.upsampling_dim[2]%self.patch_size[2] != 0:
+        
+            # h padding
+            pad_h = self.patch_size[1] - (self.upsampling_dim[1]%self.patch_size[1])
+            #pad_h = np.ceil(pad_h/2).astype(int)
+            
+            # w padding 
+            pad_w = self.patch_size[2] - (self.upsampling_dim[2]%self.patch_size[2])
+            #pad_w = np.ceil(pad_w/2).astype(int)
+            
+            
+            self.spatial_padding = (pad_w,0,
+                   pad_h,0,
+                   0,0)
+        
+            dense_embedding.append(nn.ReplicationPad3d(padding  = self.spatial_padding))
+            
+            nd = self.upsampling_dim[0] // self.patch_size[0]
+            nh = (self.upsampling_dim[1]+(self.spatial_padding[2])) // self.patch_size[1]
+            nw = (self.upsampling_dim[2]+(self.spatial_padding[0])) // self.patch_size[2]
+            
+        else:
+            self.spatial_padding = None
+            
+            nd = self.upsampling_dim[0] // self.patch_size[0]
+            nh = self.upsampling_dim[1] // self.patch_size[1]
+            nw = self.upsampling_dim[2] // self.patch_size[2]
+            
+        dense_seq_len = nd*nh*nw
+        
+        dense_embedding.append(nn.Conv3d(int(self.sparse_emb_dim*2),
                                          self.dense_emb_dim,
                                          kernel_size = self.patch_size,
                                          stride = self.patch_size,
-                                         padding="valid")
+                                         padding="valid"))
+        
+        self.dense_embedding = nn.Sequential(*dense_embedding)
         
         ## ViT blocks ## 
-        
-        nd = self.upsampling_dim[0] // self.patch_size[0]
-        nh = self.upsampling_dim[1] // self.patch_size[1]
-        nw = self.upsampling_dim[2] // self.patch_size[2]
-        
-        dense_seq_len = nd*nh*nw
         
         #dense_emb_dim = int(self.sparse_emb_dim*2) #c*ph*pw
         self.pasitional_embedding = self.PositionEmbedding(dense_seq_len, self.dense_emb_dim) # (seq_len, emb_dim)
@@ -1760,17 +1787,13 @@ class FullAttention_ViT(nn.Module):
         
         ### Weather module ### 
             
-        #Weaether_seq = self.Weather_Module(W[0]) # N, C, D, H, W
         date_conditioning_wm = self.Date_Conditioning_Module_wm(W[1]) # alt N, D, C  # N, C, D, 2
-        #date_conditioning_sm = self.Date_Conditioning_Module_sm(W[1]) # N, C, D, 2
         
         ### Conditioning modules ###
         
         if self.training is True and teacher_forcing is True:
             Upsampled_VideoCond = []
             Upsampled_VideoWeather = []
-            # Target_VideoCond = []
-            # Upsampled_VideoWeather = []
             
             for timestep in range(X.shape[1]):
                 
@@ -1813,7 +1836,7 @@ class FullAttention_ViT(nn.Module):
             print(Hidden_Video.shape)
             
             pasitional_embedding = self.pasitional_embedding[None,:,:].expand(Hidden_Video.shape[0],
-                                                                              -1,-1)  # (seq_len, emb_dim)
+                                                                              -1,-1).to(Hidden_Video.device)  # (seq_len, emb_dim)
             
             Hidden_Video = Hidden_Video + pasitional_embedding
             
@@ -1821,12 +1844,25 @@ class FullAttention_ViT(nn.Module):
             
                 Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video)
             
-            Hidden_Video = self.depatchify(Hidden_Video,
-                                           self.patch_size,
-                                           self.upsampling_dim)
+            if self.spatial_padding is None:
             
-            print(Hidden_Video.shape)
-            #Output_seq = nn.functional.dropout3d(Joint_seq, p = self.spatial_dropout, training= True)          
+                Hidden_Video = self.depatchify(Hidden_Video,
+                                            self.patch_size,
+                                            self.upsampling_dim)
+                
+            else:
+                
+                Hidden_Video = self.depatchify(Hidden_Video,
+                                            self.patch_size,
+                                            [self.upsampling_dim[0],
+                                            self.upsampling_dim[1] + (self.spatial_padding[2]),
+                                            self.upsampling_dim[2] + (self.spatial_padding[0])])
+                
+                Hidden_Video = Hidden_Video[:,:,:,
+                                            self.spatial_padding[2]:,
+                                            self.spatial_padding[0]:]
+            
+            #print(Hidden_Video.shape)        
             
             Output_Video = self.linear(Hidden_Video)
             
@@ -1839,11 +1875,9 @@ class FullAttention_ViT(nn.Module):
             Hidden_Frames = []
             Hidden_Video = []
             Output_Video = []
+
             
-            # Joint_seq[i].append(Joint_Image)
-            # conditional_padding[i] = torch.cat(Joint_seq[i], dim = 2)
-            
-            for timestep in range(W[0].shape[2]):
+            for timestep in tqdm(range(W[0].shape[2])):
                 
                 Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask).unsqueeze(2)
                 
@@ -1860,12 +1894,6 @@ class FullAttention_ViT(nn.Module):
                                                                                 self.upsampling_dim[2],
                                                                                 -1)
                 
-                 # N, C, D, 2
-                # date_conditioning_wm = date_conditioning_wm[:,:,:,None,None,:].expand(-1,-1,-1,
-                #                                                                 self.upsampling_dim[1],
-                #                                                                 self.upsampling_dim[2],
-                #                                                                 -1)
-                
                 Hidden_Frame = torch.cat([Upsampled_ImageWeather,
                                     Upsampled_ImageCond], 
                                     dim = 1)
@@ -1873,12 +1901,12 @@ class FullAttention_ViT(nn.Module):
                 Hidden_Frames.append(Hidden_Frame)
                 Hidden_Video = torch.cat(Hidden_Frames, dim = 2)
                 Hidden_Video_tlen = Hidden_Video.shape[2]
-                print(Hidden_Video.shape)
+                #print(Hidden_Video.shape)
                 
                 # Pad if len is too short
-                if Hidden_Video_tlen<self.patch_size[0]:
+                if Hidden_Video_tlen%self.patch_size[0] != 0:
                 
-                    padding_len = self.patch_size[0]-Hidden_Video_tlen
+                    padding_len = Hidden_Video_tlen%self.patch_size[0]
                     padding_video = Hidden_Video[:,:,0,:,:].unsqueeze(2).expand(-1,-1,
                                                                     padding_len,
                                                                     -1,-1)
@@ -1893,20 +1921,23 @@ class FullAttention_ViT(nn.Module):
                     Hidden_Video = torch.cat([padding_video,
                                         Hidden_Video], dim = 2)
                     
-                    print("Padding HV", Hidden_Video.shape)
+                    #print("Padding HV", Hidden_Video.shape)
                     
                     Hidden_Video_tlen = Hidden_Video.shape[2]
+                    
+                else:
+                    padding_len = 0
                 
                 # Date Conditioning
                 Hidden_Video = (Hidden_Video * date_conditioning_Frames[:,:,:,:,:,0]) + date_conditioning_Frames[:,:,:,:,:,1]
                 
                 # Tubelet Embedding
                 Hidden_Video = self.dense_embedding(Hidden_Video)
-                print(Hidden_Video.shape)
+                #print(Hidden_Video.shape)
                 Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
                 
                 # Positional Embedding
-                pasitional_embedding = self.PositionEmbedding(Hidden_Video.shape[1], self.dense_emb_dim)
+                pasitional_embedding = self.PositionEmbedding(Hidden_Video.shape[1], self.dense_emb_dim).to(Hidden_Video.device)
                 pasitional_embedding = pasitional_embedding[None,:,:].expand(Hidden_Video.shape[0],
                                                                               -1,-1)  # (seq_len, emb_dim)
             
@@ -1916,30 +1947,33 @@ class FullAttention_ViT(nn.Module):
             
                     Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video)
                 
-                print(Hidden_Video.shape)
-                Hidden_Video = self.depatchify(Hidden_Video,
-                                            self.patch_size,
-                                            [Hidden_Video_tlen,*self.upsampling_dim[1:]]) 
+                #print(Hidden_Video.shape)
+                # Hidden_Video = self.depatchify(Hidden_Video,
+                #                             self.patch_size,
+                #                             [Hidden_Video_tlen,*self.upsampling_dim[1:]]) 
+                
+                ###
+                if self.spatial_padding is None:
+            
+                    Hidden_Video = self.depatchify(Hidden_Video,
+                                                self.patch_size,
+                                                [Hidden_Video_tlen,*self.upsampling_dim[1:]])
+                
+                else:
+                    
+                    Hidden_Video = self.depatchify(Hidden_Video,
+                                                self.patch_size,
+                                                [Hidden_Video_tlen,
+                                                self.upsampling_dim[1] + (self.spatial_padding[2]),
+                                                self.upsampling_dim[2] + (self.spatial_padding[0])])
+                    
+                    Hidden_Video = Hidden_Video[:,:,:,
+                                                self.spatial_padding[2]:,
+                                                self.spatial_padding[0]:]
+                
+                ###
                 
                 Output_Video = self.linear(Hidden_Video[:,:,padding_len:,:,:])
-            
-                # ### Sequential module ###         
-                # for i in range(self.convlstm_nlayer):
-                    
-                #     # if timestep == 0:
-                #     #     convlstm_h_state[i] = getattr(self, f"HiddenState_convLSTM_{i}")(Upsampled_ImageCond)
-                #     #     convlstm_c_state[i] = convlstm_h_state[i]
-                        
-                    
-                #     Joint_Image, (convlstm_h_state[i], convlstm_c_state[i]) = getattr(self, f"convLSTM_{i}")(Joint_Image,
-                #                                                                                               convlstm_h_state[i],
-                #                                                                                               convlstm_c_state[i])
-                
-                
-                # # Spatial Dropout
-                # Output_image =  nn.functional.dropout3d(Joint_Image, p = self.spatial_dropout, training = mc_dropout) 
-                
-                # Output_image = self.Output_layer(Output_image)
             
                 ImageCond = torch.cat([Z.clone(),
                                        Output_Video[:,-1,:,:,:]],
@@ -1947,9 +1981,6 @@ class FullAttention_ViT(nn.Module):
                 ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
                 ImageCond_mask = torch.ones((ImageCond[:,:,0].shape)).to(torch.bool).to(ImageCond.device)
             
-                #Output_Video.append(Output_Frames)
-                
-        
         Output_Video = Output_Video.squeeze()
             
         return Output_Video
