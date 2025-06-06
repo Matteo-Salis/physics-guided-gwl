@@ -159,6 +159,9 @@ class Dataset_2D_VideoCond(Dataset):
             
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
+        
+        self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
+        
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
         self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
         
@@ -247,7 +250,45 @@ class Dataset_2D_VideoCond(Dataset):
         self.wtd_names = gpd.read_file(self.config["wtd_shp"],
                                              engine='fiona')
         self.wtd_names = self.wtd_names.to_crs('epsg:4326')
-
+        
+        # Subset Stations
+        discard_sensor_list = ["00405910001",
+                                "00119710001",
+                                "00127210003",
+                                "00117110001",
+                                "00421710001",
+                                "00121510001",
+                                "00104810001",
+                                "00127210005",
+                                "00402910001",
+                                "00403410001",
+                                "00126010001",
+                                "00105110001"]
+        self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(discard_sensor_list), :]
+        self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(discard_sensor_list), :]
+        
+        
+                # sensor_list = ["00417910001",
+                #                "00105910001",
+                #                "00425010001",
+                #                "00109010001",
+                #                "00127210001"
+                #                ]
+                
+                # self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(sensor_list), :]
+                # self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(sensor_list), :]
+                
+                # self.wtd_df = self.wtd_df.set_index(["date", "sensor_id"])
+                # self.wtd_df = self.wtd_df.groupby(level='date').filter(lambda group: not group.isna().all().all())
+                # self.wtd_df = self.wtd_df.reset_index()
+        # Resampling 
+        
+        if self.config["frequency"] != "D":
+            self.wtd_df.sort_values(by='date', inplace = True)
+            self.wtd_df = self.wtd_df.set_index(["date"])
+            self.wtd_df = self.wtd_df.groupby([pd.Grouper(freq=self.config["frequency"], label = "left"), "sensor_id"]).mean()
+            self.wtd_df = self.wtd_df.reset_index()
+            
         # Define attributes about dates and coordinates
         self.dates = self.wtd_df["date"].unique()
         self.sensor_id_list = self.wtd_df["sensor_id"].unique()
@@ -296,7 +337,7 @@ class Dataset_2D_VideoCond(Dataset):
         self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
         
         # Subset wtd data truncating the last `twindow` instances
-        last_date = self.dates.max() - np.timedelta64(self.twindow, 'D')
+        last_date = self.dates.max() - np.timedelta64(self.twindow, self.config["frequency"])
         self.input_dates = self.dates[self.dates <= last_date]
         
         # Create nan-mask
@@ -332,13 +373,13 @@ class Dataset_2D_VideoCond(Dataset):
         
         # Retrieve date and coords for idx instance
         start_date = self.wtd_data_raserized.time.values[idx] #self.wtd_df.iloc[idx, :].name[0]
-        end_date = start_date + np.timedelta64(self.twindow, "D")
+        end_date = start_date + np.timedelta64(self.twindow, self.config["frequency"])
           
         # Z = torch.stack(Z, dim = -1).squeeze()
         Z = torch.from_numpy(self.target_rasterized_coords).to(torch.float32)
         
         # Initial state WTD (t0) data        
-        X, X_mask = self.get_icon_target_data(start_date, end_date - np.timedelta64(1, "D"))
+        X, X_mask = self.get_icon_target_data(start_date, end_date - np.timedelta64(1, self.config["frequency"]))
         
         # Retrieve weather data
         W = self.get_weather_video(start_date, end_date)
@@ -352,7 +393,7 @@ class Dataset_2D_VideoCond(Dataset):
         
         target_t0 = self.wtd_df[[self.target, "nan_mask", "lat", "lon", "height"]].loc[pd.IndexSlice[start_date:end_date, :]] #.loc[self.wtd_df.index.get_level_values(0) == date]
         
-        timesteps = (end_date-start_date).astype('timedelta64[D]').astype(int) + 1
+        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int) + 1
         target_t0_values = target_t0[self.target].values.reshape((timesteps, len(self.sensor_id_list)))
         target_t0_mask = target_t0["nan_mask"].values.reshape((timesteps, len(self.sensor_id_list)))
         target_t0_lat = target_t0["lat"].values.reshape((timesteps, len(self.sensor_id_list)))
@@ -377,7 +418,7 @@ class Dataset_2D_VideoCond(Dataset):
         return Y, Y_mask
     
     def get_weather_video(self, start_date, end_date):
-        weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, "D"),
+        weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, self.config["frequency"]),
                                                     end_date)) #slice include extremes
         
         W_video = weather_video.to_array().values
@@ -716,7 +757,7 @@ class Dataset_2D_ImageCond(Dataset):
         
         # Retrieve date and coords for idx instance
         start_date = self.wtd_data_raserized.time.values[idx] #self.wtd_df.iloc[idx, :].name[0]
-        end_date = start_date + np.timedelta64(self.twindow, "D")
+        end_date = start_date + np.timedelta64(self.twindow, self.config["frequency"])
           
         # Z = torch.stack(Z, dim = -1).squeeze()
         Z = torch.from_numpy(self.target_rasterized_coords).to(torch.float32)
@@ -760,7 +801,7 @@ class Dataset_2D_ImageCond(Dataset):
         return Y, Y_mask
     
     def get_weather_video(self, start_date, end_date):
-        weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, "D"),
+        weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, self.config["frequency"]),
                                                     end_date)) #slice include extremes
         
         weather_doy = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
