@@ -155,19 +155,25 @@ class Weather_Attention_Block(nn.Module):
                  embedding_dim,
                  input_channles,
                  heads,
-                 output_dims):
+                 output_dims,
+                 activation):
         super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
         
         self.output_dims = output_dims
         
         cb_topo_emb = []
         cb_topo_emb.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
-        cb_topo_emb.append(nn.GELU())
+        cb_topo_emb.append(self.activation)
         self.cb_topo_emb = nn.Sequential(*cb_topo_emb)
         
         cb_value_emb = []
         cb_value_emb.append(nn.Linear(input_channles, embedding_dim))
-        cb_value_emb.append(nn.GELU())
+        cb_value_emb.append(self.activation)
         self.cb_value_emb = nn.Sequential(*cb_value_emb)
         
         self.cb_multihead_att_1 = nn.MultiheadAttention(embedding_dim, heads,
@@ -176,7 +182,7 @@ class Weather_Attention_Block(nn.Module):
         self.norm_linear_1 = nn.Sequential(
                                     nn.LayerNorm(normalized_shape = embedding_dim),
                                     nn.Linear(embedding_dim, output_dims[0]),
-                                    nn.GELU(),
+                                    self.activation,
                                     )
         
         # self.cb_multihead_att_2 = nn.MultiheadAttention(embedding_dim, heads,
@@ -247,17 +253,23 @@ class Conditioning_Attention_Block(nn.Module):
     def __init__(self,
                  embedding_dim,
                  heads,
-                 output_channels):
+                 output_channels,
+                 activation):
         super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
         
         cb_topo_emb = []
         cb_topo_emb.append(nn.Linear(3, embedding_dim))
-        cb_topo_emb.append(nn.GELU())
+        cb_topo_emb.append(self.activation)
         self.cb_topo_emb = nn.Sequential(*cb_topo_emb)
         
         cb_value_emb = []
         cb_value_emb.append(nn.Linear(4, embedding_dim))
-        cb_value_emb.append(nn.GELU())
+        cb_value_emb.append(self.activation)
         self.cb_value_emb = nn.Sequential(*cb_value_emb)
         
         self.cb_multihead_att_1 = nn.MultiheadAttention(embedding_dim, heads,
@@ -266,7 +278,7 @@ class Conditioning_Attention_Block(nn.Module):
         self.norm_linear_1 = nn.Sequential(
                                     nn.LayerNorm(normalized_shape = embedding_dim),
                                     nn.Linear(embedding_dim, output_channels),
-                                    nn.GELU(),
+                                    self.activation,
                                     )
         
         # self.cb_multihead_att_2 = nn.MultiheadAttention(embedding_dim, heads,
@@ -391,8 +403,14 @@ class ConvLSTMBlock(nn.Module):
     
 class Date_Conditioning_Block(nn.Module):
     def __init__(self,
-                 n_channels):
+                 n_channels,
+                 activation):
         super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
         
         self.n_channels = n_channels
         
@@ -401,7 +419,7 @@ class Date_Conditioning_Block(nn.Module):
             setattr(self, f"fc_0_{i}",
                     nn.Linear(2, 16))
             setattr(self, f"activation_0_{i}",
-                    nn.GELU()),
+                    self.activation),
             setattr(self, f"fc_1_{i}",
                     nn.Linear(16, 2))
             # setattr(self, f"activation_1_{i}",
@@ -1583,8 +1601,14 @@ class MHA_Block(nn.Module):
     
     def __init__(self,
                  embedding_dim,
-                 heads):
+                 heads,
+                 activation):
         super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
         
         
         self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim)
@@ -1596,7 +1620,7 @@ class MHA_Block(nn.Module):
         
         self.mlp = nn.Sequential(
                                     nn.Linear(embedding_dim, embedding_dim),
-                                    nn.GELU(),
+                                    self.activation,
                                     nn.Linear(embedding_dim, embedding_dim),
                                     )
         
@@ -1678,7 +1702,8 @@ class FullAttention_ViViT(nn.Module):
                 densification_dropout = 0.5,
                 upsampling_dim = [4,42,62],
                 spatial_dropout = None, # TODO
-                layernorm_affine = False):
+                layernorm_affine = False,
+                activation = "LeakyReLU"):
         
         super().__init__()
         
@@ -1693,14 +1718,23 @@ class FullAttention_ViViT(nn.Module):
         self.upsampling_dim = upsampling_dim
         self.layernorm_affine = layernorm_affine
         self.spatial_dropout = spatial_dropout
+        self.activation = activation
+        
+        if self.activation == "LeakyReLU":
+            self.activation_fn = nn.LeakyReLU()
+        elif self.activation == "GELU":
+            self.activation_fn = nn.GELU()
+            
         
         ### Conditioning module - Transofrmer like architecture ###
         
         self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.sparse_emb_dim,
                  heads = self.sparse_heads,
-                 output_channels = self.sparse_emb_dim)
+                 output_channels = self.sparse_emb_dim,
+                 activation = self.activation)
         
-        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.sparse_emb_dim*2))
+        self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.sparse_emb_dim*2),
+                                                                   activation= self.activation)
         
         ### Weather module ### 
         
@@ -1711,7 +1745,8 @@ class FullAttention_ViViT(nn.Module):
                  embedding_dim = self.sparse_emb_dim,
                  input_channles = self.input_dimension[0],
                  heads = self.sparse_heads,
-                 output_dims = [self.sparse_emb_dim, *self.upsampling_dim[1:]])
+                 output_dims = [self.sparse_emb_dim, *self.upsampling_dim[1:]],
+                 activation=self.activation)
         
         ### Join Modoule ### 
         
@@ -1763,12 +1798,15 @@ class FullAttention_ViViT(nn.Module):
         ## ViT blocks ## 
         
         #dense_emb_dim = int(self.sparse_emb_dim*2) #c*ph*pw
-        self.pasitional_embedding = self.PositionEmbedding(dense_seq_len, self.dense_emb_dim) # (seq_len, emb_dim)
+        # print([nd,nh,nw])
+        # print(dense_seq_len)
+        self.positional_embedding = self.PositionEmbedding(dense_seq_len, self.dense_emb_dim) # (seq_len, emb_dim)
         
         
         for i in range(self.mha_blocks):
             setattr(self, f"MHA_Block_{i}",
-                    MHA_Block(self.dense_emb_dim, self.dense_heads))
+                    MHA_Block(self.dense_emb_dim, self.dense_heads,
+                              self.activation))
             
             
         # depatchify
@@ -1777,8 +1815,8 @@ class FullAttention_ViViT(nn.Module):
         
         self.linear = nn.Sequential(
                                     MoveAxis(1,-1),
-                                    nn.Linear(output_channels, output_channels),
-                                    nn.GELU(),
+                                    # nn.Linear(output_channels, output_channels),
+                                    # self.activation_fn,
                                     nn.Linear(output_channels, 1))
         
         
@@ -1829,16 +1867,16 @@ class FullAttention_ViViT(nn.Module):
             
             Hidden_Video = (Hidden_Video * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
-            print(Hidden_Video.shape)
+            #print(Hidden_Video.shape)
             Hidden_Video = self.dense_embedding(Hidden_Video)
-            print(Hidden_Video.shape)
+            #print(Hidden_Video.shape)
             Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
-            print(Hidden_Video.shape)
+            #print(Hidden_Video.shape)
             
-            pasitional_embedding = self.pasitional_embedding[None,:,:].expand(Hidden_Video.shape[0],
+            positional_embedding = self.positional_embedding[None,:,:].expand(Hidden_Video.shape[0],
                                                                               -1,-1).to(Hidden_Video.device)  # (seq_len, emb_dim)
-            
-            Hidden_Video = Hidden_Video + pasitional_embedding
+            #print(positional_embedding.shape)
+            Hidden_Video = Hidden_Video + positional_embedding
             
             for i in range(self.mha_blocks):
             
@@ -1903,20 +1941,23 @@ class FullAttention_ViViT(nn.Module):
                 Hidden_Video_tlen = Hidden_Video.shape[2]
                 #print(Hidden_Video.shape)
                 
-                # Pad if len is too short
-                if Hidden_Video_tlen%self.patch_size[0] != 0:
+                # Date Conditioning
+                Hidden_Video = (Hidden_Video * date_conditioning_Frames[:,:,:,:,:,0]) + date_conditioning_Frames[:,:,:,:,:,1]
                 
-                    padding_len = Hidden_Video_tlen%self.patch_size[0]
+                # Pad if len is too short
+                if Hidden_Video_tlen%self.patch_size[0] != 0 or Hidden_Video_tlen<self.patch_size[0]:
+                
+                    padding_len = self.patch_size[0] - (Hidden_Video_tlen%self.patch_size[0])
                     padding_video = Hidden_Video[:,:,0,:,:].unsqueeze(2).expand(-1,-1,
                                                                     padding_len,
                                                                     -1,-1)
                     
-                    padding_date_conditioning = date_conditioning_Frames[:,:,0,:,:,:].unsqueeze(2).expand(-1,-1,
-                                                                    padding_len,
-                                                                    -1,-1,-1)
+                    # padding_date_conditioning = date_conditioning_Frames[:,:,0,:,:,:].unsqueeze(2).expand(-1,-1,
+                    #                                                 padding_len,
+                    #                                                 -1,-1,-1)
                     
-                    date_conditioning_Frames = torch.cat([padding_date_conditioning,
-                                        date_conditioning_Frames], dim = 2)
+                    # date_conditioning_Frames = torch.cat([padding_date_conditioning,
+                    #                     date_conditioning_Frames], dim = 2)
                     
                     Hidden_Video = torch.cat([padding_video,
                                         Hidden_Video], dim = 2)
@@ -1928,20 +1969,17 @@ class FullAttention_ViViT(nn.Module):
                 else:
                     padding_len = 0
                 
-                # Date Conditioning
-                Hidden_Video = (Hidden_Video * date_conditioning_Frames[:,:,:,:,:,0]) + date_conditioning_Frames[:,:,:,:,:,1]
-                
                 # Tubelet Embedding
                 Hidden_Video = self.dense_embedding(Hidden_Video)
                 #print(Hidden_Video.shape)
                 Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
                 
                 # Positional Embedding
-                pasitional_embedding = self.PositionEmbedding(Hidden_Video.shape[1], self.dense_emb_dim).to(Hidden_Video.device)
-                pasitional_embedding = pasitional_embedding[None,:,:].expand(Hidden_Video.shape[0],
+                positional_embedding = self.PositionEmbedding(Hidden_Video.shape[1], self.dense_emb_dim).to(Hidden_Video.device)
+                positional_embedding = positional_embedding[None,:,:].expand(Hidden_Video.shape[0],
                                                                               -1,-1)  # (seq_len, emb_dim)
             
-                Hidden_Video = Hidden_Video + pasitional_embedding
+                Hidden_Video = Hidden_Video + positional_embedding
                 
                 for i in range(self.mha_blocks):
             
