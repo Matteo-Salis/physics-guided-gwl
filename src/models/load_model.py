@@ -239,7 +239,8 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"]), model_name
+                spatial_dropout = config["spatial_dropout"],
+                activation = config["activation"]), model_name
         
         
     elif config["model"] == "FullAttention_ViViT":
