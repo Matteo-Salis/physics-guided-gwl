@@ -1,5 +1,6 @@
 from functools import partial
 
+
 from train_test.training_1d import *
 from train_test.training_2d import *
 from train_test.training_2D import *
@@ -117,7 +118,7 @@ def training_model(config):
                 print(f"Physics Scheduling: {physics_scheduling}")
             
             elif isinstance(config["physics_scheduling"], float):
-                physics_scheduling = torch.ones(config["epochs"]) * config["physics_scheduling"]
+                physics_scheduling = torch.ones(config["epochs"]) * config["physics_scheduling"]       
         
             
             return partial(train_pinns_model, 

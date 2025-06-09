@@ -1,4 +1,5 @@
 import torch
+from torch.optim import lr_scheduler
 
 def load_optimizer(config, model):
     
@@ -35,3 +36,13 @@ def load_optimizer(config, model):
                                momentum=config["momentum"],
                                weight_decay=config["weight_decay"],
                                nesterov=config["nesterov"])
+        
+        
+        
+def load_lr_scheduler(config, optimizer):
+    if config["lr_scheduling"] == "linear":
+        pass
+    elif config["lr_scheduling"] == "exponential":
+        pass
+    elif isinstance(config["lr_scheduling"], list):
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=config["lr_scheduling"][1], gamma=config["lr_scheduling"][0])
