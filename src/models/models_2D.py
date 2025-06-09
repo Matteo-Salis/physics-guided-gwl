@@ -156,8 +156,11 @@ class Weather_Attention_Block(nn.Module):
                  input_channles,
                  heads,
                  output_dims,
-                 activation):
+                 activation,
+                 elementwise_affine):
         super().__init__()
+        
+        self.elementwise_affine = elementwise_affine
         
         if activation == "LeakyReLU":
             self.activation = nn.LeakyReLU()
@@ -180,8 +183,8 @@ class Weather_Attention_Block(nn.Module):
                                                    batch_first=True)
         
         self.norm_linear_1 = nn.Sequential(
-                                    nn.LayerNorm(normalized_shape = embedding_dim),
-                                    nn.Linear(embedding_dim, output_dims[0]),
+                                    nn.LayerNorm(normalized_shape = int(embedding_dim*2), elementwise_affine=self.elementwise_affine),
+                                    nn.Linear(int(embedding_dim*2), output_dims[0]),
                                     self.activation,
                                     )
         
@@ -220,6 +223,10 @@ class Weather_Attention_Block(nn.Module):
                                             key = keys,
                                             value = values
                                             )
+            
+            weather_out = torch.cat([weather_out,
+                                     queries], dim = -1)
+            
             weather_out = self.norm_linear_1(weather_out)
             
             # weather_out_skip_2 = weather_out
@@ -254,8 +261,11 @@ class Conditioning_Attention_Block(nn.Module):
                  embedding_dim,
                  heads,
                  output_channels,
-                 activation):
+                 activation,
+                 elementwise_affine):
         super().__init__()
+        
+        self.elementwise_affine = elementwise_affine
         
         if activation == "LeakyReLU":
             self.activation = nn.LeakyReLU()
@@ -276,8 +286,8 @@ class Conditioning_Attention_Block(nn.Module):
                                                    batch_first=True)
         
         self.norm_linear_1 = nn.Sequential(
-                                    nn.LayerNorm(normalized_shape = embedding_dim),
-                                    nn.Linear(embedding_dim, output_channels),
+                                    nn.LayerNorm(normalized_shape = int(embedding_dim*2), elementwise_affine=self.elementwise_affine),
+                                    nn.Linear(int(embedding_dim*2), output_channels),
                                     self.activation,
                                     )
         
@@ -317,6 +327,9 @@ class Conditioning_Attention_Block(nn.Module):
                                             value = values,
                                             key_padding_mask = ~X_mask, #(N,S)
                                             )
+            
+            target_Icond = torch.cat([target_Icond,
+                                      queries], dim = -1)
             
             target_Icond = self.norm_linear_1(target_Icond)
             
@@ -1276,7 +1289,8 @@ class CausalConv3d(torch.nn.Conv3d):
                  stride=[1,1,1],
                  dilation=[1,1,1],
                  groups=1,
-                 bias=True):
+                 bias=True,
+                 spatial_padding = True):
 
         super(CausalConv3d, self).__init__(
             input_channels,
@@ -1288,6 +1302,7 @@ class CausalConv3d(torch.nn.Conv3d):
             groups=groups,
             bias=bias)
     
+        self.spatial_padding = spatial_padding
         self.kernel_size = kernel_size
         self.dilation = dilation
         self.stride = stride
@@ -1339,20 +1354,21 @@ class CausalConv3d(torch.nn.Conv3d):
 
         temporal_padding_len = self.compute_padding(input.shape[2], 0)
         #print(temporal_padding_len)
-        spatial_h_padding_len = self.compute_padding(input.shape[3], 1)
-        #print(spatial_h_padding_len)
-        spatial_w_padding_len = self.compute_padding(input.shape[4], 2)
-        #print(spatial_w_padding_len)
         
-        
-        time_padded_video = self.temporal_causal_padding(input, padding_len = temporal_padding_len, 
+        padded_video = self.temporal_causal_padding(input, padding_len = temporal_padding_len, 
                                                          padding_values = conditional_padding)
         
-        full_padded_video = self.spatial_padding(time_padded_video,
-                                                 spatial_h_padding_len,
-                                                 spatial_w_padding_len)
+        if self.spatial_padding is True:
+            spatial_h_padding_len = self.compute_padding(input.shape[3], 1)
+            #print(spatial_h_padding_len)
+            spatial_w_padding_len = self.compute_padding(input.shape[4], 2)
+            #print(spatial_w_padding_len)
         
-        return super(CausalConv3d, self).forward(full_padded_video)
+            padded_video = self.spatial_padding(padded_video,
+                                                    spatial_h_padding_len,
+                                                    spatial_w_padding_len)
+            
+        return super(CausalConv3d, self).forward(padded_video)
 
 class FullAttention_CausalConv(nn.Module):
     def __init__(self,
@@ -1602,8 +1618,11 @@ class MHA_Block(nn.Module):
     def __init__(self,
                  embedding_dim,
                  heads,
-                 activation):
+                 activation,
+                 elementwise_affine):
         super().__init__()
+        
+        self.elementwise_affine = elementwise_affine
         
         if activation == "LeakyReLU":
             self.activation = nn.LeakyReLU()
@@ -1611,11 +1630,16 @@ class MHA_Block(nn.Module):
             self.activation = nn.GELU()
         
         
-        self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim)
+        self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
+                                         elementwise_affine = self.elementwise_affine)
         
         self.mha = nn.MultiheadAttention(embedding_dim, heads,
                                          batch_first=True)
-        self.norm_layer_2 = nn.LayerNorm(normalized_shape = embedding_dim)
+        
+        self.dropout_1 = nn.Dropout1d(0.35)
+        
+        self.norm_layer_2 = nn.LayerNorm(normalized_shape = embedding_dim,
+                                         elementwise_affine = self.elementwise_affine)
         
         
         self.mlp = nn.Sequential(
@@ -1624,7 +1648,9 @@ class MHA_Block(nn.Module):
                                     nn.Linear(embedding_dim, embedding_dim),
                                     )
         
-    def forward(self, input):
+        self.dropout_2 = nn.Dropout1d(0.35)
+        
+    def forward(self, input, attn_mask = None):
         
         skip_1 = input.clone()
         output = self.norm_layer_1(input)
@@ -1632,14 +1658,22 @@ class MHA_Block(nn.Module):
         output, _ = self.mha(
                             query = output, #(N,L,E)
                             key = output,
-                            value = output
+                            value = output,
+                            attn_mask = attn_mask,
+                            is_causal = True
                             )
+        
+        output = self.dropout_1(torch.moveaxis(output, source = 1, destination = -1))
+        output = torch.moveaxis(output, source = 1, destination = -1)
         
         output = output + skip_1
         skip_2 = output.clone()
         
         output = self.norm_layer_2(output)
         output = self.mlp(output)
+        
+        output = self.dropout_2(torch.moveaxis(output, source = 1, destination = -1))
+        output = torch.moveaxis(output, source = 1, destination = -1)
         
         output = output + skip_2
         
@@ -1688,7 +1722,7 @@ class FullAttention_ViViT(nn.Module):
             for j in range(emb_size):
                 embeddings[i][j] = np.sin(i / (pow(10000, j / emb_size))) if j % 2 == 0 else np.cos(i / (pow(10000, (j - 1) / emb_size)))
         
-        embeddings = embeddings.clone().requires_grad_()
+        #embeddings = embeddings.clone().requires_grad_()
         return embeddings
     
     def __init__(self,
@@ -1701,7 +1735,7 @@ class FullAttention_ViViT(nn.Module):
                 mha_blocks = 3,
                 densification_dropout = 0.5,
                 upsampling_dim = [4,42,62],
-                spatial_dropout = None, # TODO
+                spatial_dropout = 0.0, # TODO
                 layernorm_affine = False,
                 activation = "LeakyReLU"):
         
@@ -1731,7 +1765,8 @@ class FullAttention_ViViT(nn.Module):
         self.Icondition_Module = Conditioning_Attention_Block(embedding_dim = self.sparse_emb_dim,
                  heads = self.sparse_heads,
                  output_channels = self.sparse_emb_dim,
-                 activation = self.activation)
+                 activation = self.activation,
+                 elementwise_affine= self.layernorm_affine)
         
         self.Date_Conditioning_Module_wm = Date_Conditioning_Block(int(self.sparse_emb_dim*2),
                                                                    activation= self.activation)
@@ -1746,7 +1781,8 @@ class FullAttention_ViViT(nn.Module):
                  input_channles = self.input_dimension[0],
                  heads = self.sparse_heads,
                  output_dims = [self.sparse_emb_dim, *self.upsampling_dim[1:]],
-                 activation=self.activation)
+                 activation=self.activation,
+                 elementwise_affine=self.layernorm_affine)
         
         ### Join Modoule ### 
         
@@ -1774,39 +1810,44 @@ class FullAttention_ViViT(nn.Module):
         
             dense_embedding.append(nn.ReplicationPad3d(padding  = self.spatial_padding))
             
-            nd = self.upsampling_dim[0] // self.patch_size[0]
-            nh = (self.upsampling_dim[1]+(self.spatial_padding[2])) // self.patch_size[1]
-            nw = (self.upsampling_dim[2]+(self.spatial_padding[0])) // self.patch_size[2]
+            self.nd = self.upsampling_dim[0] // self.patch_size[0]
+            self.nh = (self.upsampling_dim[1]+(self.spatial_padding[2])) // self.patch_size[1]
+            self.nw = (self.upsampling_dim[2]+(self.spatial_padding[0])) // self.patch_size[2]
             
         else:
             self.spatial_padding = None
             
-            nd = self.upsampling_dim[0] // self.patch_size[0]
-            nh = self.upsampling_dim[1] // self.patch_size[1]
-            nw = self.upsampling_dim[2] // self.patch_size[2]
+            self.nd = self.upsampling_dim[0] // self.patch_size[0]
+            self.nh = self.upsampling_dim[1] // self.patch_size[1]
+            self.nw = self.upsampling_dim[2] // self.patch_size[2]
             
-        dense_seq_len = nd*nh*nw
+        self.dense_seq_len = self.nd*self.nh*self.nw
         
-        dense_embedding.append(nn.Conv3d(int(self.sparse_emb_dim*2),
+        dense_embedding.append(CausalConv3d(int(self.sparse_emb_dim*2),
                                          self.dense_emb_dim,
                                          kernel_size = self.patch_size,
                                          stride = self.patch_size,
-                                         padding="valid"))
+                                         padding="valid",
+                                         spatial_padding = False))
+        dense_embedding.append(LayerNorm_MA(self.dense_emb_dim, 1, -1))
+        dense_embedding.append(self.activation_fn)
         
         self.dense_embedding = nn.Sequential(*dense_embedding)
         
         ## ViT blocks ## 
         
-        #dense_emb_dim = int(self.sparse_emb_dim*2) #c*ph*pw
+        #self.dense_emb_dim = int(self.sparse_emb_dim*2) #c*ph*pw
         # print([nd,nh,nw])
         # print(dense_seq_len)
-        self.positional_embedding = self.PositionEmbedding(dense_seq_len, self.dense_emb_dim) # (seq_len, emb_dim)
+        
+        self.positional_embedding = self.PositionEmbedding(self.dense_seq_len, self.dense_emb_dim) # (seq_len, emb_dim)
         
         
         for i in range(self.mha_blocks):
             setattr(self, f"MHA_Block_{i}",
                     MHA_Block(self.dense_emb_dim, self.dense_heads,
-                              self.activation))
+                              self.activation,
+                              elementwise_affine = self.layernorm_affine))
             
             
         # depatchify
@@ -1815,8 +1856,8 @@ class FullAttention_ViViT(nn.Module):
         
         self.linear = nn.Sequential(
                                     MoveAxis(1,-1),
-                                    # nn.Linear(output_channels, output_channels),
-                                    # self.activation_fn,
+                                    nn.Linear(output_channels, output_channels),
+                                    self.activation_fn,
                                     nn.Linear(output_channels, 1))
         
         
@@ -1867,11 +1908,23 @@ class FullAttention_ViViT(nn.Module):
             
             Hidden_Video = (Hidden_Video * date_conditioning_wm[:,:,:,:,:,0]) + date_conditioning_wm[:,:,:,:,:,1]
             
+            Hidden_Video =  nn.functional.dropout3d(Hidden_Video, p = self.spatial_dropout, training = True)
+            
             #print(Hidden_Video.shape)
             Hidden_Video = self.dense_embedding(Hidden_Video)
-            #print(Hidden_Video.shape)
+            
+            ### Causal Mask 
+            causal_mask = torch.tril(torch.ones(Hidden_Video.shape[2], Hidden_Video.shape[2]))[None,:,:].expand(int(Hidden_Video.shape[0]*self.dense_heads),
+                                                                                                                -1,-1)
+            causal_mask = causal_mask.repeat_interleave(int(Hidden_Video.shape[3]*Hidden_Video.shape[4]),
+                                                        dim = 1)
+            causal_mask = torch.nn.functional.pad(causal_mask,
+                                                (0,causal_mask.shape[1]-causal_mask.shape[2]),
+                                                mode = "replicate")
+            print(causal_mask.shape)
+            print(Hidden_Video.shape)
             Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
-            #print(Hidden_Video.shape)
+            print(Hidden_Video.shape)
             
             positional_embedding = self.positional_embedding[None,:,:].expand(Hidden_Video.shape[0],
                                                                               -1,-1).to(Hidden_Video.device)  # (seq_len, emb_dim)
@@ -1880,7 +1933,7 @@ class FullAttention_ViViT(nn.Module):
             
             for i in range(self.mha_blocks):
             
-                Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video)
+                Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video, causal_mask)
             
             if self.spatial_padding is None:
             
@@ -1900,7 +1953,7 @@ class FullAttention_ViViT(nn.Module):
                                             self.spatial_padding[2]:,
                                             self.spatial_padding[0]:]
             
-            #print(Hidden_Video.shape)        
+            #print(Hidden_Video.shape)         
             
             Output_Video = self.linear(Hidden_Video)
             
@@ -1913,6 +1966,20 @@ class FullAttention_ViViT(nn.Module):
             Hidden_Frames = []
             Hidden_Video = []
             Output_Video = []
+            
+            inference_nd = W[0].shape[2] // self.patch_size[0]
+            seq_len = self.dense_seq_len * ((inference_nd)/self.nd)
+            #print(seq_len)
+            positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
+            
+            ### Causal Mask 
+            causal_masks = torch.tril(torch.ones(inference_nd, inference_nd))[None,:,:].expand(int(W[0].shape[0]*self.dense_heads),
+                                                                                                                -1,-1)
+            causal_masks = causal_masks.repeat_interleave(int(self.nh*self.nw),
+                                                        dim = 1)
+            causal_masks = torch.nn.functional.pad(causal_masks,
+                                                (0,causal_masks.shape[1]-causal_masks.shape[2]),
+                                                mode = "replicate")
 
             
             for timestep in tqdm(range(W[0].shape[2])):
@@ -1939,7 +2006,8 @@ class FullAttention_ViViT(nn.Module):
                 Hidden_Frames.append(Hidden_Frame)
                 Hidden_Video = torch.cat(Hidden_Frames, dim = 2)
                 Hidden_Video_tlen = Hidden_Video.shape[2]
-                #print(Hidden_Video.shape)
+                print(timestep)
+                print(Hidden_Video.shape)
                 
                 # Date Conditioning
                 Hidden_Video = (Hidden_Video * date_conditioning_Frames[:,:,:,:,:,0]) + date_conditioning_Frames[:,:,:,:,:,1]
@@ -1962,28 +2030,42 @@ class FullAttention_ViViT(nn.Module):
                     Hidden_Video = torch.cat([padding_video,
                                         Hidden_Video], dim = 2)
                     
-                    #print("Padding HV", Hidden_Video.shape)
+                    print("Padding HV", Hidden_Video.shape)
                     
                     Hidden_Video_tlen = Hidden_Video.shape[2]
                     
                 else:
                     padding_len = 0
                 
+                Hidden_Video =  nn.functional.dropout3d(Hidden_Video, p = self.spatial_dropout, training = mc_dropout)
                 # Tubelet Embedding
                 Hidden_Video = self.dense_embedding(Hidden_Video)
                 #print(Hidden_Video.shape)
+                print("HV sh", Hidden_Video.shape)
+                print("HV len", Hidden_Video_tlen)
                 Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
                 
                 # Positional Embedding
-                positional_embedding = self.PositionEmbedding(Hidden_Video.shape[1], self.dense_emb_dim).to(Hidden_Video.device)
-                positional_embedding = positional_embedding[None,:,:].expand(Hidden_Video.shape[0],
+                #print(Hidden_Video.shape)
+                #print(positional_embeddings.shape)
+                positional_embedding = positional_embeddings[None,:Hidden_Video.shape[1],:].expand(Hidden_Video.shape[0],
                                                                               -1,-1)  # (seq_len, emb_dim)
+                print("PE:", positional_embedding.shape)
+                # positional_embedding = self.positional_embedding[None,:,:].expand(Hidden_Video.shape[0],
+                #                                                               -1,-1).to(Hidden_Video.device)  # (seq_len, emb_dim)
+            
+                causal_mask = causal_masks[:,
+                                          :int(Hidden_Video_tlen*self.nh*self.nw),
+                                          :int(Hidden_Video_tlen*self.nh*self.nw)]
+                print("CM", causal_mask.shape)
+                #print(causal_mask)
             
                 Hidden_Video = Hidden_Video + positional_embedding
                 
                 for i in range(self.mha_blocks):
             
-                    Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video)
+                    Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video,
+                                                                   causal_mask)
                 
                 #print(Hidden_Video.shape)
                 # Hidden_Video = self.depatchify(Hidden_Video,

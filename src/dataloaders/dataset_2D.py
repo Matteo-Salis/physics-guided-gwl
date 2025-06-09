@@ -252,20 +252,21 @@ class Dataset_2D_VideoCond(Dataset):
         self.wtd_names = self.wtd_names.to_crs('epsg:4326')
         
         # Subset Stations
-        discard_sensor_list = ["00405910001",
-                                "00119710001",
-                                "00127210003",
-                                "00117110001",
-                                "00421710001",
-                                "00121510001",
-                                "00104810001",
-                                "00127210005",
-                                "00402910001",
-                                "00403410001",
-                                "00126010001",
-                                "00105110001"]
-        self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(discard_sensor_list), :]
-        self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(discard_sensor_list), :]
+        if self.config["discard_sensor_list"] is not None:
+            # discard_sensor_list = ["00405910001",
+            #                         "00119710001",
+            #                         "00127210003",
+            #                         "00117110001",
+            #                         "00421710001",
+            #                         "00121510001",
+            #                         "00104810001",
+            #                         "00127210005",
+            #                         "00402910001",
+            #                         "00403410001",
+            #                         "00126010001",
+            #                         "00105110001"]
+            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(config["discard_sensor_list"]), :]
+            self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(config["discard_sensor_list"]), :]
         
         
                 # sensor_list = ["00417910001",
