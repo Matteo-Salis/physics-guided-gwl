@@ -377,7 +377,7 @@ def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
     
     return Z
 
-def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = False, eval = True):
+def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = None, eval = True):
     
     start_date_input = start_date
     start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
@@ -397,10 +397,11 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = Fa
         model.train()
         teacher_forcing = True
     
-    if Z_grid is True:
-        Z = torch.from_numpy(grid_generation(dataset)).to(torch.float32)
-    else:
+    if Z_grid is None:
         Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
+    else:
+        Z = torch.from_numpy(grid_generation(dataset, Z_grid[0], Z_grid[1])).to(torch.float32)
+        
         
         
     W = dataset.get_weather_video(start_date_output,
