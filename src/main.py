@@ -45,13 +45,13 @@ def main(config):
     # load dataset
     print("Loading dataset...")
     dataset = load_dataset(config)
-    print("Dataset loaded.")
+    print("Dataset loaded!")
     print(f"Length of the dataset: {dataset.__len__()}")
 
     # load dataloader
     print("Getting dataloader...")
     train_loader, test_loader = get_dataloader(dataset, config)
-    print("Dataloaders ready.")
+    print("Dataloaders ready!")
 
     # load model
     device = (

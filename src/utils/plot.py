@@ -13,6 +13,7 @@ import matplotlib.animation as animation
 from rasterio.enums import Resampling
 
 from torchview import draw_graph
+from functools import partial
 
 ################
 ##### 1-D ######
@@ -345,11 +346,155 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
             f"{mode}_image_prediction" :  wandb.Image(fig, caption=f"Prediction image ep{i} t{timestep} {mode}")
         })
         
+        
+########################
+###### SparseData ######
+########################
+
+def compute_predictions(start_date, twindow, dataset, model, device, eval = True):
+    
+    start_date_input = start_date
+    start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
+    
+    end_date_input = start_date_input + np.timedelta64(twindow-1, dataset.config["frequency"])
+    end_date_output = start_date_output + np.timedelta64(twindow-1, dataset.config["frequency"])
+    
+    if eval is True:
+        model.eval()                                                    
+        X, X_mask = dataset.get_target_data(start_date_input, start_date_input)    
+        X = X.squeeze()
+        X_mask = X_mask.squeeze()
+        teacher_forcing = False
+        
+    else:
+        X, X_mask = dataset.get_target_data(start_date_input, end_date_input)
+        model.train()
+        teacher_forcing = True
+        
+    Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
+    W = dataset.get_weather_video(start_date_output,
+                                  end_date_output)
+    
+    Y, _ = dataset.get_target_data(start_date_output,
+                                   end_date_output,
+                                   get_coord=False,
+                                   fill_na = False)
+    
+    
+    
+    Y_hat = model(X = X.unsqueeze(0).to(device),
+                    Z = Z.unsqueeze(0).to(device),
+                    W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
+                    X_mask = X_mask.unsqueeze(0).to(device),
+                    teacher_forcing = teacher_forcing)
+    
+    return [Y.detach().cpu(),
+            Y_hat.detach().cpu()]
+    
+    
+def build_ds_from_pred(y_hat, start_date, twindow, freq, sensor_names):
+    
+    end_date = start_date + np.timedelta64(twindow-1, freq)
+    pd_ds = pd.DataFrame(data = y_hat,
+                         index = pd.date_range(start_date, end_date, freq = freq),
+                         columns = sensor_names)
+    
+    return pd_ds
+
+
+def plot_time_series(y_hat, y, title,
+                   save_dir = None,
+                   print_plot = False):
+    
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(y_hat, label = "Prediction", marker = "o", lw = 0.7, markersize = 2, color = "tab:orange")
+    ax.plot(y, label = "Truth", marker = "o", lw = 0.7, markersize = 2, color = "tab:blue")
+    
+    ax.tick_params(axis='x', rotation=40)
+
+    ax.set_title(title)
+
+    ax.legend()
+    
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+        
+    if print_plot is True:
+        plt.show()
+        
+    else:
+        return fig
+    
+    
+
+
+# plot_sensor_ts(sensor_ds)
+
+def wandb_time_series(dataset, model, device,
+                              start_dates_input, twindow,
+                              sensors_to_plot, 
+                              #timesteps_to_look,
+                              eval_mode):
+    
+        
+        for date in start_dates_input:
+        
+            Y_test, Y_hat_test = compute_predictions(start_date = np.datetime64(date),
+                                                                            twindow = twindow,
+                                                                            model = model,
+                                                                            device = device,
+                                                                            dataset = dataset,
+                                                                            eval = eval_mode)
+            
+            
+            # Y_hat_test_xr_denorm = build_xarray(data = Y_hat_test,
+            #              dataset = dataset,
+            #              start_date = date,
+            #              twindow = twindow)
+            
+            #WTD_hat_test_xr_denorm = dataset.target_rasterized_dtm.values - Y_hat_test_xr_denorm
+            
+            Y_hat_test_ds = build_ds_from_pred(Y_hat_test, np.datetime64(date), twindow, dataset.config["frequency"], dataset.sensor_id_list)
+            Y_test_ds = build_ds_from_pred(Y_test, np.datetime64(date), twindow, dataset.config["frequency"], dataset.sensor_id_list)
+            
+            # Denormalization
+            Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+            Y_test_ds = (Y_test_ds * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+            
+            # Y_test_xr_denorm = build_xarray(data = Y_test,
+            #              dataset = dataset,
+            #              start_date = date,
+            #              twindow = twindow)
+            
+            
+            # for timestep in timesteps_to_look:
+                    
+            #     wandb.log({f"pred_map_{date}-t{timestep}":wandb.Image(plot_h_wtd_maps(Y_hat_test_xr_denorm,
+            #                                                                             WTD_hat_test_xr_denorm,
+            #                                                                             date, timestep,
+            #                                                                             save_dir = None, 
+            #                                                                             print_plot = False))})
+                              
+            for sensor_id in sensors_to_plot:
+                
+                #municipality, lat, lon = find_munic_lat_lon_sensor(dataset, sensor_id)
+                # sensor_pred_ds = find_sensor_pred_in_xr(Y_test_xr_denorm, Y_hat_test_xr_denorm,
+                #                                         lat = lat,
+                #                                         lon = lon,
+                #                                         )
+                
+                municipality = dataset.wtd_names["munic"].loc[dataset.wtd_names["sensor_id"] == sensor_id].values[0]
+                
+                wandb.log({f"{municipality}_ts_{date} -":wandb.Image(plot_time_series(
+                                                                            Y_hat_test_ds[sensor_id], Y_test_ds[sensor_id],
+                                                                            title = f"{sensor_id} - {municipality} - from {date}",
+                                                                            save_dir = None,
+                                                                            print_plot = False))})
+        
+        
 ################
 #### 2D ########
 ################
-
-from functools import partial
 
 def test_data_prediction(start_date, twindow, dataset, model, device, eval = True):
     

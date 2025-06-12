@@ -16,7 +16,8 @@ from loss.losses_2D import *
     
     
 def test_dl_model(epoch, dataset, model, test_loader, loss_fn,
-                    start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
+                    start_dates_plot, twindow_plot, sensors_to_plot,
+                    #timesteps_to_look,
                     device = "cuda"):
     
     with torch.no_grad():
@@ -44,10 +45,10 @@ def test_dl_model(epoch, dataset, model, test_loader, loss_fn,
                                 print("Test_data_loss: ", loss.item())
                                 wandb.log({"Test_data_loss":loss.item()})
                             
-                            plot_maps_and_time_series(dataset, model, device,
+                            wandb_time_series(dataset, model, device,
                               start_dates_plot, twindow_plot,
                               sensors_to_plot, 
-                              timesteps_to_look,
+                              #timesteps_to_look,
                               eval_mode=True)
                             
                             
