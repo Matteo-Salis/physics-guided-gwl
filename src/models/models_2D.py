@@ -2471,7 +2471,7 @@ class SparseData_Transformer(nn.Module):
             Sparse_data_mask = X_mask
             Fused_st_list = []
             
-            if [W[0].shape[2], X.shape[-2]] != self.target_dim:
+            if [W[0].shape[2], Z.shape[1]] != self.target_dim:
                 
                 # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
                 # Positional Embedding
@@ -2486,9 +2486,9 @@ class SparseData_Transformer(nn.Module):
             
                 # Causal Mask
                 causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
-                causal_masks = causal_masks.repeat_interleave(X.shape[-2],  # Repeating for spatial extent
+                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
                                                             dim = 0)
-                causal_masks = causal_masks.repeat_interleave(X.shape[-2],  # Repeating for spatial extent
+                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
                                                         dim = 1)
                 
                 causal_masks = ~causal_masks.to(torch.bool)
