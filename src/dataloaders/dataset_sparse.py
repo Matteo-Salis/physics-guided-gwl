@@ -473,12 +473,14 @@ class Dataset_Sparse(Dataset):
         W_video = torch.cat([weather_coords,
                                     W_video], axis=0)
     
-        weather_doy = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-        weather_years = weather_video.time.dt.year.values
+        weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+        weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+        #weather_years = weather_video.time.dt.year.values
         
-        W_doy = torch.from_numpy(weather_doy).to(torch.float32)
-        W_years = torch.from_numpy(weather_years).to(torch.float32)
-        W_date = torch.stack([W_doy, W_years], dim = -1)
+        W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+        W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+        #W_years = torch.from_numpy(weather_years).to(torch.float32)
+        W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
         
         
         
