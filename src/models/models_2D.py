@@ -2090,13 +2090,16 @@ class FullAttention_ViViT(nn.Module):
 ###########################################
 ############ SparseData Models ############
 ###########################################
-class Date_Conditioning_Block(nn.Module):
+class FiLM_Conditioning_Block(nn.Module):
     """
     FiLM Conditioning Layer
     """
     def __init__(self,
-                 n_channels,
-                 activation):
+                 in_channels,
+                 hidden_channels,
+                 out_channels,
+                 activation,
+                 FiLMed_layers):
         super().__init__()
         
         if activation == "LeakyReLU":
@@ -2104,17 +2107,24 @@ class Date_Conditioning_Block(nn.Module):
         elif activation == "GELU":
             self.activation = nn.GELU()
         
-        self.n_channels = n_channels
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.FiLMed_layers = FiLMed_layers
         
-        for i in range(self.n_channels):
+        for i in range(self.out_channels):
             
             setattr(self, f"fc_0_{i}",
-                    nn.Linear(2, 32))
+                    nn.Linear(self.in_channels, self.hidden_channels))
             setattr(self, f"activation_0_{i}",
                     self.activation),
             setattr(self, f"fc_1_{i}",
-                    nn.Linear(32, 2))
+                    nn.Linear(self.hidden_channels, self.hidden_channels))
             setattr(self, f"activation_1_{i}",
+                    self.activation),
+            setattr(self, f"fc_2_{i}",
+                    nn.Linear(self.hidden_channels, int(self.FiLMed_layers*2)))
+            setattr(self, f"activation_2_{i}",
                     self.activation),
             
             
@@ -2124,11 +2134,13 @@ class Date_Conditioning_Block(nn.Module):
         output (N, C, *, 2)
         """
         outputs = []
-        for i in range(self.n_channels):
+        for i in range(self.out_channels):
             output = getattr(self, f"fc_0_{i}")(input)
             output = getattr(self, f"activation_0_{i}")(output)
             output = getattr(self, f"fc_1_{i}")(output)
             output = getattr(self, f"activation_1_{i}")(output)
+            output = getattr(self, f"fc_2_{i}")(output)
+            output = getattr(self, f"activation_2_{i}")(output)
             
             outputs.append(output)
         
@@ -2290,9 +2302,19 @@ class SparseData_Transformer(nn.Module):
                                 activation = self.activation,
                                 elementwise_affine= self.layernorm_affine)
         
-        self.Date_Conditioning_Module = Date_Conditioning_Block(int(self.spatial_embedding_dim*2),
-                                                                   activation= self.activation)
+        self.ST_Conditioning_Module = FiLM_Conditioning_Block(
+                                                            in_channels = 5,
+                                                            hidden_channels = 64, 
+                                                            out_channels = int(self.spatial_embedding_dim*2), 
+                                                            activation = self.activation,
+                                                            FiLMed_layers = 2)
         
+        # self.ST_Conditioning_Module = FiLM_Conditioning_Block(in_channels = 5,
+        #                                                     hidden_channles = 64, 
+        #                                                     out_channels = self.fusion_embedding_dim, 
+        #                                                     activation = self.activation)
+        
+
         ### Weather module ### 
         
         self.Weather_Module = Spatial_Attention_Block(
@@ -2312,8 +2334,8 @@ class SparseData_Transformer(nn.Module):
         ### Flatten Space-Time Dimension
         
         ### Spatio-Temporal Positional Embedding        
-        self.positional_embedding = self.PositionEmbedding(math.prod(self.target_dim),
-                                                           self.fusion_embedding_dim)
+        # self.positional_embedding = self.PositionEmbedding(math.prod(self.target_dim),
+        #                                                    self.fusion_embedding_dim)
         
         ### Causal Mask 
         self.causal_mask = torch.tril(torch.ones((self.target_dim[0], self.target_dim[0]))) # Tempooral Mask
@@ -2333,20 +2355,28 @@ class SparseData_Transformer(nn.Module):
             
         ### De-Flatten Space-Time Dimension
         
-        self.linear = nn.Sequential(
-                                    nn.Linear(self.fusion_embedding_dim,
-                                              self.fusion_embedding_dim//2),
-                                    nn.LayerNorm(self.fusion_embedding_dim//2),
+        self.linear = nn.Linear(self.fusion_embedding_dim,
+                                  int(self.spatial_embedding_dim*2))
+                                   
+        self.output = nn.Sequential(self.activation_fn,
+                                    nn.Linear(int(self.spatial_embedding_dim*2),
+                                                self.spatial_embedding_dim),
+                                    nn.LayerNorm(self.spatial_embedding_dim),
                                     self.activation_fn,
-                                    nn.Linear(self.fusion_embedding_dim//2, 1))
+                                    nn.Linear(self.spatial_embedding_dim, 1))
         
         
         
     def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False):
         
         ### Weather module ### 
-            
-        Date_Conditioning_t = self.Date_Conditioning_Module(W[1]) # N, D, 2, C
+        
+        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1)
+        ST_conditioning_input = torch.cat([ST_conditioning_input,
+                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1)],
+                                          dim = -1)
+        
+        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C
         
         ### Conditioning modules ###
         
@@ -2385,11 +2415,11 @@ class SparseData_Transformer(nn.Module):
             Weather_st = torch.stack(Weather_st, dim = 1)
             
             # Spatial repetition 
-            Date_Conditioning_st = Date_Conditioning_t[:,:,None,:,:].expand(-1,
-                                                                            -1,
-                                                                            self.target_dim[1],
-                                                                            -1,
-                                                                            -1)
+            # Date_Conditioning_st = Date_Conditionings[:,:,None,:,:].expand(-1,
+            #                                                                 -1,
+            #                                                                 self.target_dim[1],
+            #                                                                 -1,
+            #                                                                 -1)  
             # print(Autoreg_st.shape)
             # print(Weather_st.shape)
 
@@ -2397,8 +2427,8 @@ class SparseData_Transformer(nn.Module):
                                     Weather_st], 
                                     dim = -1)
             
-            # Date Conditioning FiLM
-            Fused_st = (Fused_st * Date_Conditioning_st[:,:,:,0,:]) + Date_Conditioning_st[:,:,:,1,:]
+            # Date Conditioning FiLM # N,D,S,2,C
+            Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
             Fused_st = self.activation_fn(Fused_st)
             
             Fused_st = torch.flatten(Fused_st, 1, 2)
@@ -2427,7 +2457,11 @@ class SparseData_Transformer(nn.Module):
             
             Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st.shape[-1]))        
             
-            Output_st = self.linear(Fused_st)
+            Fused_st = self.linear(Fused_st)
+            
+            Fused_st = (Fused_st * ST_Conditionings[:,:,:,2,:]) + ST_Conditionings[:,:,:,3,:]
+            
+            Output_st = self.output(Fused_st)
             
             return Output_st.squeeze()
         
@@ -2441,14 +2475,14 @@ class SparseData_Transformer(nn.Module):
                 
                 # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
                 # Positional Embedding
-                print("Computing Positional Embeddings and Causal Mask...")
+                print("Computing Causal Mask...")
                 
-                positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
-                                        self.fusion_embedding_dim).to(W[0].device)
+                # positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
+                #                         self.fusion_embedding_dim).to(W[0].device)
                 
-                # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
-                # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
-                positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
+                # # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
+                # # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
+                # positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
             
                 # Causal Mask
                 causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
@@ -2462,7 +2496,7 @@ class SparseData_Transformer(nn.Module):
 
                 
             else:
-                positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
+                #positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
                 causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
                 
             # Unfolding time - iterate own prediction as input
@@ -2490,17 +2524,17 @@ class SparseData_Transformer(nn.Module):
                 Fused_st_list.append(Fused_s)
                 Fused_st = torch.cat(Fused_st_list, dim = 1)
                 
-                Date_conditioning_st = Date_Conditioning_t[:,:timestep+1,:,:] # N, D, 2, C
-                Date_conditioning_st = Date_conditioning_st[:,:,None,:,:].expand(-1,-1,
-                                                                                X.shape[-2],
-                                                                                -1,
-                                                                                -1)  
+                ST_conditionings_rolling = ST_Conditionings[:,:timestep+1,:,:,:] # N,D,S,2*FiLMed,C
+                # Date_conditioning_st = Date_conditioning_st[:,:,None,:,:].expand(-1,-1,
+                #                                                                 X.shape[-2],
+                #                                                                 -1,
+                #                                                                 -1)  
                 #Hidden_Video_tlen = Hidden_Video.shape[2]
                 # print(timestep)
                 # print(Hidden_Video.shape)
                 
                 # Date Conditioning
-                Fused_st = (Fused_st * Date_conditioning_st[:,:,:,0,:]) + Date_conditioning_st[:,:,:,1,:]
+                Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,0,:]) + ST_conditionings_rolling[:,:,:,1,:]
                 Fused_st = self.activation_fn(Fused_st)
                 
                 Fused_st_extent = Fused_st.shape[1:3]
@@ -2522,13 +2556,13 @@ class SparseData_Transformer(nn.Module):
                 # # Positional Embedding
                 # #print(Hidden_Video.shape)
                 # #print(positional_embeddings.shape)
-                positional_embedding = positional_embeddings[:,:Fused_st.shape[1],:]          
+                #positional_embedding = positional_embeddings[:,:Fused_st.shape[1],:]          
                 causal_mask = causal_masks[:,
                                           :math.prod(Fused_st_extent),
                                           :math.prod(Fused_st_extent)]
                 # #print("CM", causal_mask.shape)
                 # #print(causal_mask)
-                Fused_st = Fused_st + positional_embedding
+                #Fused_st = Fused_st + positional_embedding
             
                 # Hidden_Video = Hidden_Video + positional_embedding
                 
@@ -2542,7 +2576,12 @@ class SparseData_Transformer(nn.Module):
                 
                 Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
                 
-                Output_st = self.linear(Fused_st)
+                
+                Fused_st = self.linear(Fused_st)
+            
+                Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,2,:]) + ST_conditionings_rolling[:,:,:,3,:]
+            
+                Output_st = self.output(Fused_st)
                 
                 # print(Sparse_data.shape)
                 # print(Output_st.shape)

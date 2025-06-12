@@ -350,8 +350,34 @@ def plot_2d_prediction(Y_hat, i, timestep, save_dir = None, model_name = None, m
 ########################
 ###### SparseData ######
 ########################
+def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
+    if bbox is None:
+        
+        bbox = [dataset.dtm_roi.x.min().values,
+        dataset.dtm_roi.x.max().values,
+        dataset.dtm_roi.y.min().values,
+        dataset.dtm_roi.y.max().values]
 
-def compute_predictions(start_date, twindow, dataset, model, device, eval = True):
+    x = np.linspace(bbox[0], bbox[1], hw)
+    y = np.linspace(bbox[2], bbox[3], nh)[::-1]
+    # create the mesh based on these arrays
+    X, Y = np.meshgrid(x, y)
+    coords = np.stack([Y, X], axis = -1)
+
+
+    dtm_grid = dataset.dtm_roi.sel(x = x, y = y,
+                    method = "nearest").values #(1,H,W)
+
+    coords[:,:,0] = (coords[:,:,0] - dataset.norm_factors["lat_mean"])/dataset.norm_factors["lat_std"]
+    coords[:,:,1] = (coords[:,:,1] - dataset.norm_factors["lon_mean"])/dataset.norm_factors["lon_std"]
+
+    Z = np.concat([coords, np.moveaxis(dtm_grid, 0, -1)], axis=-1)
+
+    Z = Z.reshape(Z.shape[0]*Z.shape[1], Z.shape[2])
+    
+    return Z
+
+def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = False, eval = True):
     
     start_date_input = start_date
     start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
@@ -370,8 +396,13 @@ def compute_predictions(start_date, twindow, dataset, model, device, eval = True
         X, X_mask = dataset.get_target_data(start_date_input, end_date_input)
         model.train()
         teacher_forcing = True
+    
+    if Z_grid is True:
+        Z = torch.from_numpy(grid_generation(dataset)).to(torch.float32)
+    else:
+        Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
         
-    Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
+        
     W = dataset.get_weather_video(start_date_output,
                                   end_date_output)
     
