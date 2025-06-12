@@ -97,6 +97,23 @@ def test_model(config):
                            sensors_to_plot = sensors_to_plot,
                            timesteps_to_look = timesteps_to_look,
                            loss_physics_fn = physics_loss)
+            
+    elif config["dataset_type"] == "Dataset_Sparse":
+        if config["physics"] is False:
+            
+            print("Test Approach: SparseData DL")
+            
+            start_dates_plot_test = config["start_dates_plot_test"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            #timesteps_to_look = config["timesteps_to_look"]
+            
+            return partial(test_dl_model, 
+                           start_dates_plot = start_dates_plot_test,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           #timesteps_to_look = timesteps_to_look
+                           )
         
         
 if __name__ == "__main__":

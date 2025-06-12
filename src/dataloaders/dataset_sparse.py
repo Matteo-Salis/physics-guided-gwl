@@ -36,17 +36,17 @@ class Dataset_Sparse(Dataset):
         self.twindow = self.config["twindow"]
 
         # Meteorological data loading 
-        print("Loading weather data...", end = " ")
+        print("    Loading weather data...", end = " ")
         self.loading_weather()
         print("Done!")
         
         # Digital Terrain Model data loading
-        print("Loading dtm...", end = " ")
+        print("    Loading dtm...", end = " ")
         self.loading_dtm()
         print("Done!")
         
         # Water Table Depth data loading 
-        print("Loading underground water data...", end = " ")
+        print("    Loading underground water data...", end = " ")
         self.loading_point_wtd(fill_value = config["fill_value"])
         print("Done!")
         
@@ -102,9 +102,9 @@ class Dataset_Sparse(Dataset):
                             "weather_std": weather_std}
         
         if verbose is True:
-            print("Norm factors:")
+            print("    Norm factors:")
             print(self.norm_factors)
-            print(f"Max date norm: {date_max}")
+            print(f"    Max date norm: {date_max}")
             
         if dict_out is True:
             return self.norm_factors
@@ -419,7 +419,7 @@ class Dataset_Sparse(Dataset):
         
         return [X, Z, W, Y, X_mask, Y_mask]
     
-    def get_target_data(self, start_date, end_date, get_coord = True):
+    def get_target_data(self, start_date, end_date, get_coord = True, fill_na = True):
         
         if get_coord is True:
             var_names = ["lat", "lon", "height", self.target, "nan_mask"]
@@ -444,7 +444,9 @@ class Dataset_Sparse(Dataset):
         # target_t0_dtm = target_t0["height"].values.reshape((timesteps, len(self.sensor_id_list)))
         
         target_mask = target_tensor.pop()
-        target_tensor[-1] = target_tensor[-1].nan_to_num(self.fill_value)
+        if fill_na is True:
+            target_tensor[-1] = target_tensor[-1].nan_to_num(self.fill_value)
+            
         target_tensor = torch.stack(target_tensor, dim = -1).squeeze()
             
             # target = [torch.from_numpy(target_t0_lat).to(torch.float32),

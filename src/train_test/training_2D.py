@@ -20,7 +20,9 @@ from torch import autograd
 
 
 def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
-                      start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look, teacher_forcing_factor = 1,
+                      start_dates_plot, twindow_plot, sensors_to_plot,
+                      #timesteps_to_look,
+                      teacher_forcing_factor = 1,
                       device = "cuda", plot_arch = True, l2_alpha = 1e-6): #, 
     
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -68,10 +70,10 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                     # Plots
                     model.eval()
                     with torch.no_grad():
-                        plot_maps_and_time_series(dataset, model, device,
+                        wandb_time_series(dataset, model, device,
                               start_dates_plot, twindow_plot,
                               sensors_to_plot, 
-                              timesteps_to_look,
+                              #timesteps_to_look,
                               eval_mode = True)
                         
                         if epoch == 0 and plot_arch is True:

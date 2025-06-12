@@ -2132,7 +2132,7 @@ class Date_Conditioning_Block(nn.Module):
             
             outputs.append(output)
         
-        outputs = torch.stack(outputs, dim = 1)
+        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
         
         return outputs
         
@@ -2306,7 +2306,7 @@ class SparseData_Transformer(nn.Module):
         ### Joint Modoule ### 
         
         self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2),
-                                                       self.spatial_embedding_dim),
+                                                       self.fusion_embedding_dim),
                                              self.activation_fn)
         
         ### Flatten Space-Time Dimension
@@ -2346,7 +2346,7 @@ class SparseData_Transformer(nn.Module):
         
         ### Weather module ### 
             
-        Date_Conditioning_t = self.Date_Conditioning_Module(W[1]) # alt N, D, C  # N, C, D, 2
+        Date_Conditioning_t = self.Date_Conditioning_Module(W[1]) # N, D, 2, C
         
         ### Conditioning modules ###
         
@@ -2354,11 +2354,8 @@ class SparseData_Transformer(nn.Module):
             Autoreg_st = []
             Weather_st = []
             
-            
             for timestep in range(X.shape[1]):
-                
-                #DA QUA
-                # fai sparseautoreg input come meteo 
+                 
                 if self.densification_dropout_p>0:
                     X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
                                                            X_mask[:,timestep,:]],
@@ -2369,14 +2366,11 @@ class SparseData_Transformer(nn.Module):
                 
                 X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
                 
-                # SparseAutoreg_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                # SparseAutoreg_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)  
-                # attn_mask[:,None,:].expand(-1,queries.shape[1],-1)  
                 Autoreg_st.append(self.SparseAutoreg_Module(
                                                                     K = X_t[:,:,:3],
                                                                     V = X_t,
                                                                     Q = Z,
-                                                                    attn_mask = X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
+                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
                                                                     ))
                 
                 Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
@@ -2387,24 +2381,28 @@ class SparseData_Transformer(nn.Module):
                                                                 Q = Z
                                                                 ))
                 
-            Autoreg_st = torch.stack(Autoreg_st, dim = 2)
-            Weather_st = torch.stack(Weather_st, dim = 2)
+            Autoreg_st = torch.stack(Autoreg_st, dim = 1)
+            Weather_st = torch.stack(Weather_st, dim = 1)
             
-            # Spatial repetition
-            Date_Conditioning_st = Date_Conditioning_t[:,:,:,None,:].expand(-1,-1,-1,
-                                                                       self.target_dim[1],
-                                                                       -1)
-            # print(Weaether_seq.shape)
-            # print(Target_VideoCond.shape)
+            # Spatial repetition 
+            Date_Conditioning_st = Date_Conditioning_t[:,:,None,:,:].expand(-1,
+                                                                            -1,
+                                                                            self.target_dim[1],
+                                                                            -1,
+                                                                            -1)
+            # print(Autoreg_st.shape)
+            # print(Weather_st.shape)
+
             Fused_st = torch.cat([Autoreg_st,
                                     Weather_st], 
                                     dim = -1)
             
             # Date Conditioning FiLM
-            Fused_st = (Fused_st * Date_Conditioning_st[:,:,:,:,0]) + Date_Conditioning_st[:,:,:,:,1]
+            Fused_st = (Fused_st * Date_Conditioning_st[:,:,:,0,:]) + Date_Conditioning_st[:,:,:,1,:]
             Fused_st = self.activation_fn(Fused_st)
             
             Fused_st = torch.flatten(Fused_st, 1, 2)
+            
             # N,C,L
             
             Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
@@ -2417,42 +2415,17 @@ class SparseData_Transformer(nn.Module):
             causal_mask = self.causal_mask[None,:,:].expand(int(Fused_st.shape[0]*self.st_heads),-1,-1).to(Fused_st.device)
             #print(causal_mask.shape)
             #print(Hidden_Video.shape)
-            #Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
             #print(Hidden_Video.shape)
-            positional_embedding = self.positional_embedding[None,:,:].expand(Fused_st.shape[0],
-                                                                              -1,-1).to(Fused_st.device)  # (seq_len, emb_dim)
-            #print(positional_embedding.shape)
-            Fused_st = Fused_st + positional_embedding
+            # positional_embedding = self.positional_embedding[None,:,:].expand(Fused_st.shape[0],
+            #                                                                   -1,-1).to(Fused_st.device)  # (seq_len, emb_dim)
+            # #print(positional_embedding.shape)
+            # Fused_st = Fused_st + positional_embedding
             
             for i in range(self.st_mha_blocks):
             
                 Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st, causal_mask, self.training)
             
-            # if self.spatial_padding is None:
-            
-            #     Hidden_Video = self.depatchify(Hidden_Video,
-            #                                 self.patch_size,
-            #                                 self.upsampling_dim)
-                
-            #     Hidden_Video = self.conv2d(Hidden_Video)
-                
-            # else:
-                
-            #     Hidden_Video = self.depatchify(Hidden_Video,
-            #                                 self.patch_size,
-            #                                 [self.upsampling_dim[0],
-            #                                 self.upsampling_dim[1] + (self.spatial_padding[2]),
-            #                                 self.upsampling_dim[2] + (self.spatial_padding[0])])
-                
-            #     Hidden_Video = self.conv2d(Hidden_Video)
-                
-            #     Hidden_Video = Hidden_Video[:,:,:,
-            #                                 self.spatial_padding[2]:,
-            #                                 self.spatial_padding[0]:]
-            
-            #print(Hidden_Video.shape)
-            
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st[-1]))        
+            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st.shape[-1]))        
             
             Output_st = self.linear(Fused_st)
             
@@ -2460,125 +2433,131 @@ class SparseData_Transformer(nn.Module):
         
         else:
             
-            ImageCond = X
-            ImageCond_mask = X_mask
-            Hidden_Frames = []
-            Hidden_Video = []
-            Output_Video = []
+            Sparse_data = X
+            Sparse_data_mask = X_mask
+            Fused_st_list = []
             
-            if W[0].shape[2] != self.upsampling_dim[0]:
+            if [W[0].shape[2], X.shape[-2]] != self.target_dim:
                 
                 # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
                 # Positional Embedding
                 print("Computing Positional Embeddings and Causal Mask...")
-                seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
-                positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
+                
+                positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
+                                        self.fusion_embedding_dim).to(W[0].device)
+                
+                # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
+                # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
                 positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
             
                 # Causal Mask
-                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2]))[None,:,:].expand(int(W[0].shape[0]*self.dense_heads),
-                                                                                                                    -1,-1).to(W[0].device)
-                causal_masks = causal_masks.repeat_interleave(int(self.nh*self.nw),
-                                                            dim = 1)
-                causal_masks = causal_masks.repeat_interleave(int(self.nh*self.nw),
-                                                        dim = 2)
+                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
+                causal_masks = causal_masks.repeat_interleave(X.shape[-2],  # Repeating for spatial extent
+                                                            dim = 0)
+                causal_masks = causal_masks.repeat_interleave(X.shape[-2],  # Repeating for spatial extent
+                                                        dim = 1)
+                
+                causal_masks = ~causal_masks.to(torch.bool)
+                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
+
                 
             else:
                 positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.dense_heads),-1,-1).to(W[0].device)
+                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
                 
             # Unfolding time - iterate own prediction as input
             for timestep in tqdm(range(W[0].shape[2])):
                 
-                Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask).unsqueeze(2)
+                Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
+                
+                Autoreg_s = self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
+                                                                V = Sparse_data,
+                                                                Q = Z,
+                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1)).unsqueeze(1)
+                
                 Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
                 Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Upsampled_ImageWeather = self.Weather_Module(Weather_Keys,
-                                                        Weather_Values,
-                                                        Z.flatten(start_dim = 1, end_dim = 2)
-                                                        ).unsqueeze(2)
-                date_conditioning_Frames = date_conditioning_wm[:,:,:timestep+1,:] 
-                date_conditioning_Frames = date_conditioning_Frames[:,:,:,None,None,:].expand(-1,-1,-1,
-                                                                                self.upsampling_dim[1],
-                                                                                self.upsampling_dim[2],
-                                                                                -1)
-                Hidden_Frame = torch.cat([Upsampled_ImageWeather,
-                                    Upsampled_ImageCond], 
-                                    dim = 1)
-
-                Hidden_Frames.append(Hidden_Frame)
-                Hidden_Video = torch.cat(Hidden_Frames, dim = 2)
+                Weather_s = self.Weather_Module(
+                                                        K = Weather_Keys,
+                                                        V = Weather_Values,
+                                                        Q = Z
+                                                        ).unsqueeze(1)
+                
+                Fused_s = torch.cat([Autoreg_s,
+                                        Weather_s], 
+                                        dim = -1)
+                
+                Fused_st_list.append(Fused_s)
+                Fused_st = torch.cat(Fused_st_list, dim = 1)
+                
+                Date_conditioning_st = Date_Conditioning_t[:,:timestep+1,:,:] # N, D, 2, C
+                Date_conditioning_st = Date_conditioning_st[:,:,None,:,:].expand(-1,-1,
+                                                                                X.shape[-2],
+                                                                                -1,
+                                                                                -1)  
                 #Hidden_Video_tlen = Hidden_Video.shape[2]
                 # print(timestep)
                 # print(Hidden_Video.shape)
                 
                 # Date Conditioning
-                Hidden_Video = (Hidden_Video * date_conditioning_Frames[:,:,:,:,:,0]) + date_conditioning_Frames[:,:,:,:,:,1]
-                Hidden_Video = self.activation_fn(Hidden_Video)
+                Fused_st = (Fused_st * Date_conditioning_st[:,:,:,0,:]) + Date_conditioning_st[:,:,:,1,:]
+                Fused_st = self.activation_fn(Fused_st)
                 
-                Hidden_Video =  nn.functional.dropout3d(Hidden_Video, p = self.spatial_dropout, training = mc_dropout)
-                # Tubelet Embedding
-                Hidden_Video = self.dense_embedding(Hidden_Video)
-                #print(Hidden_Video.shape)
-                Hidden_Video_tlen_emb = Hidden_Video.shape[2]
-                # print("HV sh", Hidden_Video.shape)
-                # print("HV len", Hidden_Video_tlen_emb)
-                Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
+                Fused_st_extent = Fused_st.shape[1:3]
+                Fused_st = torch.flatten(Fused_st, 1, 2)
                 
-                # Positional Embedding
-                #print(Hidden_Video.shape)
-                #print(positional_embeddings.shape)
-                positional_embedding = positional_embeddings[:,:Hidden_Video.shape[1],:]          
+                Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
+                                                p = self.spatial_dropout, training = mc_dropout)
+                
+                Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
+                                               
+                # # Tubelet Embedding
+                # Hidden_Video = self.dense_embedding(Hidden_Video)
+                # #print(Hidden_Video.shape)
+                # Hidden_Video_tlen_emb = Hidden_Video.shape[2]
+                # # print("HV sh", Hidden_Video.shape)
+                # # print("HV len", Hidden_Video_tlen_emb)
+                # Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
+                
+                # # Positional Embedding
+                # #print(Hidden_Video.shape)
+                # #print(positional_embeddings.shape)
+                positional_embedding = positional_embeddings[:,:Fused_st.shape[1],:]          
                 causal_mask = causal_masks[:,
-                                          :int(Hidden_Video_tlen_emb*self.nh*self.nw),
-                                          :int(Hidden_Video_tlen_emb*self.nh*self.nw)]
-                #print("CM", causal_mask.shape)
-                #print(causal_mask)
+                                          :math.prod(Fused_st_extent),
+                                          :math.prod(Fused_st_extent)]
+                # #print("CM", causal_mask.shape)
+                # #print(causal_mask)
+                Fused_st = Fused_st + positional_embedding
             
-                Hidden_Video = Hidden_Video + positional_embedding
+                # Hidden_Video = Hidden_Video + positional_embedding
                 
-                for i in range(self.mha_blocks):
+                for i in range(self.st_mha_blocks):
             
-                    Hidden_Video = getattr(self, f"MHA_Block_{i}")(Hidden_Video,
+                    Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st,
                                                                    causal_mask,
                                                                    mc_dropout)
                 
                 #print(Hidden_Video.shape)
                 
-                ###
-                if self.spatial_padding is None:
-            
-                    Hidden_Video = self.depatchify(Hidden_Video,
-                                                self.patch_size,
-                                                [Hidden_Video_tlen_emb,*self.upsampling_dim[1:]])
-                    
-                    Hidden_Video = self.conv2d(Hidden_Video)
+                Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
                 
-                else:
-                    
-                    Hidden_Video = self.depatchify(Hidden_Video,
-                                                self.patch_size,
-                                                [Hidden_Video_tlen_emb,
-                                                self.upsampling_dim[1] + (self.spatial_padding[2]),
-                                                self.upsampling_dim[2] + (self.spatial_padding[0])])
-                    
-                    Hidden_Video = self.conv2d(Hidden_Video)
-                    
-                    Hidden_Video = Hidden_Video[:,:,:,
-                                                self.spatial_padding[2]:,
-                                                self.spatial_padding[0]:]
+                Output_st = self.linear(Fused_st)
                 
-                Output_Video = self.linear(Hidden_Video)
+                # print(Sparse_data.shape)
+                # print(Output_st.shape)
             
-                ImageCond = torch.cat([Z.clone(),
-                                       Output_Video[:,-1,:,:,:]],
+                Sparse_data = torch.cat([Z.clone(),
+                                       Output_st[:,-1,:,:]],
                                       dim=-1)
-                ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
-                ImageCond_mask = torch.ones((ImageCond[:,:,0].shape)).to(torch.bool).to(ImageCond.device)
+                
+                #print(Sparse_data.shape)
+                #ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
+                Sparse_data_mask = torch.ones((Sparse_data[:,:,0].shape)).to(torch.bool).to(Sparse_data.device)
             
-        Output_Video = Output_Video.squeeze()
+        Output_st = Output_st.squeeze()
             
-        return Output_Video
+        return Output_st
 
 ###########################################
     
