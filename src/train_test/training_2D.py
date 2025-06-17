@@ -74,7 +74,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                               start_dates_plot, twindow_plot,
                               sensors_to_plot, 
                               #timesteps_to_look,
-                              eval_mode = True)
+                              eval_mode = False)
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")

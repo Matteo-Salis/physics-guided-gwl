@@ -82,9 +82,25 @@ def main(config):
     optimizer = load_optimizer(config, model)
     loss_fn = load_loss(config)
 
-    if config["teacher_forcing_scheduling"] == "linear":
-        # 1 always TF
-        teacher_forcing_scheduling = torch.arange(config["epochs"]-1,-1,-1).to(device)/((config["epochs"]-1)*(1+config["teacher_forcing_scheduling_offset"]))
+    # if config["teacher_forcing_scheduling"] == "linear":
+    #     # 1 always TF
+    #     teacher_forcing_scheduling = torch.arange(config["epochs"]-1,-1,-1).to(device)/((config["epochs"]-1)*(1+config["teacher_forcing_scheduling_offset"]))
+        
+    if config["teacher_forcing_scheduling"] == "affine":
+                if config["teacher_forcing_scheduling_offset"]>0:
+                    teacher_forcing_scheduling = torch.ones(config["epochs"])
+                    offset_from_epoch = int(config["teacher_forcing_scheduling_offset"])
+                    teacher_forcing_scheduling[offset_from_epoch:] = torch.linspace(1,0,config["epochs"]-offset_from_epoch)
+                
+                elif config["teacher_forcing_scheduling_offset"]<0:
+                    
+                    offset_from_value = config["teacher_forcing_scheduling_offset"]
+                    teacher_forcing_scheduling = torch.linspace(offset_from_value,0,config["epochs"])
+                    
+                else:
+                    teacher_forcing_scheduling = torch.linspace(1,0,config["epochs"])
+                    
+                print(f"Teacher Forcing Scheduling: {teacher_forcing_scheduling}")
         
     elif isinstance(config["teacher_forcing_scheduling"], float):
         teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]    

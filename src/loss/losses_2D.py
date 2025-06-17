@@ -15,7 +15,7 @@ def loss_masked_mse(Y_hat, Y, Y_mask):
 
 def loss_masked_mae(Y_hat, Y, Y_mask):
     
-    if len(Y_hat.size()) < 4:
+    if len(Y_hat.size()) < 3:
         Y_hat = Y_hat.unsqueeze(0)
 
     if torch.sum(Y_mask) != 0:        
