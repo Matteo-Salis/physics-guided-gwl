@@ -2116,15 +2116,15 @@ class FiLM_Conditioning_Block(nn.Module):
             
             setattr(self, f"fc_0_{i}",
                     nn.Linear(self.in_channels, self.hidden_channels))
-            setattr(self, f"activation_0_{i}",
-                    self.activation),
+            setattr(self, f"act_and_norm_0_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
             setattr(self, f"fc_1_{i}",
                     nn.Linear(self.hidden_channels, self.hidden_channels))
-            setattr(self, f"activation_1_{i}",
-                    self.activation),
+            setattr(self, f"act_and_norm_1_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
             setattr(self, f"fc_2_{i}",
                     nn.Linear(self.hidden_channels, int(self.FiLMed_layers*2)))
-            setattr(self, f"activation_2_{i}",
+            setattr(self, f"act_2_{i}",
                     self.activation),
             
             
@@ -2136,11 +2136,11 @@ class FiLM_Conditioning_Block(nn.Module):
         outputs = []
         for i in range(self.out_channels):
             output = getattr(self, f"fc_0_{i}")(input)
-            output = getattr(self, f"activation_0_{i}")(output)
+            output = getattr(self, f"act_and_norm_0_{i}")(output)
             output = getattr(self, f"fc_1_{i}")(output)
-            output = getattr(self, f"activation_1_{i}")(output)
+            output = getattr(self, f"act_and_norm_1_{i}")(output)
             output = getattr(self, f"fc_2_{i}")(output)
-            output = getattr(self, f"activation_2_{i}")(output)
+            output = getattr(self, f"act_2_{i}")(output)
             
             outputs.append(output)
         
@@ -2304,10 +2304,10 @@ class SparseData_Transformer(nn.Module):
         
         self.ST_Conditioning_Module = FiLM_Conditioning_Block(
                                                             in_channels = 5,
-                                                            hidden_channels = 64, 
+                                                            hidden_channels = 32, 
                                                             out_channels = int(self.spatial_embedding_dim*2), 
                                                             activation = self.activation,
-                                                            FiLMed_layers = 2)
+                                                            FiLMed_layers = 1)
         
         # self.ST_Conditioning_Module = FiLM_Conditioning_Block(in_channels = 5,
         #                                                     hidden_channles = 64, 
@@ -2459,7 +2459,7 @@ class SparseData_Transformer(nn.Module):
             
             Fused_st = self.linear(Fused_st)
             
-            Fused_st = (Fused_st * ST_Conditionings[:,:,:,2,:]) + ST_Conditionings[:,:,:,3,:]
+            #Fused_st = (Fused_st * ST_Conditionings[:,:,:,2,:]) + ST_Conditionings[:,:,:,3,:]
             
             Output_st = self.output(Fused_st)
             
@@ -2579,7 +2579,7 @@ class SparseData_Transformer(nn.Module):
                 
                 Fused_st = self.linear(Fused_st)
             
-                Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,2,:]) + ST_conditionings_rolling[:,:,:,3,:]
+                #Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,2,:]) + ST_conditionings_rolling[:,:,:,3,:]
             
                 Output_st = self.output(Fused_st)
                 
