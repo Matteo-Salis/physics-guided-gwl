@@ -2378,7 +2378,33 @@ class SparseData_Transformer(nn.Module):
         
         ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C
         
-        ### Conditioning modules ###
+        if [W[0].shape[2], Z.shape[1]] != self.target_dim:
+                
+                # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
+                # Positional Embedding
+                print("Computing Causal Mask...")
+                
+                # positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
+                #                         self.fusion_embedding_dim).to(W[0].device)
+                
+                # # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
+                # # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
+                # positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
+            
+                # Causal Mask
+                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
+                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
+                                                            dim = 0)
+                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
+                                                        dim = 1)
+                
+                causal_masks = ~causal_masks.to(torch.bool)
+                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
+
+                
+        else:
+                #positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
+                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
         
         if self.training is True and teacher_forcing is True:
             Autoreg_st = []
@@ -2431,6 +2457,7 @@ class SparseData_Transformer(nn.Module):
             Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
             Fused_st = self.activation_fn(Fused_st)
             
+            Fused_st_extent = Fused_st.shape[1:3]
             Fused_st = torch.flatten(Fused_st, 1, 2)
             
             # N,C,L
@@ -2442,7 +2469,9 @@ class SparseData_Transformer(nn.Module):
             Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
             
             ### Causal Mask 
-            causal_mask = self.causal_mask[None,:,:].expand(int(Fused_st.shape[0]*self.st_heads),-1,-1).to(Fused_st.device)
+            #causal_mask = self.causal_mask[None,:,:].expand(int(Fused_st.shape[0]*self.st_heads),-1,-1).to(Fused_st.device)
+            
+            
             #print(causal_mask.shape)
             #print(Hidden_Video.shape)
             #print(Hidden_Video.shape)
@@ -2453,9 +2482,10 @@ class SparseData_Transformer(nn.Module):
             
             for i in range(self.st_mha_blocks):
             
-                Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st, causal_mask, self.training)
+                Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st, causal_masks, self.training)
             
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st.shape[-1]))        
+            #Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st.shape[-1])) 
+            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1])) 
             
             Fused_st = self.linear(Fused_st)
             
@@ -2470,34 +2500,6 @@ class SparseData_Transformer(nn.Module):
             Sparse_data = X
             Sparse_data_mask = X_mask
             Fused_st_list = []
-            
-            if [W[0].shape[2], Z.shape[1]] != self.target_dim:
-                
-                # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
-                # Positional Embedding
-                print("Computing Causal Mask...")
-                
-                # positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
-                #                         self.fusion_embedding_dim).to(W[0].device)
-                
-                # # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
-                # # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
-                # positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
-            
-                # Causal Mask
-                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                            dim = 0)
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                        dim = 1)
-                
-                causal_masks = ~causal_masks.to(torch.bool)
-                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
-
-                
-            else:
-                #positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
                 
             # Unfolding time - iterate own prediction as input
             for timestep in tqdm(range(W[0].shape[2])):

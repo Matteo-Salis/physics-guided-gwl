@@ -131,8 +131,13 @@ class Dataset_Sparse(Dataset):
         # self.target_rasterized_coords[:,:,0] = (self.target_rasterized_coords[:,:,0] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
         # self.target_rasterized_coords[:,:,1] = (self.target_rasterized_coords[:,:,1] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
         # self.target_rasterized_coords[:,:,2] = (self.target_rasterized_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
-            
-        self.weather_xr = (self.weather_xr - self.norm_factors["weather_mean"])/self.norm_factors["weather_std"]       
+        
+        norm_weather_var = list(self.weather_xr.keys())
+        norm_weather_var = [var for var in norm_weather_var if var not in ["tmax","tmin"]]
+        self.weather_xr[norm_weather_var] = (self.weather_xr[norm_weather_var] - self.norm_factors["weather_mean"][norm_weather_var])/self.norm_factors["weather_std"][norm_weather_var]
+        
+        self.weather_xr["tmin"] = (self.weather_xr["tmin"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
+        self.weather_xr["tmax"] = (self.weather_xr["tmax"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
         
         self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
         self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
