@@ -276,8 +276,8 @@ class Dataset_Sparse(Dataset):
             #                         "00403410001",
             #                         "00126010001",
             #                         "00105110001"]
-            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(config["discard_sensor_list"]), :]
-            self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(config["discard_sensor_list"]), :]
+            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(self.config["discard_sensor_list"]), :]
+            self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
         
         
                 # sensor_list = ["00417910001",
