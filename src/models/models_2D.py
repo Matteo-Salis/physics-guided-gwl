@@ -1640,7 +1640,7 @@ class MHA_Block(nn.Module):
         
     def forward(self, input, attn_mask = None, mc_dropout = True):
         
-        skip_1 = input.clone()
+        skip_1 = input #.clone()
         output = self.norm_layer_1(input)
         
         output, _ = self.mha(
@@ -1659,7 +1659,7 @@ class MHA_Block(nn.Module):
         output = torch.moveaxis(output, source = 1, destination = -1)
         
         output = output + skip_1
-        skip_2 = output.clone()
+        skip_2 = output #.clone()
         
         output = self.norm_layer_2(output)
         output = self.mlp(output)
@@ -2147,6 +2147,123 @@ class FiLM_Conditioning_Block(nn.Module):
         outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
         
         return outputs
+    
+class FiLM_Conditioning_Block_alt(nn.Module):
+    """
+    FiLM Conditioning Layer
+    """
+    def __init__(self,
+                 in_channels,
+                 hidden_channels,
+                 out_channels,
+                 activation,
+                 FiLMed_layers):
+        super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
+        
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.FiLMed_layers = FiLMed_layers
+        
+        for i in range(self.out_channels):
+            
+            setattr(self, f"fc_0_{i}",
+                    nn.Linear(self.in_channels, self.hidden_channels))
+            setattr(self, f"act_and_norm_0_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
+            setattr(self, f"fc_1_{i}",
+                    nn.Linear(self.hidden_channels, self.hidden_channels))
+            setattr(self, f"act_and_norm_1_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
+            setattr(self, f"fc_2_{i}",
+                    nn.Linear(self.hidden_channels, self.FiLMed_layers))
+            setattr(self, f"act_2_{i}",
+                    self.activation),
+            
+            
+    def forward(self, input):
+        """
+        Only Addition factor
+        input (N, *, C)
+        output (N, C, *, 1)
+        """
+        outputs = []
+        for i in range(self.out_channels):
+            output = getattr(self, f"fc_0_{i}")(input)
+            output = getattr(self, f"act_and_norm_0_{i}")(output)
+            output = getattr(self, f"fc_1_{i}")(output)
+            output = getattr(self, f"act_and_norm_1_{i}")(output)
+            output = getattr(self, f"fc_2_{i}")(output)
+            output = getattr(self, f"act_2_{i}")(output)
+            
+            outputs.append(output)
+        
+        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
+        
+        return outputs
+    
+class ST_Conditioning_Block(nn.Module):
+    """
+    FiLM Conditioning Layer
+    """
+    def __init__(self,
+                 in_channels,
+                 hidden_channels,
+                 out_channels,
+                 activation,
+                 STC_layers):
+        super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
+        
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.STC_layers = STC_layers
+        
+        for i in range(self.out_channels):
+            
+            setattr(self, f"fc_0_{i}",
+                    nn.Linear(self.in_channels, self.hidden_channels))
+            setattr(self, f"act_and_norm_0_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
+            setattr(self, f"fc_1_{i}",
+                    nn.Linear(self.hidden_channels, self.hidden_channels))
+            setattr(self, f"act_and_norm_1_{i}",
+                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
+            setattr(self, f"fc_2_{i}",
+                    nn.Linear(self.hidden_channels, int(self.STC_layers*2)))
+            setattr(self, f"act_2_{i}",
+                    self.activation),
+            
+            
+    def forward(self, input):
+        """
+        input (N, *, C)
+        output (N, C, *, 2)
+        """
+        outputs = []
+        for i in range(self.out_channels):
+            output = getattr(self, f"fc_0_{i}")(input)
+            output = getattr(self, f"act_and_norm_0_{i}")(output)
+            output = getattr(self, f"fc_1_{i}")(output)
+            output = getattr(self, f"act_and_norm_1_{i}")(output)
+            output = getattr(self, f"fc_2_{i}")(output)
+            output = getattr(self, f"act_2_{i}")(output)
+            
+            outputs.append(output)
+        
+        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
+        
+        return outputs
         
 class Spatial_Attention_Block(nn.Module):
     
@@ -2302,7 +2419,7 @@ class SparseData_Transformer(nn.Module):
                                 activation = self.activation,
                                 elementwise_affine= self.layernorm_affine)
         
-        self.ST_Conditioning_Module = FiLM_Conditioning_Block(
+        self.ST_Conditioning_Module = FiLM_Conditioning_Block_alt(
                                                             in_channels = 5,
                                                             hidden_channels = 32, 
                                                             out_channels = int(self.spatial_embedding_dim*2), 
@@ -2454,7 +2571,8 @@ class SparseData_Transformer(nn.Module):
                                     dim = -1)
             
             # Date Conditioning FiLM # N,D,S,2,C
-            Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
+            #Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
+            Fused_st = Fused_st + ST_Conditionings[:,:,:,0,:]
             Fused_st = self.activation_fn(Fused_st)
             
             Fused_st_extent = Fused_st.shape[1:3]
@@ -2536,7 +2654,8 @@ class SparseData_Transformer(nn.Module):
                 # print(Hidden_Video.shape)
                 
                 # Date Conditioning
-                Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,0,:]) + ST_conditionings_rolling[:,:,:,1,:]
+                #Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,0,:]) + ST_conditionings_rolling[:,:,:,1,:]
+                Fused_st = Fused_st + ST_conditionings_rolling[:,:,:,0,:]
                 Fused_st = self.activation_fn(Fused_st)
                 
                 Fused_st_extent = Fused_st.shape[1:3]
