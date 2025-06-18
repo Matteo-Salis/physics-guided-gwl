@@ -88,7 +88,7 @@ model = models_2D.SparseData_Transformer(
                 activation= config["activation"]).to(device)
 
 # %%
-model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/models/model_SparseData_Transformer_20250618_102345.pt"
+model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/models/model_SparseData_Transformer_20250618_183513.pt"
 model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
 model.eval()
 
@@ -96,7 +96,7 @@ model.eval()
 print("Computing predictions...")
 # %%
 date = "2020-01-05"
-twindow = 8
+twindow = 16
 lat_points = 35
 lon_points = 45
 z_grid = grid_generation(ds, lat_points,lon_points)
