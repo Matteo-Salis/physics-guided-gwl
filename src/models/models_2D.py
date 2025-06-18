@@ -2215,8 +2215,7 @@ class ST_Conditioning_Block(nn.Module):
                  in_channels,
                  hidden_channels,
                  out_channels,
-                 activation,
-                 STC_layers):
+                 activation):
         super().__init__()
         
         if activation == "LeakyReLU":
@@ -2227,43 +2226,26 @@ class ST_Conditioning_Block(nn.Module):
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
-        self.STC_layers = STC_layers
         
-        for i in range(self.out_channels):
-            
-            setattr(self, f"fc_0_{i}",
-                    nn.Linear(self.in_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_0_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
-            setattr(self, f"fc_1_{i}",
-                    nn.Linear(self.hidden_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_1_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
-            setattr(self, f"fc_2_{i}",
-                    nn.Linear(self.hidden_channels, int(self.STC_layers*2)))
-            setattr(self, f"act_2_{i}",
-                    self.activation),
-            
+        
+        
+        self.ST_layers = nn.Sequential(nn.Linear(self.in_channels, self.hidden_channels),
+                                       self.activation,
+                                       nn.LayerNorm(self.hidden_channels),
+                                       nn.Linear(self.hidden_channels, self.hidden_channels),
+                                       self.activation,
+                                       nn.LayerNorm(self.hidden_channels),
+                                       nn.Linear(self.hidden_channels, self.out_channels),
+                                       self.activation
+                                       )
             
     def forward(self, input):
         """
-        input (N, *, C)
-        output (N, C, *, 2)
+        input (B, D, S, C_in)
+        output (B, D, S, C_out)
         """
-        outputs = []
-        for i in range(self.out_channels):
-            output = getattr(self, f"fc_0_{i}")(input)
-            output = getattr(self, f"act_and_norm_0_{i}")(output)
-            output = getattr(self, f"fc_1_{i}")(output)
-            output = getattr(self, f"act_and_norm_1_{i}")(output)
-            output = getattr(self, f"fc_2_{i}")(output)
-            output = getattr(self, f"act_2_{i}")(output)
-            
-            outputs.append(output)
         
-        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
-        
-        return outputs
+        return self.ST_layers(input)
         
 class Spatial_Attention_Block(nn.Module):
     
@@ -2419,12 +2401,11 @@ class SparseData_Transformer(nn.Module):
                                 activation = self.activation,
                                 elementwise_affine= self.layernorm_affine)
         
-        self.ST_Conditioning_Module = FiLM_Conditioning_Block_alt(
+        self.ST_Conditioning_Module = ST_Conditioning_Block(
                                                             in_channels = 5,
-                                                            hidden_channels = 32, 
-                                                            out_channels = int(self.spatial_embedding_dim*2), 
-                                                            activation = self.activation,
-                                                            FiLMed_layers = 1)
+                                                            hidden_channels = 64, 
+                                                            out_channels = 16, 
+                                                            activation = self.activation) 
         
         # self.ST_Conditioning_Module = FiLM_Conditioning_Block(in_channels = 5,
         #                                                     hidden_channles = 64, 
@@ -2444,7 +2425,7 @@ class SparseData_Transformer(nn.Module):
         
         ### Joint Modoule ### 
         
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2),
+        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2)+16,
                                                        self.fusion_embedding_dim),
                                              self.activation_fn)
         
@@ -2491,9 +2472,9 @@ class SparseData_Transformer(nn.Module):
         ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1)
         ST_conditioning_input = torch.cat([ST_conditioning_input,
                                            Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1)],
-                                          dim = -1)
+                                          dim = -1) # B, D, S, C
         
-        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C
+        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
         
         if [W[0].shape[2], Z.shape[1]] != self.target_dim:
                 
@@ -2567,13 +2548,14 @@ class SparseData_Transformer(nn.Module):
             # print(Weather_st.shape)
 
             Fused_st = torch.cat([Autoreg_st,
-                                    Weather_st], 
+                                    Weather_st,
+                                    ST_Conditionings], 
                                     dim = -1)
             
             # Date Conditioning FiLM # N,D,S,2,C
             #Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
-            Fused_st = Fused_st + ST_Conditionings[:,:,:,0,:]
-            Fused_st = self.activation_fn(Fused_st)
+            #Fused_st = Fused_st + ST_Conditionings[:,:,:,0,:]
+            #Fused_st = self.activation_fn(Fused_st)
             
             Fused_st_extent = Fused_st.shape[1:3]
             Fused_st = torch.flatten(Fused_st, 1, 2)
@@ -2637,14 +2619,16 @@ class SparseData_Transformer(nn.Module):
                                                         Q = Z
                                                         ).unsqueeze(1)
                 
+                ST_conditionings_rolling = ST_Conditionings[:,timestep,:,:].unsqueeze(1) # N,D,S,2*FiLMed,C
                 Fused_s = torch.cat([Autoreg_s,
-                                        Weather_s], 
+                                        Weather_s,
+                                        ST_conditionings_rolling], 
                                         dim = -1)
                 
                 Fused_st_list.append(Fused_s)
                 Fused_st = torch.cat(Fused_st_list, dim = 1)
                 
-                ST_conditionings_rolling = ST_Conditionings[:,:timestep+1,:,:,:] # N,D,S,2*FiLMed,C
+                
                 # Date_conditioning_st = Date_conditioning_st[:,:,None,:,:].expand(-1,-1,
                 #                                                                 X.shape[-2],
                 #                                                                 -1,
@@ -2655,8 +2639,8 @@ class SparseData_Transformer(nn.Module):
                 
                 # Date Conditioning
                 #Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,0,:]) + ST_conditionings_rolling[:,:,:,1,:]
-                Fused_st = Fused_st + ST_conditionings_rolling[:,:,:,0,:]
-                Fused_st = self.activation_fn(Fused_st)
+                #Fused_st = Fused_st + ST_conditionings_rolling[:,:,:,0,:]
+                #Fused_st = self.activation_fn(Fused_st)
                 
                 Fused_st_extent = Fused_st.shape[1:3]
                 Fused_st = torch.flatten(Fused_st, 1, 2)
