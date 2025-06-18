@@ -400,7 +400,7 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
     if Z_grid is None:
         Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
     else:
-        Z = torch.from_numpy(grid_generation(dataset, Z_grid[0], Z_grid[1])).to(torch.float32)
+        Z = torch.from_numpy(Z_grid).to(torch.float32)
         
         
         
@@ -426,7 +426,7 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
     
 def build_ds_from_pred(y_hat, start_date, twindow, freq, sensor_names):
     
-    end_date = start_date + np.timedelta64(twindow-1, freq)
+    end_date = start_date + np.timedelta64(twindow - 1, freq)
     pd_ds = pd.DataFrame(data = y_hat,
                          index = pd.date_range(start_date, end_date, freq = freq),
                          columns = sensor_names)
@@ -443,6 +443,7 @@ def plot_time_series(y_hat, y, title,
     ax.plot(y, label = "Truth", marker = "o", lw = 0.7, markersize = 2, color = "tab:blue")
     
     ax.tick_params(axis='x', rotation=40)
+    ax.set_ylabel("H [m]")
 
     ax.set_title(title)
 
@@ -486,8 +487,12 @@ def wandb_time_series(dataset, model, device,
             
             #WTD_hat_test_xr_denorm = dataset.target_rasterized_dtm.values - Y_hat_test_xr_denorm
             
-            Y_hat_test_ds = build_ds_from_pred(Y_hat_test, np.datetime64(date), twindow, dataset.config["frequency"], dataset.sensor_id_list)
-            Y_test_ds = build_ds_from_pred(Y_test, np.datetime64(date), twindow, dataset.config["frequency"], dataset.sensor_id_list)
+            Y_hat_test_ds = build_ds_from_pred(Y_hat_test,
+                                               np.datetime64(date) + np.timedelta64(1, dataset.config["frequency"]),
+                                               twindow, dataset.config["frequency"], dataset.sensor_id_list)
+            Y_test_ds = build_ds_from_pred(Y_test,
+                                           np.datetime64(date) + np.timedelta64(1, dataset.config["frequency"]),
+                                           twindow, dataset.config["frequency"], dataset.sensor_id_list)
             
             # Denormalization
             Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
@@ -732,13 +737,14 @@ def plot_maps_and_time_series(dataset, model, device,
 
 def generate_gif_h_wtd(start_date, twindow,
                        sample_h, sample_wtd,
+                       freq,
                        save_dir = None,
                        print_plot = False):
 
     fig, ax = plt.subplots(1,2, figsize = (10,4))
 
-    ax[0].set_title("Piezometric head")
-    ax[1].set_title("WTD")
+    ax[0].set_title("Piezometric head [m]")
+    ax[1].set_title("WTD [m]")
 
 
     fig.suptitle(f"t0: {start_date} - Prediction Timestep {0}")
@@ -749,12 +755,12 @@ def generate_gif_h_wtd(start_date, twindow,
     wtd_image = sample_wtd[0,:,:].plot(ax = ax[1], animated=True, 
                                                 vmin = sample_wtd.min().values,
                                                 vmax = sample_wtd.max().values,
-                                                cmap = "Blues")
+                                                cmap = "Greys")
 
 
     def update_h_wtd_maps(i):
         
-        sample_date_i = np.datetime64(start_date) + np.timedelta64(i+1)
+        sample_date_i = np.datetime64(start_date) + np.timedelta64(i+1, freq)
         fig.suptitle(f"t0: {start_date} - Prediction Timestep {i}: {sample_date_i} ")
         
         ax[0].set_title("Piezometric head")
