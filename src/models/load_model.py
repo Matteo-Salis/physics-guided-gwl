@@ -279,6 +279,25 @@ def load_model(config):
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
                 activation= config["activation"]), model_name
+        
+    elif config["model"] == "SparseData_STMoE":
+        
+        model_name = "SparseData_STMoE"
+        print(f"Model: {model_name}")
+        
+        return SparseData_STMoE(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                target_dim = config["target_dim"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                fusion_embedding_dim = config["fusion_embedding_dim"],
+                st_heads = config["st_heads"],
+                st_mha_blocks = config["st_mha_blocks"],
+                num_experts = config["num_experts"],
+                densification_dropout = config["densification_dropout"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"],
+                activation= config["activation"]), model_name
     
     else:
         raise Exception("Model name unknown.")
