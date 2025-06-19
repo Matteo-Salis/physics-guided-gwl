@@ -39,7 +39,7 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                             
                         else:
                             teacher_forcing = True
-                            print("Teacher Forcing Mode!", end = " - ")
+                            print("Teacher Forcing Mode!", end = " ")
                             X = X.to(device)
                             X_mask = X_mask.to(device)
                             
@@ -51,16 +51,20 @@ def train_dl_model(epoch, dataset, model, train_loader, loss_fn, optimizer, mode
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
+                        Y_hat, aux_loss = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True,
+                                      get_aux_loss = True)
                         
                         #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
                         loss = loss_fn(Y_hat,
                                           Y,
                                           Y_mask)
                         
+                        loss += aux_loss
+                        
                         #loss += l2_alpha * loss_l2_regularization(model)
                         
-                        print("Training_data_loss: ", loss.item())
+                        print("Training_data_loss: ", loss.item(), end = " - ")
+                        print("aux_moe_loss: ", aux_loss)
                         
                         loss.backward()
                         optimizer.step()

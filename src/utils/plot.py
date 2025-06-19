@@ -405,7 +405,8 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
         
         
     W = dataset.get_weather_video(start_date_output,
-                                  end_date_output)
+                                  end_date_output,
+                                  lags = dataset.config["weather_lags"])
     
     Y, _ = dataset.get_target_data(start_date_output,
                                    end_date_output,
