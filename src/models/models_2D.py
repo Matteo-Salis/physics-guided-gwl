@@ -2833,7 +2833,7 @@ class SparseData_STMoE(nn.Module):
         return embeddings
     
     def __init__(self,
-                weather_CHW_dim = [7, 9, 12],
+                weather_CHW_dim = [23, 9, 12],
                 target_dim = [14, 31],
                 spatial_embedding_dim = 16,
                 spatial_heads = 2,
@@ -2880,14 +2880,8 @@ class SparseData_STMoE(nn.Module):
         self.ST_Conditioning_Module = ST_Conditioning_Block(
                                                             in_channels = 5,
                                                             hidden_channels = 64, 
-                                                            out_channels = 16, 
+                                                            out_channels = 1, 
                                                             activation = self.activation) 
-        
-        # self.ST_Conditioning_Module = FiLM_Conditioning_Block(in_channels = 5,
-        #                                                     hidden_channles = 64, 
-        #                                                     out_channels = self.fusion_embedding_dim, 
-        #                                                     activation = self.activation)
-        
 
         ### Weather module ### 
         
@@ -2901,15 +2895,11 @@ class SparseData_STMoE(nn.Module):
         
         ### Joint Modoule ### 
         
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2)+16,
+        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2),
                                                        self.fusion_embedding_dim),
                                              self.activation_fn)
         
         ### Flatten Space-Time Dimension
-        
-        ### Spatio-Temporal Positional Embedding        
-        # self.positional_embedding = self.PositionEmbedding(math.prod(self.target_dim),
-        #                                                    self.fusion_embedding_dim)
         
         ### Causal Mask 
         self.causal_mask = torch.tril(torch.ones((self.target_dim[0], self.target_dim[0]))) # Tempooral Mask
@@ -2931,11 +2921,12 @@ class SparseData_STMoE(nn.Module):
             
         ### De-Flatten Space-Time Dimension
         
-        self.linear = nn.Linear(self.fusion_embedding_dim,
-                                  int(self.spatial_embedding_dim*2))
+        self.linear = nn.Sequential(
+                                    nn.Linear(self.fusion_embedding_dim,
+                                                self.spatial_embedding_dim),
+                                    self.activation_fn)
                                    
-        self.output = nn.Sequential(self.activation_fn,
-                                    nn.Linear(int(self.spatial_embedding_dim*2),
+        self.output = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim),
                                                 self.spatial_embedding_dim),
                                     nn.LayerNorm(self.spatial_embedding_dim),
                                     self.activation_fn,
@@ -2954,19 +2945,11 @@ class SparseData_STMoE(nn.Module):
                                           dim = -1) # B, D, S, C
         
         ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
+        ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
         
         if [W[0].shape[2], Z.shape[1]] != self.target_dim:
                 
-                # Compute Positional Embedding and Causal Mask if inference tlen is different from the training one
-                # Positional Embedding
                 print("Computing Causal Mask...")
-                
-                # positional_embeddings = self.PositionEmbedding(W[0].shape[2]*X.shape[-2],
-                #                         self.fusion_embedding_dim).to(W[0].device)
-                
-                # # seq_len = self.dense_seq_len * ((W[0].shape[2])/self.nd)
-                # # positional_embeddings = self.PositionEmbedding(int(seq_len), self.dense_emb_dim).to(W[0].device)
-                # positional_embeddings = positional_embeddings[None,:,:].expand(W[0].shape[0],-1,-1)  # (seq_len, emb_dim)
             
                 # Causal Mask
                 causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
@@ -2980,7 +2963,6 @@ class SparseData_STMoE(nn.Module):
 
                 
         else:
-                #positional_embeddings = self.positional_embedding[None,:,:].expand(W[0].shape[0],-1,-1).to(W[0].device)
                 causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
         
         if self.training is True and teacher_forcing is True:
@@ -3016,48 +2998,20 @@ class SparseData_STMoE(nn.Module):
                 
             Autoreg_st = torch.stack(Autoreg_st, dim = 1)
             Weather_st = torch.stack(Weather_st, dim = 1)
-            
-            # Spatial repetition 
-            # Date_Conditioning_st = Date_Conditionings[:,:,None,:,:].expand(-1,
-            #                                                                 -1,
-            #                                                                 self.target_dim[1],
-            #                                                                 -1,
-            #                                                                 -1)  
-            # print(Autoreg_st.shape)
-            # print(Weather_st.shape)
 
             Fused_st = torch.cat([Autoreg_st,
-                                    Weather_st,
-                                    ST_Conditionings], 
+                                    Weather_st], 
                                     dim = -1)
-            
-            # Date Conditioning FiLM # N,D,S,2,C
-            #Fused_st = (Fused_st * ST_Conditionings[:,:,:,0,:]) + ST_Conditionings[:,:,:,1,:]
-            #Fused_st = Fused_st + ST_Conditionings[:,:,:,0,:]
-            #Fused_st = self.activation_fn(Fused_st)
             
             Fused_st_extent = Fused_st.shape[1:3]
             Fused_st = torch.flatten(Fused_st, 1, 2)
             
-            # N,C,L
-            
             Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
                                                 p = self.spatial_dropout, training = True)
             
-            #print(Hidden_Video.shape)
             Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
             
-            ### Causal Mask 
-            #causal_mask = self.causal_mask[None,:,:].expand(int(Fused_st.shape[0]*self.st_heads),-1,-1).to(Fused_st.device)
-            
-            
-            #print(causal_mask.shape)
-            #print(Hidden_Video.shape)
-            #print(Hidden_Video.shape)
-            # positional_embedding = self.positional_embedding[None,:,:].expand(Fused_st.shape[0],
-            #                                                                   -1,-1).to(Fused_st.device)  # (seq_len, emb_dim)
-            # #print(positional_embedding.shape)
-            # Fused_st = Fused_st + positional_embedding
+            Fused_st += ST_Conditionings
             
             total_aux_loss = []
             
@@ -3069,13 +3023,12 @@ class SparseData_STMoE(nn.Module):
             
             total_aux_loss = torch.tensor(total_aux_loss).sum()
             
-            #Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*self.target_dim,Fused_st.shape[-1])) 
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1])) 
+            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))
             
             Fused_st = self.linear(Fused_st)
             
-            #Fused_st = (Fused_st * ST_Conditionings[:,:,:,2,:]) + ST_Conditionings[:,:,:,3,:]
-            
+            Fused_st = Fused_st + Autoreg_st
+             
             Output_st = self.output(Fused_st)
             
             if get_aux_loss is True:
@@ -3087,7 +3040,9 @@ class SparseData_STMoE(nn.Module):
             
             Sparse_data = X
             Sparse_data_mask = X_mask
-            Fused_st_list = []
+            
+            Autoreg_st_rlist = []
+            Weather_st_rlist = []
             
             total_aux_loss = []
                 
@@ -3096,41 +3051,29 @@ class SparseData_STMoE(nn.Module):
                 
                 Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
                 
-                Autoreg_s = self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
+                Autoreg_st_rlist.append(self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
                                                                 V = Sparse_data,
                                                                 Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1)).unsqueeze(1)
+                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1))
+                                )
                 
                 Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
                 Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Weather_s = self.Weather_Module(
+                Weather_st_rlist.append(self.Weather_Module(
                                                         K = Weather_Keys,
                                                         V = Weather_Values,
                                                         Q = Z
-                                                        ).unsqueeze(1)
+                                                        )
+                                )
                 
-                ST_conditionings_rolling = ST_Conditionings[:,timestep,:,:].unsqueeze(1) # N,D,S,2*FiLMed,C
-                Fused_s = torch.cat([Autoreg_s,
-                                        Weather_s,
-                                        ST_conditionings_rolling], 
-                                        dim = -1)
+                #ST_conditionings_rolling = ST_Conditionings[:,timestep,:,:].unsqueeze(1) # N,D,S,2*FiLMed,C
+                #Autoreg_st.append(Autoreg_s)
+                Autoreg_st = torch.stack(Autoreg_st_rlist, dim = 1)
+                Weather_st = torch.stack(Weather_st_rlist, dim = 1)
+                Fused_st = torch.cat([Autoreg_st,
+                                    Weather_st], 
+                                    dim = -1)
                 
-                Fused_st_list.append(Fused_s)
-                Fused_st = torch.cat(Fused_st_list, dim = 1)
-                
-                
-                # Date_conditioning_st = Date_conditioning_st[:,:,None,:,:].expand(-1,-1,
-                #                                                                 X.shape[-2],
-                #                                                                 -1,
-                #                                                                 -1)  
-                #Hidden_Video_tlen = Hidden_Video.shape[2]
-                # print(timestep)
-                # print(Hidden_Video.shape)
-                
-                # Date Conditioning
-                #Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,0,:]) + ST_conditionings_rolling[:,:,:,1,:]
-                #Fused_st = Fused_st + ST_conditionings_rolling[:,:,:,0,:]
-                #Fused_st = self.activation_fn(Fused_st)
                 
                 Fused_st_extent = Fused_st.shape[1:3]
                 Fused_st = torch.flatten(Fused_st, 1, 2)
@@ -3139,27 +3082,12 @@ class SparseData_STMoE(nn.Module):
                                                 p = self.spatial_dropout, training = mc_dropout)
                 
                 Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
-                                               
-                # # Tubelet Embedding
-                # Hidden_Video = self.dense_embedding(Hidden_Video)
-                # #print(Hidden_Video.shape)
-                # Hidden_Video_tlen_emb = Hidden_Video.shape[2]
-                # # print("HV sh", Hidden_Video.shape)
-                # # print("HV len", Hidden_Video_tlen_emb)
-                # Hidden_Video = torch.moveaxis(Hidden_Video, 1,-1).flatten(1,3)
                 
-                # # Positional Embedding
-                # #print(Hidden_Video.shape)
-                # #print(positional_embeddings.shape)
-                #positional_embedding = positional_embeddings[:,:Fused_st.shape[1],:]          
+                Fused_st = Fused_st + ST_Conditionings[:,:Fused_st.shape[1],:]
+                                               
                 causal_mask = causal_masks[:,
                                           :math.prod(Fused_st_extent),
                                           :math.prod(Fused_st_extent)]
-                # #print("CM", causal_mask.shape)
-                # #print(causal_mask)
-                #Fused_st = Fused_st + positional_embedding
-            
-                # Hidden_Video = Hidden_Video + positional_embedding
                 
                 for i in range(self.st_mha_blocks):
             
@@ -3169,26 +3097,19 @@ class SparseData_STMoE(nn.Module):
                     if timestep == W[0].shape[2]-1:
                         total_aux_loss.append(aux_loss)
                 
-                #print(Hidden_Video.shape)
                 
                 Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
                 
-                
                 Fused_st = self.linear(Fused_st)
             
-                #Fused_st = (Fused_st * ST_conditionings_rolling[:,:,:,2,:]) + ST_conditionings_rolling[:,:,:,3,:]
-            
+                Fused_st = Fused_st + Autoreg_st
+                
                 Output_st = self.output(Fused_st)
                 
-                # print(Sparse_data.shape)
-                # print(Output_st.shape)
-            
                 Sparse_data = torch.cat([Z.clone(),
                                        Output_st[:,-1,:,:]],
                                       dim=-1)
                 
-                #print(Sparse_data.shape)
-                #ImageCond = ImageCond.flatten(start_dim = 1, end_dim = 2)
                 Sparse_data_mask = torch.ones((Sparse_data[:,:,0].shape)).to(torch.bool).to(Sparse_data.device)
             
         total_aux_loss = torch.tensor(total_aux_loss).sum()
