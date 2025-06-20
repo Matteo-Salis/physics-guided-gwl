@@ -49,7 +49,7 @@ import matplotlib.animation as animation
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/VideoCond/SparseData_Transformer_0.json" #config_files_1d/lstm_att_1.json
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/VideoCond/SparseData_STMoE_2.json" #config_files_1d/lstm_att_1.json
 config = {}
 with open(json_file) as f:
     config = json.load(f)
@@ -74,7 +74,7 @@ device = (
 device
 
 # %%
-model = models_2D.SparseData_Transformer(
+model = models_2D.SparseData_STMoE(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 target_dim = config["target_dim"],
                 spatial_embedding_dim = config["spatial_embedding_dim"],
@@ -82,13 +82,27 @@ model = models_2D.SparseData_Transformer(
                 fusion_embedding_dim = config["fusion_embedding_dim"],
                 st_heads = config["st_heads"],
                 st_mha_blocks = config["st_mha_blocks"],
+                num_experts = config["num_experts"],
                 densification_dropout = config["densification_dropout"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
                 activation= config["activation"]).to(device)
 
+# models_2D.SparseData_Transformer(
+#                 weather_CHW_dim = config["weather_CHW_dim"],
+#                 target_dim = config["target_dim"],
+#                 spatial_embedding_dim = config["spatial_embedding_dim"],
+#                 spatial_heads = config["spatial_heads"],
+#                 fusion_embedding_dim = config["fusion_embedding_dim"],
+#                 st_heads = config["st_heads"],
+#                 st_mha_blocks = config["st_mha_blocks"],
+#                 densification_dropout = config["densification_dropout"],
+#                 layernorm_affine = config["layernorm_affine"],
+#                 spatial_dropout = config["spatial_dropout"],
+#                 activation= config["activation"]).to(device)
+
 # %%
-model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/models/model_SparseData_Transformer_20250618_183513.pt"
+model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/models/model_SparseData_STMoE_20250619_175735.pt"
 model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
 model.eval()
 
