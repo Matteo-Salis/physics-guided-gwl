@@ -4,6 +4,7 @@ from functools import partial
 from train_test.training_1d import *
 from train_test.training_2d import *
 from train_test.training_2D import *
+from train_test.training_SparseData import *
 
 from loss.losses_2D import *
 
@@ -108,13 +109,25 @@ def training_model(config):
             plot_arch = config["plot_arch"]
             losses_coeff = config["losses_coeff"]
             
-            if config["physics_scheduling"] == "linear":
-                physics_scheduling = torch.arange(0,config["epochs"])/(config["epochs"]-1)
-                print(f"Physics Scheduling: {physics_scheduling}")
+            # if config["physics_scheduling"] == "linear":
+            #     physics_scheduling = torch.arange(0,config["epochs"])/(config["epochs"]-1)
+            #     print(f"Physics Scheduling: {physics_scheduling}")
                 
             if config["physics_scheduling"] == "affine":
-                physics_scheduling = torch.zeros(config["epochs"])
-                physics_scheduling[config["physics_scheduling_offset"]:] = torch.linspace(0,config["epochs"],config["epochs"]-config["physics_scheduling_offset"])/config["epochs"]
+                
+                if config["physics_scheduling_offset"] > 0:
+                    physics_scheduling = torch.zeros(config["epochs"])
+                    offset_from_epoch = int(config["physics_scheduling_offset"])
+                    physics_scheduling[offset_from_epoch:] = torch.linspace(0,1,config["epochs"]-offset_from_epoch)
+                    
+                elif config["physics_scheduling_offset"] < 0:
+                    
+                    offset_from_value = config["physics_scheduling_offset"]
+                    physics_scheduling = torch.linspace(offset_from_value,1,config["epochs"])
+                    
+                else:
+                    physics_scheduling = torch.linspace(0,1,config["epochs"])
+                
                 print(f"Physics Scheduling: {physics_scheduling}")
             
             elif isinstance(config["physics_scheduling"], float):
@@ -127,11 +140,11 @@ def training_model(config):
                            sensors_to_plot = sensors_to_plot,
                            timesteps_to_look = timesteps_to_look,
                            plot_arch = plot_arch,
-                           loss_physics_fn = physics_loss,
+                           loss_physics_fn = partial(physics_loss, loss = config["loss"]),
                            losses_coeff = losses_coeff,
                            physics_guide_alpha = physics_scheduling)
     
-    ######## 2D Approach ########
+    ######## SparseData Approach ########
     elif config["dataset_type"] == "Dataset_Sparse":
         if config["physics"] is False:
             
@@ -143,7 +156,7 @@ def training_model(config):
             #timesteps_to_look = config["timesteps_to_look"]
             plot_arch = config["plot_arch"]
             
-            return partial(train_dl_model, 
+            return partial(train_dl_model_SparseData, 
                            start_dates_plot = start_dates_plot_training,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,

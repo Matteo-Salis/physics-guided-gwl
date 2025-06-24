@@ -188,67 +188,6 @@ class Dataset_Sparse(Dataset):
             self.weather_get_coords = True
         else:
             self.weather_get_coords = False
-        
-    # def rasterize_sparse_measurements(self, new_dimensions):
-    #     # downscaling dtm
-        
-    #     new_height, new_width = new_dimensions
-    #     # new_width = round(self.dtm_roi.rio.width * downscale_factor)
-    #     # new_height = round(self.dtm_roi.rio.height * downscale_factor)
-
-    #     self.dtm_roi_downsampled = self.dtm_roi.rio.reproject(
-    #         self.dtm_roi.rio.crs,
-    #         shape=(new_height, new_width),
-    #         resampling=Resampling.bilinear,
-    #     )
-
-    #     wtd_df_util = copy.deepcopy(self.wtd_df)
-    #     wtd_df_util["date"] = self.wtd_df.index.get_level_values(0)
-    #     wtd_data_geop = gpd.GeoDataFrame(
-    #     wtd_df_util, geometry =gpd.points_from_xy(wtd_df_util["lon"], 
-    #                                         wtd_df_util["lat"]), crs="EPSG:4326")
-    #     wtd_data_geop = wtd_data_geop[["date",self.target,"geometry"]]
-
-    #     self.minx = self.dtm_roi_downsampled.x.min()
-    #     self.miny = self.dtm_roi_downsampled.y.min()
-    #     self.maxx = self.dtm_roi_downsampled.x.max()
-    #     self.maxy = self.dtm_roi_downsampled.y.max()
-        
-    #     print("Rasterizing groundwater dataframe...")
-    #     rasterized_ds_list = []
-    #     for date_idx in range(len(self.dates)):
-            
-    #         vector_ds = wtd_data_geop.loc[wtd_data_geop["date"] == self.dates[date_idx],:]
-
-    #         rasterized_ds = make_geocube(vector_data=vector_ds,
-    #                                     measurements=[self.target],
-    #                                     output_crs="epsg:4326",
-    #                                     # resolution= new_resolution,
-    #                                     resolution=(self.dtm_roi_downsampled.rio.transform().a, round(self.dtm_roi_downsampled.rio.transform().e, 4)),
-    #                                     # Global extent in degrees of longitude and latitude
-    #                                     geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
-            
-    #         rasterized_ds_list.append(rasterized_ds)
-    #     print("Rasterization complete!")
-
-    #     self.wtd_data_raserized = xarray.concat(rasterized_ds_list, dim = "time")
-    #     self.wtd_data_raserized = self.wtd_data_raserized.assign_coords({"time": self.dates})
-
-    #     self.wtd_data_raserized = self.wtd_data_raserized.reindex(y=list(reversed(self.wtd_data_raserized.y)))
-    #     self.wtd_data_raserized = self.wtd_data_raserized.reindex(x=list(reversed(self.wtd_data_raserized.x)))
-
-    #     mask = self.wtd_data_raserized.notnull()
-    #     mask = mask.rename({self.target:'nan_mask'})
-    #     self.wtd_data_raserized = self.wtd_data_raserized.assign(mask = mask["nan_mask"])
-        
-    #     self.target_rasterized_dtm = self.dtm_roi.sel(x = self.wtd_data_raserized.x,
-    #                                                      y = self.wtd_data_raserized.y,
-    #                                                      method = "nearest")
-    #     self.target_rasterized_coords = self.coordinates_xr(self.target_rasterized_dtm, coord_name = "xy")
-        
-    #     self.target_rasterized_coords = np.concat([self.target_rasterized_coords,
-    #                                 np.moveaxis(self.target_rasterized_dtm.values, 0,-1)],
-    #                                 axis=-1)
 
     def loading_point_wtd(self, fill_value = None):
         

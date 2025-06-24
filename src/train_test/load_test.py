@@ -3,6 +3,8 @@ from functools import partial
 from train_test.test_1d import *
 from train_test.test_2d import *
 from train_test.test_2D import *
+from train_test.test_SparseData import *
+from loss.losses_2D import *
 
 def test_model(config):
 
@@ -96,7 +98,7 @@ def test_model(config):
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,
                            timesteps_to_look = timesteps_to_look,
-                           loss_physics_fn = physics_loss)
+                           loss_physics_fn = partial(physics_loss, loss = config["loss"]))
             
     elif config["dataset_type"] == "Dataset_Sparse":
         if config["physics"] is False:
@@ -108,7 +110,7 @@ def test_model(config):
             sensors_to_plot = config["sensors_to_plot"]
             #timesteps_to_look = config["timesteps_to_look"]
             
-            return partial(test_dl_model, 
+            return partial(test_dl_model_SparseData, 
                            start_dates_plot = start_dates_plot_test,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,

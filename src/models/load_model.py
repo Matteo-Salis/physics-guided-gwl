@@ -7,19 +7,19 @@ def load_model(config):
 
     if config["model"] == "Discrete2DConcat1":
         model_name = "Concat1_2D"
-        return Discrete2DConcat1(twindow), model_name
+        model =  Discrete2DConcat1(twindow)
     
     elif config["model"] == "Discrete2DConcat16":
         model_name = "Concat16_2D"
-        return Discrete2DConcat16(twindow), model_name
+        model = Discrete2DConcat16(twindow)
     
     elif config["model"] == "Discrete2DConcat1_Time":
         model_name = "Concat1_T_2D"
-        return Discrete2DConcat1_Time(twindow), model_name
+        model = Discrete2DConcat1_Time(twindow)
     
     elif config["model"] == "Discrete2DConvLSTM":
         model_name = "ConvLSTM_2D"
-        return Discrete2DConvLSTM(twindow), model_name
+        model = Discrete2DConvLSTM(twindow)
     
     elif config["model"] == "PICCNN_att_1D":
         
@@ -30,7 +30,7 @@ def load_model(config):
         
         model_name = "PICCNN_A_1D"
         
-        return SC_PICCNN_att(timestep = config["timesteps"],
+        model = SC_PICCNN_att(timestep = config["timesteps"],
                  cb_emb_dim = config["cb_emb_dim"],
                  cb_att_h = config["cb_att_h"],
                  cb_fc_layer = config["cb_fc_layer"],
@@ -41,7 +41,7 @@ def load_model(config):
                  ccnn_n_filters =  config["ccnn_n_filters"],
                  ccnn_n_layers =  config["ccnn_n_layers"],
                  ph_params = ph_params,
-                 ph_params_neurons = config["ph_params_neurons"]), model_name
+                 ph_params_neurons = config["ph_params_neurons"])
     
     elif config["model"] == "CCNN_att_1D":
         
@@ -49,7 +49,7 @@ def load_model(config):
         
         model_name = "CCNN_A_1D"
         
-        return SC_CCNN_att(timestep = config["timesteps"],
+        model = SC_CCNN_att(timestep = config["timesteps"],
                     cb_emb_dim = config["cb_emb_dim"],
                     cb_att_h = config["cb_att_h"],
                     cb_fc_layer = config["cb_fc_layer"],
@@ -59,7 +59,7 @@ def load_model(config):
                     ccnn_kernel_size =  config["ccnn_kernel_size"],
                     ccnn_n_filters =  config["ccnn_n_filters"],
                     ccnn_n_layers =  config["ccnn_n_layers"],
-                    ), model_name
+                    )
         
     elif config["model"] == "CCNN_idw_1D":
         
@@ -67,7 +67,7 @@ def load_model(config):
         
         model_name = "CCNN_IDW_1D"
         
-        return SC_CCNN_idw(timestep = config["timesteps"],
+        model = SC_CCNN_idw(timestep = config["timesteps"],
                     cb_fc_layer = config["cb_fc_layer"],
                     cb_fc_neurons = config["cb_fc_neurons"],
                     conv_filters = config["conv_filters"],
@@ -75,7 +75,7 @@ def load_model(config):
                     ccnn_kernel_size =  config["ccnn_kernel_size"],
                     ccnn_n_filters =  config["ccnn_n_filters"],
                     ccnn_n_layers =  config["ccnn_n_layers"],
-                    ), model_name
+                    )
         
     elif config["model"] == "CCNN_att_TRPS_1D":
     
@@ -83,7 +83,7 @@ def load_model(config):
         
         model_name = "CCNN_A_1D"
     
-        return SC_CCNN_att_TRSP(timestep = config["timesteps"],
+        model = SC_CCNN_att_TRSP(timestep = config["timesteps"],
                     cb_emb_dim = config["cb_emb_dim"],
                     cb_att_h = config["cb_att_h"],
                     cb_fc_layer = config["cb_fc_layer"],
@@ -93,7 +93,7 @@ def load_model(config):
                     ccnn_kernel_size =  config["ccnn_kernel_size"],
                     ccnn_n_filters =  config["ccnn_n_filters"],
                     ccnn_n_layers =  config["ccnn_n_layers"],
-                                ), model_name
+                                )
     
     elif config["model"] == "LSTM_att_1D":
         
@@ -101,7 +101,7 @@ def load_model(config):
         
         model_name = "LSTM_A_1D"
         
-        return SC_LSTM_att(timestep = config["timesteps"],
+        model = SC_LSTM_att(timestep = config["timesteps"],
                     cb_emb_dim = config["cb_emb_dim"],
                     cb_att_h = config["cb_att_h"],
                     cb_fc_layer = config["cb_fc_layer"],
@@ -110,7 +110,7 @@ def load_model(config):
                     lstm_layer = config["lstm_layer"],
                     lstm_input_units = config["lstm_input_units"],
                     lstm_units = config["lstm_units"]
-                    ), model_name
+                    )
         
     elif config["model"] == "LSTM_att_TT_1D":
         
@@ -118,7 +118,7 @@ def load_model(config):
         
         model_name = "LSTM_A_TT_1D"
         
-        return SC_LSTM_att_TT(timestep = config["timesteps"],
+        model = SC_LSTM_att_TT(timestep = config["timesteps"],
                     cb_emb_dim = config["cb_emb_dim"],
                     cb_att_h = config["cb_att_h"],
                     cb_fc_layer = config["cb_fc_layer"],
@@ -127,7 +127,7 @@ def load_model(config):
                     lstm_layer = config["lstm_layer"],
                     lstm_input_units = config["lstm_input_units"],
                     lstm_units = config["lstm_units"]
-                    ), model_name
+                    )
         
     elif config["model"] == "LSTM_idw_1D":
         
@@ -135,21 +135,21 @@ def load_model(config):
         
         model_name = "LSTM_IDW_1D"
         
-        return SC_LSTM_idw(timestep = config["timesteps"],
+        model = SC_LSTM_idw(timestep = config["timesteps"],
                            cb_fc_layer = config["cb_fc_layer"],
                            cb_fc_neurons = config["cb_fc_neurons"],
                            conv_filters = config["conv_filters"],
                            lstm_layer = config["lstm_layer"],
                            lstm_input_units = config["lstm_input_units"],
                            lstm_units = config["lstm_units"]
-                           ), model_name
+                           )
         
     elif config["model"] == "AttCB_ConvLSTM":
         
         model_name = "AttCB_ConvLSTM"
         print(f"Model: {model_name}")
         
-        return AttCB_ConvLSTM(
+        model = AttCB_ConvLSTM(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
@@ -158,14 +158,14 @@ def load_model(config):
                 convlstm_units = config["convlstm_units"],
                 convlstm_kernel = config["convlstm_kernel"],
                 densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"]), model_name
+                upsampling_dim = config["upsampling_dim"])
         
     elif config["model"] == "VideoCB_ConvLSTM":
         
         model_name = "VideoCB_ConvLSTM"
         print(f"Model: {model_name}")
         
-        return VideoCB_ConvLSTM(
+        model = VideoCB_ConvLSTM(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
@@ -178,14 +178,14 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"]), model_name
+                spatial_dropout = config["spatial_dropout"])
         
     elif config["model"] == "FullAttention_ConvLSTM":
         
         model_name = "FullAttention_ConvLSTM"
         print(f"Model: {model_name}")
         
-        return FullAttention_ConvLSTM(
+        model = FullAttention_ConvLSTM(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
@@ -198,14 +198,14 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"]), model_name
+                spatial_dropout = config["spatial_dropout"])
         
     elif config["model"] == "VideoCB_ConvLSTM_PI":
         
         model_name = "VideoCB_ConvLSTM"
         print(f"Model: {model_name}")
         
-        return VideoCB_ConvLSTM_PI(
+        model = VideoCB_ConvLSTM_PI(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
@@ -218,14 +218,14 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"]), model_name
+                spatial_dropout = config["spatial_dropout"])
         
     elif config["model"] == "FullAttention_CausalConv":
         
         model_name = "FullAttention_CausalConv"
         print(f"Model: {model_name}")
         
-        return FullAttention_CausalConv(
+        model = FullAttention_CausalConv(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 cb_emb_dim = config["cb_emb_dim"],
                 cb_heads = config["cb_heads"],
@@ -240,26 +240,47 @@ def load_model(config):
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
-                activation = config["activation"]), model_name
+                activation = config["activation"])
         
         
-    elif config["model"] == "FullAttention_ViViT":
+    elif config["model"] == "ViViT_STMoE":
         
-        model_name = "FullAttention_ViViT"
+        model_name = "ViViT_STMoE"
         print(f"Model: {model_name}")
         
-        return FullAttention_ViViT(
+        model = ViViT_STMoE(
                 weather_CHW_dim = config["weather_CHW_dim"],
-                sparse_emb_dim = config["sparse_emb_dim"],
-                sparse_heads = config["sparse_heads"],
-                dense_emb_dim = config["dense_emb_dim"],
-                dense_heads = config["dense_heads"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                fusion_embedding_dim = config["fusion_embedding_dim"],
+                st_heads = config["st_heads"],
                 patch_size = config["patch_size"],
-                mha_blocks = config["mha_blocks"],
+                st_mha_blocks = config["st_mha_blocks"],
+                num_experts = config["num_experts"],
                 densification_dropout = config["densification_dropout"],
                 upsampling_dim = config["upsampling_dim"],
                 layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"]), model_name
+                spatial_dropout = config["spatial_dropout"])
+        
+    
+    elif config["model"] == "ViViT_STMoE_PI":
+        
+        model_name = "ViViT_STMoE_PI"
+        print(f"Model: {model_name}")
+        
+        model = ViViT_STMoE_PI(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                fusion_embedding_dim = config["fusion_embedding_dim"],
+                st_heads = config["st_heads"],
+                patch_size = config["patch_size"],
+                st_mha_blocks = config["st_mha_blocks"],
+                num_experts = config["num_experts"],
+                densification_dropout = config["densification_dropout"],
+                upsampling_dim = config["upsampling_dim"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"])
         
         
     elif config["model"] == "SparseData_Transformer":
@@ -267,7 +288,7 @@ def load_model(config):
         model_name = "SparseData_Transformer"
         print(f"Model: {model_name}")
         
-        return SparseData_Transformer(
+        model = SparseData_Transformer(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 target_dim = config["target_dim"],
                 spatial_embedding_dim = config["spatial_embedding_dim"],
@@ -278,14 +299,14 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
-                activation= config["activation"]), model_name
+                activation= config["activation"])
         
     elif config["model"] == "SparseData_STMoE":
         
         model_name = "SparseData_STMoE"
         print(f"Model: {model_name}")
         
-        return SparseData_STMoE(
+        model = SparseData_STMoE(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 target_dim = config["target_dim"],
                 spatial_embedding_dim = config["spatial_embedding_dim"],
@@ -297,11 +318,20 @@ def load_model(config):
                 densification_dropout = config["densification_dropout"],
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
-                activation= config["activation"]), model_name
+                activation= config["activation"])
     
     else:
         raise Exception("Model name unknown.")
     
+    
+    if config["pretrain_model"] is not None:
+        print("Loading pretrained model...")
+        model.load_state_dict(torch.load(config["pretrain_model"],
+                                 weights_only=True), strict=False)
+        print("Done!")
+    
+    
+    return model, model_name
     
     
 if __name__ == "__main__":

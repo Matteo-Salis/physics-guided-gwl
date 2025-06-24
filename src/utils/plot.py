@@ -536,21 +536,27 @@ def wandb_time_series(dataset, model, device,
 
 def test_data_prediction(start_date, twindow, dataset, model, device, eval = True):
     
+    start_date_input = start_date
+    start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
+    
+    end_date_input = start_date_input + np.timedelta64(twindow-1, dataset.config["frequency"])
+    end_date_output = start_date_output + np.timedelta64(twindow-1, dataset.config["frequency"])
+    
     if eval is True:
         model.eval()                                                    
-        X, X_mask = dataset.get_icon_target_data(start_date, start_date)    
+        X, X_mask = dataset.get_icon_target_data(start_date_input, start_date_input)    
         X = X.squeeze()
         X_mask = X_mask.squeeze()
         teacher_forcing = False
         
     else:
-        X, X_mask = dataset.get_icon_target_data(start_date, start_date + np.timedelta64(twindow-1, dataset.config["frequency"]))
+        X, X_mask = dataset.get_icon_target_data(start_date_input, end_date_input)
         model.train()
         teacher_forcing = True
         
     Z = torch.from_numpy(dataset.target_rasterized_coords).to(torch.float32)
-    W = dataset.get_weather_video(start_date, end_date = start_date + np.timedelta64(twindow, dataset.config["frequency"]))
-    Y, _ = dataset.get_target_video(dataset.get_iloc_from_date(start_date), twindow)
+    W = dataset.get_weather_video(start_date_output, end_date = end_date_output, lags = dataset.config["weather_lags"])
+    Y, _ = dataset.get_target_video(dataset.get_iloc_from_date(start_date_output), twindow)
     
     
     
@@ -646,9 +652,9 @@ def plot_sensor_ts(sensor_ds, title,
                    save_dir = None,
                    print_plot = False):
     
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(sensor_ds, label = sensor_ds.columns, marker = "o", lw = 0.7, markersize = 2)
-    ax.tick_params(axis='x', rotation=50)
+    ax.tick_params(axis='x', rotation=40)
 
     ax.set_title(title)
 
@@ -673,8 +679,8 @@ def find_munic_lat_lon_sensor(dataset, sensor_id):
     return municipality, lat, lon
 
 def find_sensor_pred_in_xr(true_xr, pred_xr, lat, lon):
-    ts_pred = pd.DataFrame({"True": true_xr.sel(lon  = lon, lat = lat, method = "nearest"),
-                       "Predicted": pred_xr.sel(lon  = lon, lat = lat, method = "nearest").values,
+    ts_pred = pd.DataFrame({"Truth": true_xr.sel(lon  = lon, lat = lat, method = "nearest"),
+                       "Prediction": pred_xr.sel(lon  = lon, lat = lat, method = "nearest").values,
                        },
                        index = pred_xr.sel(lon  = lon, lat = lat, method = "nearest").time.values)
     
