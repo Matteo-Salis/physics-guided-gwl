@@ -3,20 +3,28 @@ import torch
 import torch.nn.functional as F
 
 
-def loss_masked_mse(Y_hat, Y, Y_mask):
+def loss_masked_mse(Y_hat, Y, Y_mask, input):
     
-    if len(Y_hat.size()) < 3:
-        Y_hat = Y_hat.unsqueeze(0)
+    if input == "ViViT_STMoE":
+        if len(Y_hat.size()) < 4:
+            Y_hat = Y_hat.unsqueeze(0)
+    elif input == "SparseData_STMoE":
+        if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0)
     
     if torch.sum(Y_mask) != 0:
         return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
     else:
         return 0.
 
-def loss_masked_mae(Y_hat, Y, Y_mask):
+def loss_masked_mae(Y_hat, Y, Y_mask, input):
     
-    if len(Y_hat.size()) < 3:
-        Y_hat = Y_hat.unsqueeze(0)
+    if input == "ViViT_STMoE":
+        if len(Y_hat.size()) < 4:
+            Y_hat = Y_hat.unsqueeze(0)
+    elif input == "SparseData_STMoE":
+        if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0)
 
     if torch.sum(Y_mask) != 0:        
         return torch.sum(torch.abs(Y_hat[Y_mask]-Y[Y_mask]))  / torch.sum(Y_mask)
@@ -32,8 +40,8 @@ def loss_masked_focal_mse(Y_hat, Y, Y_mask, offset_perc = 0):
         """
         
         """
-        if len(Y_hat.size()) < 4:
-            Y_hat = Y_hat.unsqueeze(0)
+        # if len(Y_hat.size()) < 4:
+        #     Y_hat = Y_hat.unsqueeze(0)
         
         offset = round(Y_hat.shape[1] * offset_perc)
         focal_weights = torch.arange(Y_hat.shape[1]+offset,offset,-1).to(Y_hat.device)/(Y_hat.shape[1] + offset)
@@ -55,8 +63,8 @@ def loss_masked_focal_mae(Y_hat, Y, Y_mask, offset_perc = 0):
         """
         
         """
-        if len(Y_hat.size()) < 4:
-            Y_hat = Y_hat.unsqueeze(0)
+        # if len(Y_hat.size()) < 4:
+        #     Y_hat = Y_hat.unsqueeze(0)
         
         offset = round(Y_hat.shape[1] * offset_perc)
         focal_weights = torch.arange(Y_hat.shape[1]+offset,offset,-1).to(Y_hat.device)/(Y_hat.shape[1] + offset)
@@ -108,13 +116,18 @@ def Fdiff_conv(x, mode = "first_lon"):
     
     return output
 
-def physics_loss(Y_hat, K_lat = 1., K_lon = 1., G = 0.):
+def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
+                 loss = "mae"):
+    
+    Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+    
+    
     
     spatial_grads = []
     
-    for t in range(Y_hat.shape[1]-1):
+    for t in range(Y_hat_denorm.shape[1]-1):
     
-        Y_hat_t = Y_hat[:,t,:,:].unsqueeze(1)
+        Y_hat_t = Y_hat_denorm[:,t,:,:].unsqueeze(1)
         dh_dy = Fdiff_conv(Y_hat_t, mode = "first_lat")
         dh_dx = Fdiff_conv(Y_hat_t, mode = "first_lon")
         
@@ -128,15 +141,20 @@ def physics_loss(Y_hat, K_lat = 1., K_lon = 1., G = 0.):
         
         spatial_grads.append(spatial_grad)
         
-    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Y_hat.device)
+    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Y_hat_denorm.device)
     
-    temporal_grad = Y_hat[:,1:,:,:] - Y_hat[:,:-1,:,:]
+    temporal_grad = Y_hat_denorm[:,1:,:,:] - Y_hat_denorm[:,:-1,:,:]
     
     residuals = temporal_grad - spatial_grads - G
     
-    residuals = torch.mean(residuals**2)
+    residuals_norm = residuals / dataset.norm_factors["target_std"]
+    
+    if loss == "mae":
+        phyiscs_loss = torch.mean(torch.abs(residuals_norm))
+    elif loss == "mse":
+        phyiscs_loss = torch.mean(residuals_norm**2)
         
-    return residuals
+    return phyiscs_loss
 
 if __name__ == "__main__":
     pass

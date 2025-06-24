@@ -36,13 +36,19 @@ class Dataset_2D_VideoCond(Dataset):
         self.twindow = self.config["twindow"]
 
         # Meteorological data loading 
+        print("    Loading weather data...", end = " ")
         self.loading_weather()
+        print("Done!")
         
         # Digital Terrain Model data loading
+        print("    Loading dtm...", end = " ")
         self.loading_dtm()
+        print("Done!")
         
         # Water Table Depth data loading 
+        print("    Loading underground water data...", end = " ")
         self.loading_point_wtd(fill_value = config["fill_value"])
+        print("Done!")
         
         if config["piezo_head"] is True:
             self.compute_piezo_head()
@@ -50,8 +56,10 @@ class Dataset_2D_VideoCond(Dataset):
         else:
             self.target = "wtd"
             
-        # Rasterizing groundwater dataset 
+        # Rasterizing groundwater dataset
+        print("    Rasterizing groundwater data...", end = " ")
         self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"][1:])
+        print("Done!")
         # around 2.5km
         
         if config["normalization"] is True:
@@ -203,7 +211,6 @@ class Dataset_2D_VideoCond(Dataset):
         self.maxx = self.dtm_roi_downsampled.x.max()
         self.maxy = self.dtm_roi_downsampled.y.max()
         
-        print("Rasterizing groundwater dataframe...")
         rasterized_ds_list = []
         for date_idx in range(len(self.dates)):
             
@@ -218,7 +225,6 @@ class Dataset_2D_VideoCond(Dataset):
                                         geom=box(minx=self.minx, miny=self.miny, maxx=self.maxx, maxy=self.maxy))
             
             rasterized_ds_list.append(rasterized_ds)
-        print("Rasterization complete!")
 
         self.wtd_data_raserized = xarray.concat(rasterized_ds_list, dim = "time")
         self.wtd_data_raserized = self.wtd_data_raserized.assign_coords({"time": self.dates})
@@ -357,9 +363,9 @@ class Dataset_2D_VideoCond(Dataset):
         return iloc of last sensor before date_max
         """
         
-        idx_subset = self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max]
+        idx_subset = self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values <= date_max]
         if idx_subset.size > 0:
-            max_idx = np.argmax(self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max])
+            max_idx = np.argmax(idx_subset)
         else:
             max_idx = 0
         return max_idx
@@ -373,20 +379,23 @@ class Dataset_2D_VideoCond(Dataset):
             idx = self.__len__() + idx
         
         # Retrieve date and coords for idx instance
-        start_date = self.wtd_data_raserized.time.values[idx] #self.wtd_df.iloc[idx, :].name[0]
-        end_date = start_date + np.timedelta64(self.twindow, self.config["frequency"])
+        start_date_input = self.wtd_data_raserized.time.values[idx] #self.wtd_df.iloc[idx, :].name[0]
+        start_date_output = self.wtd_data_raserized.time.values[idx+1]
+        
+        end_date_input = start_date_input + np.timedelta64(self.twindow-1, self.config["frequency"])
+        end_date_output = start_date_output + np.timedelta64(self.twindow-1, self.config["frequency"])
           
         # Z = torch.stack(Z, dim = -1).squeeze()
         Z = torch.from_numpy(self.target_rasterized_coords).to(torch.float32)
         
         # Initial state WTD (t0) data        
-        X, X_mask = self.get_icon_target_data(start_date, end_date - np.timedelta64(1, self.config["frequency"]))
+        X, X_mask = self.get_icon_target_data(start_date_input, end_date_input)
         
         # Retrieve weather data
-        W = self.get_weather_video(start_date, end_date)
+        W = self.get_weather_video(start_date_output, end_date_output, lags = self.config["weather_lags"])
         
         # Retrieve wtd values from t0+1 to T for the idx instance sensor
-        Y, Y_mask = self.get_target_video(idx, twindow=self.twindow)
+        Y, Y_mask = self.get_target_video(idx+1, twindow=self.twindow)
         
         return [X, Z, W, Y, X_mask, Y_mask]
     
@@ -413,30 +422,81 @@ class Dataset_2D_VideoCond(Dataset):
     
     def get_target_video(self, idx, twindow):
         
-        Y = torch.from_numpy(self.target_rasterized_numpy[0,idx+1:idx+1+twindow,:,:]).to(torch.float32)
-        Y_mask = torch.from_numpy(self.target_rasterized_numpy[1,idx+1:idx+1+twindow,:,:]).to(torch.bool)
+        Y = torch.from_numpy(self.target_rasterized_numpy[0,idx:idx+twindow,:,:]).to(torch.float32)
+        Y_mask = torch.from_numpy(self.target_rasterized_numpy[1,idx:idx+twindow,:,:]).to(torch.bool)
         
         return Y, Y_mask
     
-    def get_weather_video(self, start_date, end_date):
-        weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, self.config["frequency"]),
-                                                    end_date)) #slice include extremes
+    # def get_weather_video(self, start_date, end_date):
+    #     weather_video = self.weather_xr.sel(time = slice(start_date + np.timedelta64(1, self.config["frequency"]),
+    #                                                 end_date)) #slice include extremes
         
-        W_video = weather_video.to_array().values
-        W_video = torch.from_numpy(W_video).to(torch.float32)
+    #     W_video = weather_video.to_array().values
+    #     W_video = torch.from_numpy(W_video).to(torch.float32)
         
-        if self.weather_get_coords is True:
+    #     if self.weather_get_coords is True:
+    #         weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+    #         weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+    #         W_video = torch.cat([weather_coords,
+    #                                    W_video], axis=0)
+        
+    #     weather_doy = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+    #     weather_years = weather_video.time.dt.year.values
+        
+    #     W_doy = torch.from_numpy(weather_doy).to(torch.float32)
+    #     W_years = torch.from_numpy(weather_years).to(torch.float32)
+    #     W_date = torch.stack([W_doy, W_years], dim = -1)
+        
+        
+        
+    #     return [W_video, W_date]
+    
+    def get_weather_video(self, start_date, end_date, lags = 0):
+        
+        if lags > 0:
+            
+            start_date = start_date - np.timedelta64(lags, self.config["frequency"])
+            
+            weather_video = self.weather_xr.sel(time = slice(start_date,
+                                                        end_date))
+            shifted_weather_video = [weather_video.shift(time=lag).to_array()[:,lags:,:,:].values for lag in range(lags+1)]
+            shifted_weather_video = np.concat(shifted_weather_video, axis = 0)
+            W_video = torch.from_numpy(shifted_weather_video).to(torch.float32)
+            
             weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
             weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
             W_video = torch.cat([weather_coords,
-                                       W_video], axis=0)
+                                        W_video], axis=0)
+            
+            weather_doy_sin = np.sin((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
+            weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
+            
+            W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+            W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+            
+            W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
+            
+        else:
         
-        weather_doy = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-        weather_years = weather_video.time.dt.year.values
+            weather_video = self.weather_xr.sel(time = slice(start_date,
+                                                        end_date)) #slice include extremes
+            
+            W_video = weather_video.to_array().values
+            W_video = torch.from_numpy(W_video).to(torch.float32)
+            
+            weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+            W_video = torch.cat([weather_coords,
+                                        W_video], axis=0)
         
-        W_doy = torch.from_numpy(weather_doy).to(torch.float32)
-        W_years = torch.from_numpy(weather_years).to(torch.float32)
-        W_date = torch.stack([W_doy, W_years], dim = -1)
+            weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+            weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+            #weather_years = weather_video.time.dt.year.values
+            
+            W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+            W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+            #W_years = torch.from_numpy(weather_years).to(torch.float32)
+            W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
         
         
         

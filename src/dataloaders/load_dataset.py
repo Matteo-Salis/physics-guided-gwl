@@ -6,7 +6,7 @@ from dataloaders.dataset_1d import Dataset_1D
 from dataloaders.dataset_2D import Dataset_2D_ImageCond
 from dataloaders.dataset_2D import Dataset_2D_VideoCond
 from dataloaders.dataset_2d import DiscreteDataset
-from dataloaders.dataset_sparse import Dataset_Sparse
+from dataloaders.dataset_SparseData import Dataset_Sparse
 
 
 def load_dataset(config):
