@@ -40,9 +40,15 @@ def load_optimizer(config, model):
         
         
 def load_lr_scheduler(config, optimizer):
-    if config["lr_scheduling"] == "linear":
+    if config["lr_scheduling"] is None:
+        scheduler = None
+    elif config["lr_scheduling"] == "linear":
         pass
     elif config["lr_scheduling"] == "exponential":
         pass
+    elif config["lr_scheduling"] == "dynamic":
+        pass
     elif isinstance(config["lr_scheduling"], list):
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=config["lr_scheduling"][1], gamma=config["lr_scheduling"][0])
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=config["lr_scheduling"][0], gamma=config["lr_scheduling"][1])
+        
+    return scheduler

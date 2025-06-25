@@ -498,8 +498,9 @@ def wandb_time_series(dataset, model, device,
                                            twindow, dataset.config["frequency"], dataset.sensor_id_list)
             
             # Denormalization
-            Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-            Y_test_ds = (Y_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+            if dataset.config["normalization"] is True:
+                Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+                Y_test_ds = (Y_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
             
                                       
             for sensor_id in sensors_to_plot:
