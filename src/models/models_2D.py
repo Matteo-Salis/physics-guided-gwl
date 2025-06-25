@@ -2899,8 +2899,8 @@ class MHA_STMoE_Block(nn.Module):
             self.activation = nn.GELU()
         
         
-        # self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
-        #                                  elementwise_affine = self.elementwise_affine)
+        self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
+                                         elementwise_affine = self.elementwise_affine)
         
         self.mha = nn.MultiheadAttention(embedding_dim, heads,
                                          batch_first=True)
@@ -2927,7 +2927,7 @@ class MHA_STMoE_Block(nn.Module):
     def forward(self, input, attn_mask = None, mc_dropout = False):
         
         skip_1 = input #.clone()
-        #output = self.norm_layer_1(input)
+        output = self.norm_layer_1(input)
         
         output, _ = self.mha(
                             query = input, #(N,L,E)
