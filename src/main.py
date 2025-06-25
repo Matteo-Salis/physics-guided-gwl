@@ -17,6 +17,7 @@ from models.load_model import load_model
 from train_test.load_train import training_model
 from train_test.load_test import test_model
 from optimizer.load_optimizer import load_optimizer
+from optimizer.load_optimizer import load_lr_scheduler
 from loss.load_losses import load_loss
 
 wandb.login()
@@ -80,31 +81,33 @@ def main(config):
     print(f"Start time: {timestamp}")
     # optimization parameters
     optimizer = load_optimizer(config, model)
+    lr_scheduler = load_lr_scheduler(config, optimizer)
     loss_fn = load_loss(config)
     
-    # if config["teacher_forcing_scheduling"] == "affine":
-    #             if config["teacher_forcing_scheduling_offset"]>0:
-    #                 teacher_forcing_scheduling = torch.ones(config["epochs"])
-    #                 offset_from_epoch = int(config["teacher_forcing_scheduling_offset"])
-    #                 teacher_forcing_scheduling[offset_from_epoch:] = torch.linspace(1,0,config["epochs"]-offset_from_epoch)
+    if config["teacher_forcing_scheduling"] == "affine":
+                if config["teacher_forcing_scheduling_offset"]>0:
+                    teacher_forcing_scheduling = torch.ones(config["epochs"])
+                    offset_from_epoch = int(config["teacher_forcing_scheduling_offset"])
+                    teacher_forcing_scheduling[offset_from_epoch:] = torch.linspace(1,0,config["epochs"]-offset_from_epoch)
                 
-    #             elif config["teacher_forcing_scheduling_offset"]<0:
+                elif config["teacher_forcing_scheduling_offset"]<0:
                     
-    #                 offset_from_value = config["teacher_forcing_scheduling_offset"]
-    #                 teacher_forcing_scheduling = torch.linspace(offset_from_value,0,config["epochs"])
+                    offset_from_value = config["teacher_forcing_scheduling_offset"]
+                    teacher_forcing_scheduling = torch.linspace(offset_from_value,0,config["epochs"])
                     
-    #             else:
-    #                 teacher_forcing_scheduling = torch.linspace(1,0,config["epochs"])
+                else:
+                    teacher_forcing_scheduling = torch.linspace(1,0,config["epochs"])
                     
-    #             print(f"Teacher Forcing Scheduling: {teacher_forcing_scheduling}")
+                print(f"Teacher Forcing Scheduling: {teacher_forcing_scheduling}")
         
-    # elif isinstance(config["teacher_forcing_scheduling"], float):
-    #     teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]    
+    elif isinstance(config["teacher_forcing_scheduling"], float):
+        teacher_forcing_scheduling = torch.ones(config["epochs"], device = device) * config["teacher_forcing_scheduling"]    
 
     # loop training and test
     for epoch in range(config["epochs"]):
         print(f"############### Training epoch {epoch} ###############")
-        #print(f"TF factor: {teacher_forcing_scheduling[epoch]}")
+        print(f"TF factor: {teacher_forcing_scheduling[epoch]}")
+        print(f"Learning Rate: {optimizer.param_groups[0]['lr']}")
         model.train(True)
         start_time = time.time()
 
@@ -112,7 +115,7 @@ def main(config):
               loss_fn = loss_fn, optimizer = optimizer, model_dir = model_dir,
               model_name = model_name,
               device = device,
-              #teacher_forcing_factor = teacher_forcing_scheduling[epoch]
+              teacher_forcing_factor = teacher_forcing_scheduling[epoch]
               )
 
         end_time = time.time()
@@ -132,6 +135,9 @@ def main(config):
         end_time = time.time()
         exec_time = end_time-start_time
         wandb.log({"test_epoch_exec_t" : exec_time})
+        
+        if lr_scheduler:
+            lr_scheduler.step()
 
     wandb.finish()
     print(f"Execution ended.")
