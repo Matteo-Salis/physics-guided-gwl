@@ -19,7 +19,7 @@ def load_dataset(config):
         return Dataset_2D_ImageCond(config)
     elif config["dataset_type"] == "2D_VideoCond":
         return Dataset_2D_VideoCond(config)
-    elif config["dataset_type"] == "Dataset_Sparse":
+    elif config["dataset_type"] == "Dataset_Sparse" or config["dataset_type"] == "Dataset_OS":
         return Dataset_Sparse(config)
     else:
         raise Exception("Model name unknown.")
@@ -54,7 +54,7 @@ def get_dataloader(dataset, config):
         print(f"Traing size: {train_idx} - {dataset.wtd_df.index.get_level_values(0)[train_idxs[-1]].astype('datetime64[D]')}, Test size: {test_idx} - {dataset.wtd_df.index.get_level_values(0)[test_idxs[-1]].astype('datetime64[D]')}")
     elif config["dataset_type"] == "2D_VideoCond":
         print(f"Traing size: {train_idx} - Start: {dataset.wtd_data_raserized.time.values[train_idxs[0]].astype('datetime64[D]')} - End: {dataset.wtd_data_raserized.time.values[train_idxs[-1]].astype('datetime64[D]')};\nTest size: {test_idx} - Start: {dataset.wtd_data_raserized.time.values[test_idxs[0]].astype('datetime64[D]')} - End: {dataset.wtd_data_raserized.time.values[test_idxs[-1]].astype('datetime64[D]')}")
-    elif config["dataset_type"] == "Dataset_Sparse":
+    elif config["dataset_type"] == "Dataset_Sparse" or config["dataset_type"] == "Dataset_OS":
         print(f"Traing size: {train_idx} - Start: {np.datetime64(dataset.input_dates[train_idxs[0]]).astype('datetime64[D]')} - End: {np.datetime64(dataset.input_dates[train_idxs[-1]]).astype('datetime64[D]')};\nTest size: {test_idx} - Start: {np.datetime64(dataset.input_dates[test_idxs[0]]).astype('datetime64[D]')} - End: {np.datetime64(dataset.input_dates[test_idxs[-1]]).astype('datetime64[D]')}")
 
 

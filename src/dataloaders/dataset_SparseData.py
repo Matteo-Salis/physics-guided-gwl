@@ -79,8 +79,16 @@ class Dataset_Sparse(Dataset):
         subset_wtd_df = subset_wtd_df.loc[subset_wtd_df["nan_mask"] == True, :] #compute only for not nan values
         subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
         
-        target_mean = subset_wtd_df[self.target].mean()
-        target_std = subset_wtd_df[self.target].std()
+        # target_mean = subset_wtd_df[self.target].mean()
+        # target_std = subset_wtd_df[self.target].std()
+        
+        target_means = self.wtd_df[self.target].groupby(level=1).transform('mean').values
+        target_means = target_means.reshape(len(self.wtd_df.index)//len(self.sensor_id_list),
+                                            len(self.sensor_id_list))[0,:] 
+        target_stds = self.wtd_df[self.target].groupby(level=1).transform('std').values
+        target_stds = target_stds.reshape(len(self.wtd_df.index)//len(self.sensor_id_list),
+                                            len(self.sensor_id_list))[0,:]
+        
         dtm_mean = self.dtm_roi.mean()
         dtm_std = self.dtm_roi.std()
         lat_mean = self.weather_coords.mean(axis=(0,1))[0]
@@ -90,8 +98,8 @@ class Dataset_Sparse(Dataset):
         weather_mean = subset_weather_xr.mean()
         weather_std = subset_weather_xr.std()
         
-        self.norm_factors = {"target_mean": target_mean,
-                            "target_std": target_std,
+        self.norm_factors = {"target_means": target_means,
+                            "target_stds": target_stds,
                             "dtm_mean": dtm_mean,
                             "dtm_std": dtm_std,
                             "lat_mean": lat_mean,
@@ -119,7 +127,13 @@ class Dataset_Sparse(Dataset):
             self.norm_factors = norm_factors
         
         # Normalizations
-        self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
+        #self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
+        
+        target_means_extended = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
+        target_stds_extended = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
+        
+        self.wtd_df[self.target] = (self.wtd_df[self.target] - target_means_extended) / target_stds_extended
+        
             
         self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
         self.wtd_df["lon"] = (self.wtd_df["lon"] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
@@ -387,7 +401,7 @@ class Dataset_Sparse(Dataset):
         # target_t0_lon = target_t0["lon"].values.reshape((timesteps, len(self.sensor_id_list)))
         # target_t0_dtm = target_t0["height"].values.reshape((timesteps, len(self.sensor_id_list)))
         
-        target_mask = target_tensor.pop()
+        target_mask = target_tensor.pop().squeeze()
         if fill_na is True:
             target_tensor[-1] = target_tensor[-1].nan_to_num(self.fill_value)
             

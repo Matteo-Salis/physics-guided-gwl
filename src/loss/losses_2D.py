@@ -10,6 +10,9 @@ def loss_masked_mse(Y_hat, Y, Y_mask, input):
             Y_hat = Y_hat.unsqueeze(0)
     elif input == "SparseData_STMoE":
         if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0)      
+    elif input == "Spatial_STMoE" or input == "Spatial_STMoE_Light":
+        if len(Y_hat.size()) < 2:
             Y_hat = Y_hat.unsqueeze(0)
     
     if torch.sum(Y_mask) != 0:
@@ -24,6 +27,9 @@ def loss_masked_mae(Y_hat, Y, Y_mask, input):
             Y_hat = Y_hat.unsqueeze(0)
     elif input == "SparseData_STMoE":
         if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0)
+    elif input == "Spatial_STMoE" or input == "Spatial_STMoE_Light":
+        if len(Y_hat.size()) < 2:
             Y_hat = Y_hat.unsqueeze(0)
 
     if torch.sum(Y_mask) != 0:        

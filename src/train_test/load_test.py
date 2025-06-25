@@ -4,6 +4,7 @@ from train_test.test_1d import *
 from train_test.test_2d import *
 from train_test.test_2D import *
 from train_test.test_SparseData import *
+from train_test.test_OS import *
 from loss.losses_2D import *
 
 def test_model(config):
@@ -111,6 +112,23 @@ def test_model(config):
             #timesteps_to_look = config["timesteps_to_look"]
             
             return partial(test_dl_model_SparseData, 
+                           start_dates_plot = start_dates_plot_test,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           #timesteps_to_look = timesteps_to_look
+                           )
+            
+    elif config["dataset_type"] == "Dataset_OS":
+        if config["physics"] is False:
+            
+            print("Test Approach: OnlySpatial DL")
+            
+            start_dates_plot_test = config["start_dates_plot_test"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            #timesteps_to_look = config["timesteps_to_look"]
+            
+            return partial(test_dl_model_OS, 
                            start_dates_plot = start_dates_plot_test,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,

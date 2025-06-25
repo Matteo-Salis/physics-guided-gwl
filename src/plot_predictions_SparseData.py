@@ -40,7 +40,7 @@ import importlib
 
 # %%
 from models import models_2D
-from dataloaders import dataset_sparse
+from dataloaders import dataset_SparseData
 from subprocess import Popen
 
 import matplotlib.animation as animation
@@ -49,19 +49,19 @@ import matplotlib.animation as animation
 # # Load dictionary
 
 # %%
-json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/VideoCond/SparseData_STMoE_2.json" #config_files_1d/lstm_att_1.json
+json_file = "/leonardo_scratch/fast/IscrC_DL4EO/github/water-pinns/src/configs/VideoCond/Spatial_STMoE_0.json" #config_files_1d/lstm_att_1.json
 config = {}
 with open(json_file) as f:
     config = json.load(f)
     print(f"Read data.json: {config}")
 
 # %%
-saving_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/plots"
+saving_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_OS/plots"
 saving_path_maps = f"{saving_path}/maps"
 saving_path_ts = f"{saving_path}/time_series"
 
 # %%
-ds = dataset_sparse.Dataset_Sparse(config)
+ds = dataset_SparseData.Dataset_Sparse(config)
 
 # %%
 device = (
@@ -74,14 +74,11 @@ device = (
 device
 
 # %%
-model = models_2D.SparseData_STMoE(
+model = models_2D.Spatial_STMoE(
                 weather_CHW_dim = config["weather_CHW_dim"],
                 target_dim = config["target_dim"],
                 spatial_embedding_dim = config["spatial_embedding_dim"],
                 spatial_heads = config["spatial_heads"],
-                fusion_embedding_dim = config["fusion_embedding_dim"],
-                st_heads = config["st_heads"],
-                st_mha_blocks = config["st_mha_blocks"],
                 num_experts = config["num_experts"],
                 densification_dropout = config["densification_dropout"],
                 layernorm_affine = config["layernorm_affine"],
@@ -102,7 +99,7 @@ model = models_2D.SparseData_STMoE(
 #                 activation= config["activation"]).to(device)
 
 # %%
-model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_SparseData/models/model_SparseData_STMoE_20250619_175735.pt"
+model_path = "/leonardo_scratch/fast/IscrC_DL4EO/results/results_OS/models/model_Spatial_STMoE_20250625_134322.pt"
 model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
 model.eval()
 
@@ -110,11 +107,11 @@ model.eval()
 print("Computing predictions...")
 # %%
 date = "2020-01-05"
-twindow = 16
+twindow = 104
 lat_points = 35
-lon_points = 45
+lon_points = 50
 z_grid = grid_generation(ds, lat_points,lon_points)
-Y_test, Y_hat_test = compute_predictions(start_date = np.datetime64(date),
+Y_test, Y_hat_test = compute_predictions_OS(start_date = np.datetime64(date),
                                         twindow = twindow,
                                         model = model,
                                         device = device,
@@ -167,7 +164,7 @@ Y_test_list = []
 Y_hat_test_list = []
    
 for date_idx in range(len(start_dates)):
-    Y_test_window, Y_hat_test_window = compute_predictions(
+    Y_test_window, Y_hat_test_window = compute_predictions_OS(
                                         start_date = np.datetime64(start_dates[date_idx]),
                                         twindow = twindow,
                                         model = model,

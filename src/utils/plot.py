@@ -5,6 +5,7 @@ import xarray
 import torch
 import wandb
 import random
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -419,7 +420,8 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
                     Z = Z.unsqueeze(0).to(device),
                     W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
                     X_mask = X_mask.unsqueeze(0).to(device),
-                    teacher_forcing = teacher_forcing)
+                    teacher_forcing = teacher_forcing
+                    )
     
     return [Y.detach().cpu(),
             Y_hat.detach().cpu()]
@@ -468,25 +470,25 @@ def wandb_time_series(dataset, model, device,
                               start_dates_input, twindow,
                               sensors_to_plot, 
                               #timesteps_to_look,
-                              eval_mode):
+                              eval_mode,
+                              model_type = "SparseData"):
+    
+        if model_type == "OS":
+            prediction_fn = compute_predictions_OS
+            
+        elif model_type == "SparseData":
+            prediction_fn = compute_predictions
     
         
         for date in start_dates_input:
         
-            Y_test, Y_hat_test = compute_predictions(start_date = np.datetime64(date),
+            Y_test, Y_hat_test = prediction_fn(start_date = np.datetime64(date),
                                                                             twindow = twindow,
                                                                             model = model,
                                                                             device = device,
                                                                             dataset = dataset,
                                                                             eval = eval_mode)
             
-            
-            # Y_hat_test_xr_denorm = build_xarray(data = Y_hat_test,
-            #              dataset = dataset,
-            #              start_date = date,
-            #              twindow = twindow)
-            
-            #WTD_hat_test_xr_denorm = dataset.target_rasterized_dtm.values - Y_hat_test_xr_denorm
             
             Y_hat_test_ds = build_ds_from_pred(Y_hat_test,
                                                np.datetime64(date) + np.timedelta64(1, dataset.config["frequency"]),
@@ -496,30 +498,11 @@ def wandb_time_series(dataset, model, device,
                                            twindow, dataset.config["frequency"], dataset.sensor_id_list)
             
             # Denormalization
-            Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
-            Y_test_ds = (Y_test_ds * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+            Y_hat_test_ds = (Y_hat_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+            Y_test_ds = (Y_test_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
             
-            # Y_test_xr_denorm = build_xarray(data = Y_test,
-            #              dataset = dataset,
-            #              start_date = date,
-            #              twindow = twindow)
-            
-            
-            # for timestep in timesteps_to_look:
-                    
-            #     wandb.log({f"pred_map_{date}-t{timestep}":wandb.Image(plot_h_wtd_maps(Y_hat_test_xr_denorm,
-            #                                                                             WTD_hat_test_xr_denorm,
-            #                                                                             date, timestep,
-            #                                                                             save_dir = None, 
-            #                                                                             print_plot = False))})
-                              
+                                      
             for sensor_id in sensors_to_plot:
-                
-                #municipality, lat, lon = find_munic_lat_lon_sensor(dataset, sensor_id)
-                # sensor_pred_ds = find_sensor_pred_in_xr(Y_test_xr_denorm, Y_hat_test_xr_denorm,
-                #                                         lat = lat,
-                #                                         lon = lon,
-                #                                         )
                 
                 municipality = dataset.wtd_names["munic"].loc[dataset.wtd_names["sensor_id"] == sensor_id].values[0]
                 
@@ -529,7 +512,65 @@ def wandb_time_series(dataset, model, device,
                                                                             save_dir = None,
                                                                             print_plot = False))})
         
+
+########################
+#### OnlySpatial #######
+########################
+
+def compute_predictions_OS(start_date, twindow, dataset, model, device, Z_grid = None, eval = True):
+    
+    start_date_input = start_date
+    start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
+    
+    # end_date_input = start_date_input + np.timedelta64(twindow-1, dataset.config["frequency"])
+    # end_date_output = start_date_output + np.timedelta64(twindow-1, dataset.config["frequency"])
+    
+    if Z_grid is None:
+        Z = torch.from_numpy(dataset.sparse_target_coords).to(torch.float32)
+    else:
+        Z = torch.from_numpy(Z_grid).to(torch.float32)
         
+    Y_list = []
+    Y_hat_list = []
+    
+    for tstep in tqdm(range(twindow)):
+        date_input = start_date_input + np.timedelta64(tstep, dataset.config["frequency"])
+        date_output = start_date_output + np.timedelta64(tstep, dataset.config["frequency"])
+        
+        if tstep == 0 or eval is False:
+            GW_values, GW_mask = dataset.get_target_data(date_input,
+                                                        date_input)
+        else:
+            GW_values = torch.cat([Z,
+                                   Y_hat[:,None].to(Z.device)], dim = -1)
+            GW_mask = torch.ones_like(Z[:,0]).to(torch.bool)
+        
+        
+        
+        W = dataset.get_weather_video(date_output,
+                                    date_output,
+                                    lags = dataset.config["weather_lags"])
+        
+        Y, _ = dataset.get_target_data(date_output,
+                                    date_output,
+                                    get_coord=False,
+                                    fill_na = False)
+        
+        Y_hat = model(X = GW_values.unsqueeze(0).to(device),
+                        Z = Z.unsqueeze(0).to(device),
+                        W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
+                        X_mask = GW_mask.unsqueeze(0).to(device)
+                        )
+        
+        Y_list.append(Y)
+        Y_hat_list.append(Y_hat)
+        
+    Y = torch.stack(Y_list, dim = 0)
+    Y_hat = torch.stack(Y_hat_list, dim = 0)
+    
+    return [Y.detach().cpu(),
+            Y_hat.detach().cpu()]
+
 ################
 #### 2D ########
 ################
