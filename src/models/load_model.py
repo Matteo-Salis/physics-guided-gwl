@@ -319,6 +319,40 @@ def load_model(config):
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
                 activation= config["activation"])
+        
+    elif config["model"] == "Spatial_STMoE":
+        
+        model_name = "Spatial_STMoE"
+        print(f"Model: {model_name}")
+        
+        model = Spatial_STMoE(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                target_dim = config["target_dim"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                fusion_embedding_dim = config["fusion_embedding_dim"],
+                fusion_heads = config["fusion_heads"],
+                num_experts = config["num_experts"],
+                densification_dropout = config["densification_dropout"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"],
+                activation= config["activation"])
+        
+    elif config["model"] == "Spatial_STMoE_Light":
+        
+        model_name = "Spatial_STMoE_Light"
+        print(f"Model: {model_name}")
+        
+        model = Spatial_STMoE_Light(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                target_dim = config["target_dim"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                num_experts = config["num_experts"],
+                densification_dropout = config["densification_dropout"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"],
+                activation= config["activation"])
     
     else:
         raise Exception("Model name unknown.")

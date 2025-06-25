@@ -5,6 +5,7 @@ from train_test.training_1d import *
 from train_test.training_2d import *
 from train_test.training_2D import *
 from train_test.training_SparseData import *
+from train_test.training_OS import *
 
 from loss.losses_2D import *
 
@@ -157,6 +158,24 @@ def training_model(config):
             plot_arch = config["plot_arch"]
             
             return partial(train_dl_model_SparseData, 
+                           start_dates_plot = start_dates_plot_training,
+                           twindow_plot = twindow_plot,
+                           sensors_to_plot = sensors_to_plot,
+                           #timesteps_to_look = timesteps_to_look,
+                           plot_arch = plot_arch)
+            
+    elif config["dataset_type"] == "Dataset_OS":
+        if config["physics"] is False:
+            
+            print("Training Approach: OnlySpatial DL")
+            
+            start_dates_plot_training = config["start_dates_plot_training"]
+            twindow_plot = config["twindow_plot"]
+            sensors_to_plot = config["sensors_to_plot"]
+            #timesteps_to_look = config["timesteps_to_look"]
+            plot_arch = config["plot_arch"]
+            
+            return partial(train_dl_model_OS, 
                            start_dates_plot = start_dates_plot_training,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,
