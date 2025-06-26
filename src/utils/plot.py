@@ -614,7 +614,7 @@ def test_data_prediction(start_date, twindow, dataset, model, device, eval = Tru
 def build_xarray(data, dataset, start_date = None, twindow = None, variable = "piezo_height"):
     
     if variable == "piezo_height":
-        denorm_data = (data * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+        denorm_data = (data * dataset.target_stds_xr.values) + dataset.target_means_xr.values
         xr_ds = xarray.DataArray(data = denorm_data,
                                 coords = dict(
                                             lat=("lat", dataset.wtd_data_raserized.y.values),
