@@ -127,7 +127,10 @@ def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
     
     #Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
     
-    Y_hat_denorm = (Y_hat * dataset.target_stds_xr.values) + dataset.target_means_xr.values
+    std = torch.from_numpy(dataset.target_stds_xr.values).to(Y_hat.device).to(torch.float32)
+    mean = torch.from_numpy(dataset.target_means_xr.values).to(Y_hat.device).to(torch.float32)
+    
+    Y_hat_denorm = (Y_hat * std) + mean
     
     
     spatial_grads = []
@@ -154,7 +157,7 @@ def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
     
     residuals = temporal_grad - spatial_grads - G
     
-    residuals_norm = residuals / dataset.target_stds_xr.values
+    residuals_norm = residuals / std
     
     if loss == "mae":
         phyiscs_loss = torch.mean(torch.abs(residuals_norm))
