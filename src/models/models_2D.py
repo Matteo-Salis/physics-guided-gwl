@@ -1861,14 +1861,14 @@ class ViViT_STMoE(nn.Module):
                                                             out_channels = 1, 
                                                             activation = self.activation) 
         
-        # self.ST_Conditioning_CausalAvgPool = CausalAvgPool3d(kernel_size = self.patch_size,
-        #                                                     stride = [1,*self.patch_size[1:]],
-        #                                                     spatial_padding = False)
+        self.ST_Conditioning_CausalAvgPool = CausalAvgPool3d(kernel_size = self.patch_size,
+                                                            stride = [1,*self.patch_size[1:]],
+                                                            spatial_padding = False)
         
-        self.ST_Conditioning_CausalConv3d = CausalConv3d(1,1,
-                                                        kernel_size = self.patch_size,
-                                                        stride = [1,*self.patch_size[1:]],
-                                                        spatial_padding = False)
+        # self.ST_Conditioning_CausalConv3d = CausalConv3d(1,1,
+        #                                                 kernel_size = self.patch_size,
+        #                                                 stride = [1,*self.patch_size[1:]],
+        #                                                 spatial_padding = False)
         
         self.Weather_Module = Spatial_Attention_Block(
                  embedding_dim = self.spatial_embedding_dim,
@@ -1959,11 +1959,12 @@ class ViViT_STMoE(nn.Module):
                                         CausalAvgPool3d(kernel_size=(2,5,5),
                                                         stride=(1,1,1),
                                                         spatial_padding=True),
-                                        CausalConv3d(self.spatial_embedding_dim,
-                                            self.spatial_embedding_dim,
-                                            kernel_size = (5,5,5),
-                                            spatial_padding=True),
-                                        self.activation_fn)
+                                        # CausalConv3d(self.spatial_embedding_dim,
+                                        #     self.spatial_embedding_dim,
+                                        #     kernel_size = (5,5,5),
+                                        #     spatial_padding=True),
+                                        # self.activation_fn,
+                                        )
         
         
         self.cconv3d_output = nn.Sequential(
@@ -1987,9 +1988,9 @@ class ViViT_STMoE(nn.Module):
         if self.spatial_padding is not None:
             ST_Conditionings = nn.functional.pad(torch.moveaxis(ST_Conditionings, -1, 1), pad = self.spatial_padding,
                                                  mode = "replicate")
-            ST_Conditionings = self.ST_Conditioning_CausalConv3d(ST_Conditionings)
+            ST_Conditionings = self.ST_Conditioning_CausalAvgPool(ST_Conditionings)
         else:
-            ST_Conditionings = self.ST_Conditioning_CausalConv3d(torch.moveaxis(ST_Conditionings, -1, 1))
+            ST_Conditionings = self.ST_Conditioning_CausalAvgPool(torch.moveaxis(ST_Conditionings, -1, 1))
         
         
         if W[0].shape[2] != self.upsampling_dim[0]: 
@@ -2059,16 +2060,15 @@ class ViViT_STMoE(nn.Module):
             Fused_st = torch.cat([Autoreg_st,
                                     Weather_st], 
                                     dim = 1)
-            
-            #Fused_st += ST_Conditionings
+    
+            Fused_st =  nn.functional.dropout3d(Fused_st,
+                                                p = self.spatial_dropout, training = True)
             
             Fused_st = self.Tublet_Embedding(Fused_st)
             Fused_st += ST_Conditionings
             
             Fused_st = Fused_st.flatten(2, 4)
             
-            # Fused_st =  nn.functional.dropout1d(Fused_st,
-            #                                     p = self.spatial_dropout, training = True)
             Fused_st = torch.moveaxis(Fused_st, 1, -1)
             
             total_aux_loss = []
@@ -2122,12 +2122,6 @@ class ViViT_STMoE(nn.Module):
             
             total_aux_loss = []
             
-            # ImageCond = X
-            # ImageCond_mask = X_mask
-            # Hidden_Frames = []
-            # Hidden_Video = []
-            # Output_Video = []
-            
             # Unfolding time - iterate own prediction as input
             for timestep in tqdm(range(W[0].shape[2])):
                 
@@ -2148,7 +2142,6 @@ class ViViT_STMoE(nn.Module):
                 
                 
                 
-                #Upsampled_ImageCond = self.Icondition_Module(ImageCond, Z, ImageCond_mask).unsqueeze(2)
                 Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
                 Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
                 Weather_s = self.Weather_Module(
@@ -2171,6 +2164,8 @@ class ViViT_STMoE(nn.Module):
                                     Weather_st], 
                                     dim = 1)
             
+                Fused_st =  nn.functional.dropout3d(Fused_st,
+                                                p = self.spatial_dropout, training = True)
                 
                 Fused_st = self.Tublet_Embedding(Fused_st)
                 
@@ -2178,8 +2173,6 @@ class ViViT_STMoE(nn.Module):
                 
                 Fused_st = Fused_st.flatten(2, 4)
             
-                # Fused_st =  nn.functional.dropout1d(Fused_st,
-                #                                     p = self.spatial_dropout, training = True)
                 Fused_st = torch.moveaxis(Fused_st, 1, -1)
                 
                 causal_mask = causal_masks[:,
@@ -2651,7 +2644,7 @@ class SparseData_Transformer(nn.Module):
         
         self.ST_Conditioning_Module = ST_Conditioning_Block(
                                                             in_channels = 5,
-                                                            hidden_channels = 64, 
+                                                            hidden_channels = 32, 
                                                             out_channels = 16, 
                                                             activation = self.activation)
         
@@ -2940,9 +2933,9 @@ class MHA_STMoE_Block(nn.Module):
         output = output + skip_1
         output, total_aux_loss, balance_loss, router_z_loss = self.moe_block(output)
         
-        output = nn.functional.dropout1d(torch.moveaxis(output, 1, -1),
+        output = nn.functional.dropout1d(output.permute((0,2,1)),
                                         p = self.dropout_p, training = mc_dropout)    
-        output = torch.moveaxis(output, source = -1, destination = 1)
+        output = output.permute((0,2,1))
         
         return output, total_aux_loss, balance_loss, router_z_loss
 
@@ -3145,8 +3138,8 @@ class SparseData_STMoE(nn.Module):
                                                             attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
                                                             ))
                 
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
+                Weather_Keys = W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1).permute((0,2,1)) # 
+                Weather_Values = W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1).permute((0,2,1))
                 Weather_st.append(self.Weather_Module(
                                                     K = Weather_Keys,
                                                     V = Weather_Values,
@@ -3163,10 +3156,10 @@ class SparseData_STMoE(nn.Module):
             Fused_st_extent = Fused_st.shape[1:3]
             Fused_st = torch.flatten(Fused_st, 1, 2)
             
-            # Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
-            #                                     p = self.spatial_dropout, training = True)
+            Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
+                                                p = self.spatial_dropout, training = True)
             
-            Fused_st = self.Fusion_Embedding(Fused_st)
+            Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
             
             Fused_st += ST_Conditionings
             
@@ -3179,7 +3172,6 @@ class SparseData_STMoE(nn.Module):
                 Fused_st, aux_loss, _, _= getattr(self, f"MHA_STMoE_Block_{i}")(Fused_st, causal_masks,
                                                                                 mc_dropout = True)
                 total_aux_loss.append(aux_loss)
-                #output, total_aux_loss, balance_loss, router_z_loss
             
             total_aux_loss = torch.tensor(total_aux_loss).sum()
             
@@ -3238,11 +3230,11 @@ class SparseData_STMoE(nn.Module):
                 Fused_st_extent = Fused_st.shape[1:3]
                 Fused_st = torch.flatten(Fused_st, 1, 2)
                 
-                # Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
-                #                                 p = self.spatial_dropout, training = mc_dropout)
+                Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
+                                                p = self.spatial_dropout, training = mc_dropout)
                 
                 
-                Fused_st = self.Fusion_Embedding(Fused_st)
+                Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
                 Fused_st = Fused_st + ST_Conditionings[:,:Fused_st.shape[1],:]
                                                
                 causal_mask = causal_masks[:,
@@ -3415,14 +3407,14 @@ class Spatial_STMoE(nn.Module):
                                 output_channels = self.spatial_embedding_dim,
                                 activation = self.activation,
                                 elementwise_affine= self.layernorm_affine,
-                                STMoE_prenorm = False)
+                                STMoE_prenorm = True)
         
         self.ST_Conditioning_Module = ST_Conditioning_Block(
                                                             in_channels = 5,
                                                             hidden_channels = 32, 
                                                             out_channels = 1, 
                                                             activation = self.activation,
-                                                            LayerNorm = False) 
+                                                            LayerNorm = True) 
 
         ### Weather module ### 
         
@@ -3434,7 +3426,7 @@ class Spatial_STMoE(nn.Module):
                  output_channels = self.spatial_embedding_dim,
                  activation=self.activation,
                  elementwise_affine=self.layernorm_affine,
-                 STMoE_prenorm = False)
+                 STMoE_prenorm = True)
         
         ### Joint Modoule ### 
         
@@ -3449,7 +3441,7 @@ class Spatial_STMoE(nn.Module):
                                 self.activation,
                                 elementwise_affine = self.layernorm_affine,
                                 dropout_p = self.spatial_dropout,
-                                STMoE_prenorm = False)
+                                STMoE_prenorm = True)
         
                                    
         self.output = nn.Sequential(nn.Linear(self.fusion_embedding_dim, spatial_embedding_dim),

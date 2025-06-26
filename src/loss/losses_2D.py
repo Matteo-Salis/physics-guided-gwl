@@ -125,8 +125,9 @@ def Fdiff_conv(x, mode = "first_lon"):
 def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
                  loss = "mae"):
     
-    Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+    #Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
     
+    Y_hat_denorm = (Y_hat * dataset.target_stds_xr.values) + dataset.target_means_xr.values
     
     
     spatial_grads = []
@@ -153,7 +154,7 @@ def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
     
     residuals = temporal_grad - spatial_grads - G
     
-    residuals_norm = residuals / dataset.norm_factors["target_std"]
+    residuals_norm = residuals / dataset.target_stds_xr.values
     
     if loss == "mae":
         phyiscs_loss = torch.mean(torch.abs(residuals_norm))
