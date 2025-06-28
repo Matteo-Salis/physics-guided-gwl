@@ -20,6 +20,49 @@ def loss_masked_mse(Y_hat, Y, Y_mask, input):
     else:
         return 0.
 
+def loss_masked_nse(Y_hat, Y, Y_mask, input):
+    
+    if input == "ViViT_STMoE":
+        if len(Y_hat.size()) < 4:
+            Y_hat = Y_hat.unsqueeze(0)
+            
+        pass
+    
+    elif input == "SparseData_STMoE":
+        if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0)      
+        
+        sensor_loss = []
+        
+        avail_sensor_mask = torch.sum(Y_mask, dim = 1)
+        
+        
+        for sensor_idx in range(Y.shape[2]):
+            
+            sensor_true = Y[:,:,sensor_idx]
+            sensor_pred = Y_hat[:,:,sensor_idx]
+            sensor_mask = Y_mask[:,:,sensor_idx]
+            
+            if torch.sum(sensor_mask) != 0:
+            
+                sensor_true_filled = torch.where(sensor_mask, sensor_true, sensor_pred)
+                residuals = torch.sum((sensor_pred - sensor_true_filled)**2, dim = 1)
+                Y_mean = torch.mean(sensor_true, dim = 1)
+                Y_variance = torch.nansum((Y_filled))
+                
+                return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
+                sensor_loss.append()
+            else:
+                sensor_loss.aapend(0)
+        
+    elif input == "Spatial_STMoE" or input == "Spatial_STMoE_Light":
+        if len(Y_hat.size()) < 2:
+            Y_hat = Y_hat.unsqueeze(0)
+            
+        pass
+    
+    
+
 def loss_masked_mae(Y_hat, Y, Y_mask, input):
     
     if input == "ViViT_STMoE":
