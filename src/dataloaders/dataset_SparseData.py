@@ -95,50 +95,55 @@ class Dataset_Sparse(Dataset):
         
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
         
-        #Subset wrt Date
         subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
-                                                       :]] #
-        subset_wtd_df = subset_wtd_df.loc[subset_wtd_df["nan_mask"] == True, :] #compute only for not nan values
+                                                        :]] #
+        #subset_wtd_df = subset_wtd_df.loc[subset_wtd_df["nan_mask"] == True, :] #compute only for not nan values
         subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
-        
-        # Compute rasterized NN norm factors 
-        target_means = self.wtd_df[self.target].groupby(level=1).transform('mean').values
-        target_means = target_means.reshape(len(self.wtd_df.index)//len(self.sensor_id_list),
-                                            len(self.sensor_id_list))[0,:] 
-        target_stds = self.wtd_df[self.target].groupby(level=1).transform('std').values
-        target_stds = target_stds.reshape(len(self.wtd_df.index)//len(self.sensor_id_list),
-                                            len(self.sensor_id_list))[0,:]
-        
-        target_means_gpd = gpd.GeoDataFrame({"mean": target_means}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
-        target_stds_gpd = gpd.GeoDataFrame({"std": target_stds}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
-        
-        bbox = [self.dtm_roi.x.min().values,
-                self.dtm_roi.x.max().values,
-                self.dtm_roi.y.min().values,
-                self.dtm_roi.y.max().values]
+            
+        #Subset wrt Date
+        if self.config["target_norm_type"] == "sensor_zscore":
+            
+            # Compute rasterized NN norm factors 
+            target_means = subset_wtd_df[self.target].groupby(level=1).transform('mean').values
+            target_means = target_means.reshape(len(subset_wtd_df.index)//len(self.sensor_id_list),
+                                                len(self.sensor_id_list))[0,:] 
+            target_stds = subset_wtd_df[self.target].groupby(level=1).transform('std').values
+            target_stds = target_stds.reshape(len(subset_wtd_df.index)//len(self.sensor_id_list),
+                                                len(self.sensor_id_list))[0,:]
+            
+            target_means_gpd = gpd.GeoDataFrame({"mean": target_means}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
+            target_stds_gpd = gpd.GeoDataFrame({"std": target_stds}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
+            
+            bbox = [self.dtm_roi.x.min().values,
+                    self.dtm_roi.x.max().values,
+                    self.dtm_roi.y.min().values,
+                    self.dtm_roi.y.max().values]
 
-        LON = np.linspace(bbox[0], bbox[1], self.config["upsampling_dim"][2])
-        LAT = np.linspace(bbox[2], bbox[3], self.config["upsampling_dim"][1])[::-1]
-        
-        target_means_raster = self.NN(target_means_gpd, LAT, LON, "mean")
-        target_stds_raster = self.NN(target_stds_gpd, LAT, LON, "std")
-        
-        self.target_means_xr = xarray.DataArray(data = target_means_raster,
-                                coords = dict(
-                                            lat=("lat", LAT),
-                                            lon=("lon", LON),
-                                            ),
-                                dims = ["lat", "lon"]
-                                )
-        
-        self.target_stds_xr = xarray.DataArray(data = target_stds_raster,
-                                coords = dict(
-                                            lat=("lat", LAT),
-                                            lon=("lon", LON),
-                                            ),
-                                dims = ["lat", "lon"]
-                                )
-        
+            LON = np.linspace(bbox[0], bbox[1], self.config["upsampling_dim"][2])
+            LAT = np.linspace(bbox[2], bbox[3], self.config["upsampling_dim"][1])[::-1]
+            
+            target_means_raster = self.NN(target_means_gpd, LAT, LON, "mean")
+            target_stds_raster = self.NN(target_stds_gpd, LAT, LON, "std")
+            
+            self.target_means_xr = xarray.DataArray(data = target_means_raster,
+                                    coords = dict(
+                                                lat=("lat", LAT),
+                                                lon=("lon", LON),
+                                                ),
+                                    dims = ["lat", "lon"]
+                                    )
+            
+            self.target_stds_xr = xarray.DataArray(data = target_stds_raster,
+                                    coords = dict(
+                                                lat=("lat", LAT),
+                                                lon=("lon", LON),
+                                                ),
+                                    dims = ["lat", "lon"]
+                                    )
+        elif self.config["target_norm_type"] == "overall_zscore":
+            
+            target_means = subset_wtd_df[self.target].mean()
+            target_stds = subset_wtd_df[self.target].std()
         # Use true sensor's stats!!!
         # target_means = []
         # target_stds = []
@@ -190,10 +195,14 @@ class Dataset_Sparse(Dataset):
         # Normalizations
         #self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
         
-        target_means_extended = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
-        target_stds_extended = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
-        
-        self.wtd_df[self.target] = (self.wtd_df[self.target] - target_means_extended) / target_stds_extended
+        if self.config["target_norm_type"] == "sensor_zscore":
+            target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
+            target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
+        elif self.config["target_norm_type"] == "overall_zscore":
+            target_norm_means = self.norm_factors["target_means"]
+            target_norm_stds = self.norm_factors["target_stds"]
+            
+        self.wtd_df[self.target] = (self.wtd_df[self.target] - target_norm_means) / target_norm_stds
         
             
         self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]

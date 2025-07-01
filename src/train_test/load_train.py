@@ -156,13 +156,15 @@ def training_model(config):
             sensors_to_plot = config["sensors_to_plot"]
             #timesteps_to_look = config["timesteps_to_look"]
             plot_arch = config["plot_arch"]
+            l2_alpha = config["l2_alpha"]
             
             return partial(train_dl_model_SparseData, 
                            start_dates_plot = start_dates_plot_training,
                            twindow_plot = twindow_plot,
                            sensors_to_plot = sensors_to_plot,
                            #timesteps_to_look = timesteps_to_look,
-                           plot_arch = plot_arch)
+                           plot_arch = plot_arch,
+                           l2_alpha = l2_alpha)
             
     elif config["dataset_type"] == "Dataset_OS":
         if config["physics"] is False:

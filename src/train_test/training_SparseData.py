@@ -23,7 +23,7 @@ def train_dl_model_SparseData(epoch, dataset, model, train_loader, loss_fn, opti
                       start_dates_plot, twindow_plot, sensors_to_plot,
                       #timesteps_to_look,
                       teacher_forcing_factor = 1,
-                      device = "cuda", plot_arch = True, l2_alpha = 1e-6): #, 
+                      device = "cuda", plot_arch = True, l2_alpha = 0): #, 
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -61,7 +61,8 @@ def train_dl_model_SparseData(epoch, dataset, model, train_loader, loss_fn, opti
                         
                         loss += aux_loss
                         
-                        #loss += l2_alpha * loss_l2_regularization(model)
+                        if l2_alpha > 0:
+                            loss += l2_alpha * loss_l2_regularization(model)
                         
                         print("Training_data_loss: ", loss.item(), end = " - ")
                         print("aux_moe_loss: ", aux_loss)
