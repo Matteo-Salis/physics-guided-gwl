@@ -20,7 +20,78 @@ def loss_masked_mse(Y_hat, Y, Y_mask, input):
     else:
         return 0.
 
-def loss_masked_nse(Y_hat, Y, Y_mask, input):
+def point_h2(Y_hat, Y, Y_mask, Y_tstep_avail, var_offset = 1e-7):
+    
+    
+    #print(Y_tstep_avail)
+    
+    Y_mean = torch.where(Y_tstep_avail == 0,
+                         0,
+                         torch.sum(Y, dim = 1)/Y_tstep_avail)
+    
+    #print(Y_mean)
+    
+    residuals = torch.sum(((Y_hat - Y)**2)*Y_mask, dim = 1)
+    
+    #print(residuals)
+    Y_variance = torch.where(Y_tstep_avail < 2,
+                         1e-5,
+                         torch.sum(((Y - Y_mean[:,None,:])**2)*Y_mask, dim = 1))
+    
+    #print(Y_variance)
+    h2 = torch.where(Y_tstep_avail < 2,
+                         0,
+                         residuals/Y_variance)
+    
+    #print(h2)
+    
+    # torch.sum(Y, dim = 1)/(Y_tstep_avail + var_offset)
+    # residuals = torch.sum(((Y_hat - Y)**2)*Y_mask, dim = 1)
+    # print(residuals.shape)
+    # Y_variance = torch.sum(((Y - Y_mean[:,None,:])**2)*Y_mask, dim = 1) + var_offset
+    # print(Y_variance.shape)
+    # h2 = residuals/Y_variance
+    
+    return h2
+    
+def loss_masked_h2(Y_hat, Y, Y_mask, input, reduce_mean = True, get_tstep_mask = False):
+    if input == "SparseData_STMoE":
+        if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0) 
+        
+        if torch.sum(Y_mask) != 0:
+            
+            Y_tstep_avail = torch.sum(Y_mask, dim = 1)
+            Y_tstep_avail_mask = (Y_tstep_avail > 1)
+
+            h2 = point_h2(Y_hat, Y, Y_mask, Y_tstep_avail)
+             
+            #print(h2)
+            if reduce_mean is True:
+                h2 = torch.sum(h2[Y_tstep_avail_mask])/torch.sum(Y_tstep_avail_mask)
+            #print(h2)
+        else:
+            print("All NaN! Loss set to 0 ...")
+            h2 = 0
+        
+        if get_tstep_mask is False:
+            return h2
+        else:
+            return [h2, Y_tstep_avail_mask]
+        
+        
+def loss_masked_mape(Y_hat, Y, Y_mask, input):
+    if input == "SparseData_STMoE":
+        if len(Y_hat.size()) < 3:
+            Y_hat = Y_hat.unsqueeze(0) 
+        
+        if torch.sum(Y_mask) != 0:
+            return torch.sum(torch.abs(Y_hat[Y_mask]-Y[Y_mask])/Y[Y_mask]) / torch.sum(Y_mask)
+        else:
+            return 0.
+    
+
+def loss_masked_nse(Y_hat, Y, Y_mask, input, normalized = True):
     
     if input == "ViViT_STMoE":
         if len(Y_hat.size()) < 4:
@@ -29,31 +100,17 @@ def loss_masked_nse(Y_hat, Y, Y_mask, input):
         pass
     
     elif input == "SparseData_STMoE":
-        if len(Y_hat.size()) < 3:
-            Y_hat = Y_hat.unsqueeze(0)      
-        
-        sensor_loss = []
-        
-        avail_sensor_mask = torch.sum(Y_mask, dim = 1)
-        
-        
-        for sensor_idx in range(Y.shape[2]):
             
-            sensor_true = Y[:,:,sensor_idx]
-            sensor_pred = Y_hat[:,:,sensor_idx]
-            sensor_mask = Y_mask[:,:,sensor_idx]
+        h2, Y_tstep_avail_mask = loss_masked_h2(Y_hat, Y, Y_mask, input,
+                                 reduce_mean=False, get_tstep_mask=True)
+        nse = 1 - h2
+        
+        if normalized is True:
+            nse = 1/(2-nse)
             
-            if torch.sum(sensor_mask) != 0:
+        nse = torch.sum(nse[Y_tstep_avail_mask])/torch.sum(Y_tstep_avail_mask)
             
-                sensor_true_filled = torch.where(sensor_mask, sensor_true, sensor_pred)
-                residuals = torch.sum((sensor_pred - sensor_true_filled)**2, dim = 1)
-                Y_mean = torch.mean(sensor_true, dim = 1)
-                Y_variance = torch.nansum((Y_filled))
-                
-                return torch.sum((Y_hat[Y_mask]-Y[Y_mask])**2.0)  / torch.sum(Y_mask)
-                sensor_loss.append()
-            else:
-                sensor_loss.aapend(0)
+        return nse
         
     elif input == "Spatial_STMoE" or input == "Spatial_STMoE_Light":
         if len(Y_hat.size()) < 2:
