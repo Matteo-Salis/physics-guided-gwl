@@ -1,6 +1,7 @@
 from models.models_1d import *
 from models.models_2d import *
-from models.models_2D import *
+#from models.models_2D import *
+from models.models_SparseData import *
 
 def load_model(config):
     twindow = config["twindow"]
@@ -144,143 +145,143 @@ def load_model(config):
                            lstm_units = config["lstm_units"]
                            )
         
-    elif config["model"] == "AttCB_ConvLSTM":
+    # elif config["model"] == "AttCB_ConvLSTM":
         
-        model_name = "AttCB_ConvLSTM"
-        print(f"Model: {model_name}")
+    #     model_name = "AttCB_ConvLSTM"
+    #     print(f"Model: {model_name}")
         
-        model = AttCB_ConvLSTM(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                cb_emb_dim = config["cb_emb_dim"],
-                cb_heads = config["cb_heads"],
-                channels_cb_wb = config["channels_cb_wb"],
-                convlstm_input_units = config["convlstm_input_units"],
-                convlstm_units = config["convlstm_units"],
-                convlstm_kernel = config["convlstm_kernel"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"])
+    #     model = AttCB_ConvLSTM(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             cb_emb_dim = config["cb_emb_dim"],
+    #             cb_heads = config["cb_heads"],
+    #             channels_cb_wb = config["channels_cb_wb"],
+    #             convlstm_input_units = config["convlstm_input_units"],
+    #             convlstm_units = config["convlstm_units"],
+    #             convlstm_kernel = config["convlstm_kernel"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"])
         
-    elif config["model"] == "VideoCB_ConvLSTM":
+    # elif config["model"] == "VideoCB_ConvLSTM":
         
-        model_name = "VideoCB_ConvLSTM"
-        print(f"Model: {model_name}")
+    #     model_name = "VideoCB_ConvLSTM"
+    #     print(f"Model: {model_name}")
         
-        model = VideoCB_ConvLSTM(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                cb_emb_dim = config["cb_emb_dim"],
-                cb_heads = config["cb_heads"],
-                channels_cb = config["channels_cb"],
-                channels_wb = config["channels_wb"],
-                convlstm_IO_units = config["convlstm_IO_units"],
-                convlstm_hidden_units = config["convlstm_hidden_units"],
-                convlstm_kernel = config["convlstm_kernel"],
-                convlstm_nlayer = config["convlstm_nlayer"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"])
+    #     model = VideoCB_ConvLSTM(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             cb_emb_dim = config["cb_emb_dim"],
+    #             cb_heads = config["cb_heads"],
+    #             channels_cb = config["channels_cb"],
+    #             channels_wb = config["channels_wb"],
+    #             convlstm_IO_units = config["convlstm_IO_units"],
+    #             convlstm_hidden_units = config["convlstm_hidden_units"],
+    #             convlstm_kernel = config["convlstm_kernel"],
+    #             convlstm_nlayer = config["convlstm_nlayer"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"])
         
-    elif config["model"] == "FullAttention_ConvLSTM":
+    # elif config["model"] == "FullAttention_ConvLSTM":
         
-        model_name = "FullAttention_ConvLSTM"
-        print(f"Model: {model_name}")
+    #     model_name = "FullAttention_ConvLSTM"
+    #     print(f"Model: {model_name}")
         
-        model = FullAttention_ConvLSTM(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                cb_emb_dim = config["cb_emb_dim"],
-                cb_heads = config["cb_heads"],
-                channels_cb = config["channels_cb"],
-                channels_wb = config["channels_wb"],
-                convlstm_IO_units = config["convlstm_IO_units"],
-                convlstm_hidden_units = config["convlstm_hidden_units"],
-                convlstm_kernel = config["convlstm_kernel"],
-                convlstm_nlayer = config["convlstm_nlayer"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"])
+    #     model = FullAttention_ConvLSTM(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             cb_emb_dim = config["cb_emb_dim"],
+    #             cb_heads = config["cb_heads"],
+    #             channels_cb = config["channels_cb"],
+    #             channels_wb = config["channels_wb"],
+    #             convlstm_IO_units = config["convlstm_IO_units"],
+    #             convlstm_hidden_units = config["convlstm_hidden_units"],
+    #             convlstm_kernel = config["convlstm_kernel"],
+    #             convlstm_nlayer = config["convlstm_nlayer"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"])
         
-    elif config["model"] == "VideoCB_ConvLSTM_PI":
+    # elif config["model"] == "VideoCB_ConvLSTM_PI":
         
-        model_name = "VideoCB_ConvLSTM"
-        print(f"Model: {model_name}")
+    #     model_name = "VideoCB_ConvLSTM"
+    #     print(f"Model: {model_name}")
         
-        model = VideoCB_ConvLSTM_PI(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                cb_emb_dim = config["cb_emb_dim"],
-                cb_heads = config["cb_heads"],
-                channels_cb = config["channels_cb"],
-                channels_wb = config["channels_wb"],
-                convlstm_IO_units = config["convlstm_IO_units"],
-                convlstm_hidden_units = config["convlstm_hidden_units"],
-                convlstm_kernel = config["convlstm_kernel"],
-                convlstm_nlayer = config["convlstm_nlayer"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"])
+    #     model = VideoCB_ConvLSTM_PI(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             cb_emb_dim = config["cb_emb_dim"],
+    #             cb_heads = config["cb_heads"],
+    #             channels_cb = config["channels_cb"],
+    #             channels_wb = config["channels_wb"],
+    #             convlstm_IO_units = config["convlstm_IO_units"],
+    #             convlstm_hidden_units = config["convlstm_hidden_units"],
+    #             convlstm_kernel = config["convlstm_kernel"],
+    #             convlstm_nlayer = config["convlstm_nlayer"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"])
         
-    elif config["model"] == "FullAttention_CausalConv":
+    # elif config["model"] == "FullAttention_CausalConv":
         
-        model_name = "FullAttention_CausalConv"
-        print(f"Model: {model_name}")
+    #     model_name = "FullAttention_CausalConv"
+    #     print(f"Model: {model_name}")
         
-        model = FullAttention_CausalConv(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                cb_emb_dim = config["cb_emb_dim"],
-                cb_heads = config["cb_heads"],
-                channels_cb = config["channels_cb"],
-                channels_wb = config["channels_wb"],
-                cconv3d_input_channels = config["cconv3d_input_channels"],
-                cconv3d_hidden_channels = config["cconv3d_hidden_channels"],
-                cconv3d_kernel = config["cconv3d_kernel"],
-                cconv3d_dilation = config["cconv3d_dilation"],
-                cconv3d_layers = config["cconv3d_layers"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"],
-                activation = config["activation"])
+    #     model = FullAttention_CausalConv(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             cb_emb_dim = config["cb_emb_dim"],
+    #             cb_heads = config["cb_heads"],
+    #             channels_cb = config["channels_cb"],
+    #             channels_wb = config["channels_wb"],
+    #             cconv3d_input_channels = config["cconv3d_input_channels"],
+    #             cconv3d_hidden_channels = config["cconv3d_hidden_channels"],
+    #             cconv3d_kernel = config["cconv3d_kernel"],
+    #             cconv3d_dilation = config["cconv3d_dilation"],
+    #             cconv3d_layers = config["cconv3d_layers"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"],
+    #             activation = config["activation"])
         
         
-    elif config["model"] == "ViViT_STMoE":
+    # elif config["model"] == "ViViT_STMoE":
         
-        model_name = "ViViT_STMoE"
-        print(f"Model: {model_name}")
+    #     model_name = "ViViT_STMoE"
+    #     print(f"Model: {model_name}")
         
-        model = ViViT_STMoE(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                spatial_embedding_dim = config["spatial_embedding_dim"],
-                spatial_heads = config["spatial_heads"],
-                fusion_embedding_dim = config["fusion_embedding_dim"],
-                st_heads = config["st_heads"],
-                patch_size = config["patch_size"],
-                st_mha_blocks = config["st_mha_blocks"],
-                num_experts = config["num_experts"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"])
+    #     model = ViViT_STMoE(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             spatial_embedding_dim = config["spatial_embedding_dim"],
+    #             spatial_heads = config["spatial_heads"],
+    #             fusion_embedding_dim = config["fusion_embedding_dim"],
+    #             st_heads = config["st_heads"],
+    #             patch_size = config["patch_size"],
+    #             st_mha_blocks = config["st_mha_blocks"],
+    #             num_experts = config["num_experts"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"])
         
     
-    elif config["model"] == "ViViT_STMoE_PI":
+    # elif config["model"] == "ViViT_STMoE_PI":
         
-        model_name = "ViViT_STMoE_PI"
-        print(f"Model: {model_name}")
+    #     model_name = "ViViT_STMoE_PI"
+    #     print(f"Model: {model_name}")
         
-        model = ViViT_STMoE_PI(
-                weather_CHW_dim = config["weather_CHW_dim"],
-                spatial_embedding_dim = config["spatial_embedding_dim"],
-                spatial_heads = config["spatial_heads"],
-                fusion_embedding_dim = config["fusion_embedding_dim"],
-                st_heads = config["st_heads"],
-                patch_size = config["patch_size"],
-                st_mha_blocks = config["st_mha_blocks"],
-                num_experts = config["num_experts"],
-                densification_dropout = config["densification_dropout"],
-                upsampling_dim = config["upsampling_dim"],
-                layernorm_affine = config["layernorm_affine"],
-                spatial_dropout = config["spatial_dropout"])
+    #     model = ViViT_STMoE_PI(
+    #             weather_CHW_dim = config["weather_CHW_dim"],
+    #             spatial_embedding_dim = config["spatial_embedding_dim"],
+    #             spatial_heads = config["spatial_heads"],
+    #             fusion_embedding_dim = config["fusion_embedding_dim"],
+    #             st_heads = config["st_heads"],
+    #             patch_size = config["patch_size"],
+    #             st_mha_blocks = config["st_mha_blocks"],
+    #             num_experts = config["num_experts"],
+    #             densification_dropout = config["densification_dropout"],
+    #             upsampling_dim = config["upsampling_dim"],
+    #             layernorm_affine = config["layernorm_affine"],
+    #             spatial_dropout = config["spatial_dropout"])
         
         
     elif config["model"] == "SparseData_Transformer":
@@ -300,6 +301,9 @@ def load_model(config):
                 layernorm_affine = config["layernorm_affine"],
                 spatial_dropout = config["spatial_dropout"],
                 activation= config["activation"])
+    
+        model = model.apply(weight_init)
+        print("Initialization: He")
         
     elif config["model"] == "SparseData_STMoE":
         

@@ -43,15 +43,6 @@ def point_h2(Y_hat, Y, Y_mask, Y_tstep_avail, var_offset = 1e-7):
                          0,
                          residuals/Y_variance)
     
-    #print(h2)
-    
-    # torch.sum(Y, dim = 1)/(Y_tstep_avail + var_offset)
-    # residuals = torch.sum(((Y_hat - Y)**2)*Y_mask, dim = 1)
-    # print(residuals.shape)
-    # Y_variance = torch.sum(((Y - Y_mean[:,None,:])**2)*Y_mask, dim = 1) + var_offset
-    # print(Y_variance.shape)
-    # h2 = residuals/Y_variance
-    
     return h2
     
 def loss_masked_h2(Y_hat, Y, Y_mask, input, reduce_mean = True, get_tstep_mask = False):
@@ -86,10 +77,10 @@ def loss_masked_mape(Y_hat, Y, Y_mask, input):
             Y_hat = Y_hat.unsqueeze(0) 
         
         if torch.sum(Y_mask) != 0:
-            return torch.sum(torch.abs(Y_hat[Y_mask]-Y[Y_mask])/Y[Y_mask]) / torch.sum(Y_mask)
+            return torch.sum(torch.abs((Y_hat[Y_mask]-Y[Y_mask])/Y[Y_mask])) / torch.sum(Y_mask)
         else:
             return 0.
-    
+
 
 def loss_masked_nse(Y_hat, Y, Y_mask, input, normalized = True):
     
