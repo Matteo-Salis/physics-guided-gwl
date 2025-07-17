@@ -1,25 +1,25 @@
-from loss.losses_2D import *
+from loss.losses_SparseData import *
 from functools import partial
 
 def load_loss(config):
     if config["loss"] == "mse":
-        return partial(loss_masked_mse, input = config["model"])
+        return partial(loss_masked_mse)
     
     if config["loss"] == "mae":
-        return partial(loss_masked_mae, input = config["model"])
+        return partial(loss_masked_mae)
     
     if config["loss"] == "mape":
-        return partial(loss_masked_mape, input = config["model"])
+        return partial(loss_masked_mape)
     
     if config["loss"] == "h2":
-        return partial(loss_masked_h2, input = config["model"])
+        return partial(loss_masked_h2)
     
     if config["loss"] == "nse":
-        return partial(loss_masked_nse, input = config["model"],
+        return partial(loss_masked_nse,
                        normalized = False)
     
     if config["loss"] == "nnse":
-        return partial(loss_masked_nse, input = config["model"],
+        return partial(loss_masked_nse,
                        normalized = True)
 
     if config["loss"] == "focal-mse":

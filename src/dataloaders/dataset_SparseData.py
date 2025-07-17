@@ -144,6 +144,10 @@ class Dataset_Sparse(Dataset):
             
             target_means = subset_wtd_df[self.target].mean()
             target_stds = subset_wtd_df[self.target].std()
+            
+        elif self.config["target_norm_type"] is None:
+            target_means = None
+            target_stds = None
         # Use true sensor's stats!!!
         # target_means = []
         # target_stds = []
@@ -195,14 +199,19 @@ class Dataset_Sparse(Dataset):
         # Normalizations
         #self.wtd_df[self.target] = (self.wtd_df[self.target] - self.norm_factors["target_mean"])/self.norm_factors["target_std"]
         
-        if self.config["target_norm_type"] == "sensor_zscore":
-            target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
-            target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
-        elif self.config["target_norm_type"] == "overall_zscore":
-            target_norm_means = self.norm_factors["target_means"]
-            target_norm_stds = self.norm_factors["target_stds"]
+        
+        if self.config["target_norm_type"] is not None:
             
-        self.wtd_df[self.target] = (self.wtd_df[self.target] - target_norm_means) / target_norm_stds
+            if self.config["target_norm_type"] == "sensor_zscore":
+                target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
+                target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
+            
+            elif self.config["target_norm_type"] == "overall_zscore":
+                target_norm_means = self.norm_factors["target_means"]
+                target_norm_stds = self.norm_factors["target_stds"]
+            
+                
+            self.wtd_df[self.target] = (self.wtd_df[self.target] - target_norm_means) / target_norm_stds
         
             
         self.wtd_df["lat"] = (self.wtd_df["lat"] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
