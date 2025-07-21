@@ -82,7 +82,7 @@ def main(config):
     # optimization parameters
     optimizer = load_optimizer(config, model)
     lr_scheduler = load_lr_scheduler(config, optimizer)
-    loss_fn = load_loss(config)
+    loss_fn = load_loss(config, dataset)
     
     if config["teacher_forcing_scheduling"] == "affine":
                 if config["teacher_forcing_scheduling_offset"]>0:

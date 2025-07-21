@@ -53,19 +53,28 @@ def point_h2(Y_hat, Y, Y_mask, Y_tstep_avail, var_offset = 1e-7):
     
     return h2
     
-def loss_masked_h2(Y_hat, Y, Y_mask, reduce_mean = True, get_tstep_mask = False):
+def loss_masked_h2(Y_hat, Y, Y_mask, norm_factor, reduce_mean = True, get_tstep_mask = False):
+
+        if norm_factor is not None:      
+            mean, std = norm_factor
+            mean = mean.to(Y_hat.device)
+            std = std.to(Y_hat.device)
+            
+            Y_hat_denorm = (Y_hat * std) + mean
+            Y_denorm = (Y * std) + mean
+        else:
+            Y_hat_denorm = Y_hat
+            Y_denorm = Y
         
         if torch.sum(Y_mask) != 0:
             
             Y_tstep_avail = torch.sum(Y_mask, dim = 1)
             Y_tstep_avail_mask = (Y_tstep_avail > 1)
 
-            h2 = point_h2(Y_hat, Y, Y_mask, Y_tstep_avail)
+            h2 = point_h2(Y_hat_denorm, Y_denorm, Y_mask, Y_tstep_avail)
              
-            #print(h2)
             if reduce_mean is True:
                 h2 = torch.sum(h2[Y_tstep_avail_mask])/torch.sum(Y_tstep_avail_mask)
-            #print(h2)
         else:
             print("All NaN! Loss set to 0 ...")
             h2 = 0
