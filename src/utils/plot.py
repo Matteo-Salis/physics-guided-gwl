@@ -380,15 +380,15 @@ def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
 
 def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = None, eval = True):
     
-    start_date_input = start_date
-    start_date_output = start_date + np.timedelta64(1, dataset.config["frequency"])
+    start_date_input = start_date.astype(f"datetime64[{dataset.config['frequency']}]")
+    start_date_output = start_date.astype(f"datetime64[{dataset.config['frequency']}]") + np.timedelta64(1, dataset.config["frequency"])
     
-    end_date_input = start_date_input + np.timedelta64(twindow-1, dataset.config["frequency"])
-    end_date_output = start_date_output + np.timedelta64(twindow-1, dataset.config["frequency"])
+    end_date_input = start_date_input.astype(f"datetime64[{dataset.config['frequency']}]") + np.timedelta64(twindow, dataset.config["frequency"])
+    end_date_output = start_date_output.astype(f"datetime64[{dataset.config['frequency']}]") + np.timedelta64(twindow, dataset.config["frequency"])
     
     if eval is True:
         model.eval()                                                    
-        X, X_mask = dataset.get_target_data(start_date_input, start_date_input)    
+        X, X_mask = dataset.get_target_data(start_date_input, start_date_output)    
         X = X.squeeze()
         X_mask = X_mask.squeeze()
         teacher_forcing = False
@@ -429,7 +429,7 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
     
 def build_ds_from_pred(y_hat, start_date, twindow, freq, sensor_names):
     
-    end_date = start_date + np.timedelta64(twindow - 1, freq)
+    end_date = start_date + np.timedelta64(twindow, freq)
     pd_ds = pd.DataFrame(data = y_hat,
                          index = pd.date_range(start_date, end_date, freq = freq),
                          columns = sensor_names)
@@ -491,10 +491,10 @@ def wandb_time_series(dataset, model, device,
             
             
             Y_hat_test_ds = build_ds_from_pred(Y_hat_test,
-                                               np.datetime64(date) + np.timedelta64(1, dataset.config["frequency"]),
+                                               np.datetime64(date).astype(f"datetime64[{dataset.config['frequency']}]") + np.timedelta64(1, dataset.config["frequency"]),
                                                twindow, dataset.config["frequency"], dataset.sensor_id_list)
             Y_test_ds = build_ds_from_pred(Y_test,
-                                           np.datetime64(date) + np.timedelta64(1, dataset.config["frequency"]),
+                                           np.datetime64(date).astype(f"datetime64[{dataset.config['frequency']}]") + np.timedelta64(1, dataset.config["frequency"]),
                                            twindow, dataset.config["frequency"], dataset.sensor_id_list)
             
             # Denormalization

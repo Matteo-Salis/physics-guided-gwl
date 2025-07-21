@@ -305,6 +305,28 @@ def load_model(config):
         model = model.apply(weight_init)
         print("Initialization: He")
         
+    elif config["model"] == "SparseData_Transformer_MoE":
+        
+        model_name = "SparseData_Transformer_MoE"
+        print(f"Model: {model_name}")
+        
+        model = SparseData_Transformer_MoE(
+                weather_CHW_dim = config["weather_CHW_dim"],
+                target_dim = config["target_dim"],
+                spatial_embedding_dim = config["spatial_embedding_dim"],
+                spatial_heads = config["spatial_heads"],
+                fusion_embedding_dim = config["fusion_embedding_dim"],
+                st_heads = config["st_heads"],
+                num_experts = config["num_experts"],
+                st_mha_blocks = config["st_mha_blocks"],
+                densification_dropout = config["densification_dropout"],
+                layernorm_affine = config["layernorm_affine"],
+                spatial_dropout = config["spatial_dropout"],
+                activation= config["activation"])
+    
+        model = model.apply(weight_init)
+        print("Initialization: He")
+        
     elif config["model"] == "SparseData_STMoE":
         
         model_name = "SparseData_STMoE"

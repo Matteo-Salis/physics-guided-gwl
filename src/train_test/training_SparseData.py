@@ -51,22 +51,30 @@ def train_dl_model_SparseData(epoch, dataset, model, train_loader, loss_fn, opti
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
-                        
-                        #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
+                        if "MoE" in model_name:
+                            Y_hat, aux_loss = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True,
+                                                        get_aux_loss = True)
+                            moe = True
+                        else:
+                            Y_hat = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing, mc_dropout = True)
+                            moe = False
+                            
                         loss = loss_fn(Y_hat,
                                           Y,
                                           Y_mask)
                         
-                        #loss += aux_loss
-                        
                         if l2_alpha > 0:
                             loss += l2_alpha * loss_l2_regularization(model)
                         
-                        print("Training_data_loss: ", loss.item(),
-                              #end = " - "
+                        if moe is True:
+                            loss += aux_loss
+                            print("Training_data_loss: ", loss.item(),
+                              end = " - "
                               )
-                        #print("aux_moe_loss: ", aux_loss)
+                            print("aux_moe_loss: ", aux_loss)
+                            
+                        else:
+                             print("Training_data_loss: ", loss.item())
                         
                         loss.backward()
                         optimizer.step()

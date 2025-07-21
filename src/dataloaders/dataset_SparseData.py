@@ -56,6 +56,9 @@ class Dataset_Sparse(Dataset):
         else:
             self.target = "wtd"
             
+        if self.config["relative_target"] is True:
+            self.relative_target()
+            
         # Rasterizing groundwater dataset 
         # self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"][1:])
         # around 2.5km
@@ -325,7 +328,11 @@ class Dataset_Sparse(Dataset):
                 # self.wtd_df = self.wtd_df.set_index(["date", "sensor_id"])
                 # self.wtd_df = self.wtd_df.groupby(level='date').filter(lambda group: not group.isna().all().all())
                 # self.wtd_df = self.wtd_df.reset_index()
-        # Resampling 
+        # Resampling
+        
+        if self.config["sel_sensor_list"] is not None:
+            self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(self.config["sel_sensor_list"]), :]
+            self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(self.config["sel_sensor_list"]), :]
         
         if self.config["frequency"] != "D":
             self.wtd_df.sort_values(by='date', inplace = True)
@@ -381,7 +388,8 @@ class Dataset_Sparse(Dataset):
         self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
         
         # Subset wtd data truncating the last `twindow` instances
-        last_date = self.dates.max() - np.timedelta64(self.twindow, self.config["frequency"])
+        max_date = self.dates.max()  
+        last_date = np.datetime64(max_date).astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(self.twindow, self.config["frequency"])
         self.input_dates = self.dates[self.dates <= last_date]
         
         # Create nan-mask
@@ -408,6 +416,11 @@ class Dataset_Sparse(Dataset):
         
     def compute_piezo_head(self):
         self.wtd_df["h"] = self.wtd_df["height"] - self.wtd_df["wtd"]
+        
+    def relative_target(self):
+        self.wtd_df[f"{self.target}_r"] = self.wtd_df[self.target]/self.wtd_df["height"]
+        self.target = f"{self.target}_r"
+        
         
     def get_iloc_from_date(self, date_max):
         """
@@ -437,11 +450,11 @@ class Dataset_Sparse(Dataset):
             idx = self.__len__() + idx
         
         # Retrieve date and coords for idx instance
-        start_date_input = np.datetime64(self.dates[idx])
-        start_date_output = np.datetime64(self.dates[idx+1])
+        start_date_input = np.datetime64(self.dates[idx]).astype(f"datetime64[{self.config['frequency']}]")
+        start_date_output = np.datetime64(self.dates[idx+1]).astype(f"datetime64[{self.config['frequency']}]")
         
-        end_date_input = start_date_input + np.timedelta64(self.twindow-1, self.config["frequency"])
-        end_date_output = start_date_output + np.timedelta64(self.twindow-1, self.config["frequency"])
+        end_date_input = start_date_input.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
+        end_date_output = start_date_output.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
         
         Z = torch.from_numpy(self.sparse_target_coords).to(torch.float32) 
         
@@ -464,7 +477,7 @@ class Dataset_Sparse(Dataset):
             var_names = [self.target, "nan_mask"]
         
         target_subset_ds = self.wtd_df[var_names].loc[pd.IndexSlice[start_date:end_date, :]] #.loc[self.wtd_df.index.get_level_values(0) == date]
-        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int) + 1
+        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int)# + 1
         
         target_tensor = []
         
@@ -502,7 +515,7 @@ class Dataset_Sparse(Dataset):
         
         if lags > 0:
             
-            start_date = start_date - np.timedelta64(lags, self.config["frequency"])
+            start_date = start_date.astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(lags, self.config["frequency"])
             
             weather_video = self.weather_xr.sel(time = slice(start_date,
                                                         end_date))
@@ -516,12 +529,14 @@ class Dataset_Sparse(Dataset):
                                         W_video], axis=0)
             
             weather_doy_sin = np.sin((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
-            weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
+            weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366)
+            weather_year = weather_video.time[lags:].dt.year.values - 2000
             
             W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
             W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+            W_year = torch.from_numpy(weather_year).to(torch.float32)
             
-            W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
+            W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
             
         else:
         
@@ -538,13 +553,13 @@ class Dataset_Sparse(Dataset):
         
             weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
             weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-            #weather_years = weather_video.time.dt.year.values
+            weather_year = weather_video.time[lags:].dt.year.values - 2000
             
             W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
             W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
-            #W_years = torch.from_numpy(weather_years).to(torch.float32)
-            W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
-        
+            W_year = torch.from_numpy(weather_year).to(torch.float32)
+            
+            W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
         
         
         return [W_video, W_date]
