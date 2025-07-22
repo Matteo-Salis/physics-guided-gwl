@@ -20,7 +20,7 @@ import torch.nn as nn
 
 import warnings
 
-class Dataset_Sparse(Dataset):
+class Dataset_CPoint_Sparse(Dataset):
     """Weather and Groundwater Dataset for the continuous case model"""
 
     def __init__(self, config):
@@ -50,6 +50,98 @@ class Dataset_Sparse(Dataset):
         self.loading_point_wtd(fill_value = self.config["fill_value"])
         print("Done!")
         
+        if self.config["normalization"] is True:
+            
+            self.normalize(date_max = np.datetime64(self.config["date_max_norm"]))
+        
+        #self.sparse_target_coords_object()
+        
+        
+    def loading_weather(self):
+        self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
+        
+        self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
+        
+        self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
+        self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
+        
+        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
+                                               engine='fiona')
+        self.weather_coords = self.coordinates_xr(self.weather_dtm, coord_name = "xy")
+        
+        self.weather_coords = np.concat([self.weather_coords,
+                                    np.moveaxis(self.weather_dtm.values, 0,-1)],
+                                    axis=-1)
+        
+        if self.config["weather_get_coords"] is True:
+            self.weather_get_coords = True
+        else:
+            self.weather_get_coords = False
+            
+    def loading_dtm(self):
+        self.dtm_roi = rioxarray.open_rasterio(self.config["dtm_nc"],
+                                               engine='fiona')
+        self.dtm_roi = self.dtm_roi.rio.write_crs("epsg:4326")
+    
+    def loading_point_wtd(self, fill_value = None):
+        
+        # Water Table Depth data loading
+        self.wtd_df = pd.read_csv(self.config["wtd_csv_path"], 
+                                    dtype= {"sensor_id": "str"})
+        self.wtd_df = self.wtd_df.astype({"date":'datetime64[ns]'})
+
+        # Water Table Depth Sensors shapefile loading: 
+        self.wtd_names = gpd.read_file(self.config["wtd_shp"],
+                                             engine='fiona')
+        self.wtd_names = self.wtd_names.to_crs('epsg:4326')
+        
+        # Subset Stations
+        if self.config["discard_sensor_list"] is not None:
+
+            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(self.config["discard_sensor_list"]), :]
+            self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
+        
+        
+        if self.config["sel_sensor_list"] is not None:
+            self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(self.config["sel_sensor_list"]), :]
+            self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(self.config["sel_sensor_list"]), :]
+        
+        # Resampling
+        if self.config["frequency"] != "D":
+            self.wtd_df.sort_values(by='date', inplace = True)
+            self.wtd_df = self.wtd_df.set_index(["date"])
+            self.wtd_df = self.wtd_df.groupby([pd.Grouper(freq=self.config["frequency"], label = "left"), "sensor_id"]).mean()
+            self.wtd_df = self.wtd_df.reset_index()
+            
+        # Define attributes about dates and coordinates
+        self.dates = self.wtd_df["date"].unique()
+        self.sensor_id_list = self.wtd_df["sensor_id"].unique()
+        
+        # use same sensors order
+        self.wtd_names["sensor_id"] = pd.Categorical(self.wtd_names["sensor_id"], ordered=True, categories=self.sensor_id_list)
+        self.wtd_names = self.wtd_names.sort_values('sensor_id')
+        self.wtd_names = self.wtd_names.reset_index(drop=True)
+        
+        # Find sensors' heights 
+        dtm_values = [self.dtm_roi.sel(x = self.wtd_names.geometry.x.values[i],
+                             y = self.wtd_names.geometry.y.values[i],
+                             method = "nearest").values.squeeze() for i in range(len(self.sensor_id_list))]
+                                
+        self.wtd_names["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
+        
+        ## Build lagged_ds with target and features
+        # attach height
+        self.wtd_names['x'] = self.wtd_names.geometry.x
+        self.wtd_names['y'] = self.wtd_names.geometry.y
+
+        # Create a regular DataFrame with sensor_id as column
+        #df_reset = df.reset_index()
+
+        # Merge coordinates into df using sensor_id
+        self.wtd_df = self.wtd_df.merge(self.wtd_names[['sensor_id', 'y', 'x', 'height']], on='sensor_id', how='left')
+        self.wtd_df = self.wtd_df.set_index(['date', 'sensor_id'])
+        
+        # Define Target
         if self.config["piezo_head"] is True:
             self.compute_piezo_head()
             self.target = "h"
@@ -58,21 +150,58 @@ class Dataset_Sparse(Dataset):
             
         if self.config["relative_target"] is True:
             self.relative_target()
+        
+        # Create lagged features
+        self.target_lags = self.config["target_lags"]
+        
+        # Unstack to get features: each column is a sensor_id, each row is a date
+        features = self.wtd_df[self.target].unstack(level=1)
+        #lagged_features = [features.shift(lag).add_suffix(f'_lag{lag}') for lag in self.target_lags]
+        
+        lagged_features = []
+        avail_mask_names = []
+        for lag in self.target_lags:
             
-        # Rasterizing groundwater dataset 
-        # self.rasterize_sparse_measurements(new_dimensions = config["upsampling_dim"][1:])
-        # around 2.5km
+            temp_lagged_ds = features.shift(lag).add_suffix(f'_lag{lag}')
+            avail_mask_names.append(f"avail_mask_lag{lag}")
+            temp_lagged_ds[avail_mask_names[-1]] = (len(self.sensor_id_list) - temp_lagged_ds.isna().sum(axis=1)) > self.config["nan_treshold"]
+            lagged_features.append(temp_lagged_ds)
         
-        if self.config["normalization"] is True:
-            
-            self.normalize(date_max = np.datetime64(self.config["date_max_norm"]))
+        features_lagged = pd.concat([features] + lagged_features, axis=1)
+        #features_lagged["all_nan"] = features_lagged.isna().all(axis=1)
+        #num_features = len(self.sensor_id_list)*(len(self.target_lags)+1)
+        features_lagged["avail_mask"] = temp_lagged_ds[avail_mask_names].all(axis = 1)
+        self.check_features_lagged = features_lagged
         
-        #self.sparse_target_coords_object()
+        # Reconstruct target by stacking the original dataframe
+        target = self.target_lags[[self.target,"y","x","height"]]
+
+        # Build final dataset: join features with target (reset index to align properly)
+        features_lagged_reindex = features_lagged.loc[target.index.get_level_values(0)].reset_index(drop=True)
+        target = target.reset_index(drop=False)
+
+        self.wtd_df = pd.concat([target, features_lagged_reindex], axis=1)
         
-        self.build_lag_ds()
+        # Delete instance with no lagged measurement
+        self.wtd_df = self.wtd_df.loc[self.wtd_df["avail_mask"] is True]
+        self.wtd_df = self.wtd_df.drop(avail_mask_names.append("avail_mask"),
+                                       axis = 1)
         
-    def build_lag_ds(self):
-        self.lag_ds
+        
+        
+        # # Subset wtd data truncating the last `twindow` instances
+        # max_date = self.dates.max()  
+        # last_date = np.datetime64(max_date).astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(self.twindow, self.config["frequency"])
+        # self.input_dates = self.dates[self.dates <= last_date]
+        
+        # Create nan-mask
+        self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
+        
+        if fill_value:
+            self.fill_value = fill_value
+        else:
+            self.fill_value = 0
+    
     
     def Euclidean(self,x1,x2,y1,y2):
         return ((x1-x2)**2+(y1-y2)**2)**0.5
@@ -239,12 +368,6 @@ class Dataset_Sparse(Dataset):
         self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
         self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
         self.weather_coords[:,:,2] = (self.weather_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
-            
-        
-    def loading_dtm(self):
-        self.dtm_roi = rioxarray.open_rasterio(self.config["dtm_nc"],
-                                               engine='fiona')
-        self.dtm_roi = self.dtm_roi.rio.write_crs("epsg:4326")
         
     def coordinates_xr(self, xr, coord_name = "latlon"):
         
@@ -263,138 +386,7 @@ class Dataset_Sparse(Dataset):
         coords = np.stack([lat_matrix,lon_matrix], axis = -1)
         
         return coords
-        
-            
-    def loading_weather(self):
-        self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
-        
-        self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
-        
-        self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
-        self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
-        
-        self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
-                                               engine='fiona')
-        self.weather_coords = self.coordinates_xr(self.weather_dtm, coord_name = "xy")
-        
-        self.weather_coords = np.concat([self.weather_coords,
-                                    np.moveaxis(self.weather_dtm.values, 0,-1)],
-                                    axis=-1)
-        
-        if self.config["weather_get_coords"] is True:
-            self.weather_get_coords = True
-        else:
-            self.weather_get_coords = False
 
-    def loading_point_wtd(self, fill_value = None):
-        
-        # Water Table Depth data loading
-        self.wtd_df = pd.read_csv(self.config["wtd_csv_path"], 
-                                    dtype= {"sensor_id": "str"})
-        self.wtd_df = self.wtd_df.astype({"date":'datetime64[ns]'})
-
-        # Water Table Depth Sensors shapefile loading: 
-        self.wtd_names = gpd.read_file(self.config["wtd_shp"],
-                                             engine='fiona')
-        self.wtd_names = self.wtd_names.to_crs('epsg:4326')
-        
-        # Subset Stations
-        if self.config["discard_sensor_list"] is not None:
-            # discard_sensor_list = ["00405910001",
-            #                         "00119710001",
-            #                         "00127210003",
-            #                         "00117110001",
-            #                         "00421710001",
-            #                         "00121510001",
-            #                         "00104810001",
-            #                         "00127210005",
-            #                         "00402910001",
-            #                         "00403410001",
-            #                         "00126010001",
-            #                         "00105110001"]
-            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(self.config["discard_sensor_list"]), :]
-            self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
-        
-        
-                # sensor_list = ["00417910001",
-                #                "00105910001",
-                #                "00425010001",
-                #                "00109010001",
-                #                "00127210001"
-                #                ]
-                
-                # self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(sensor_list), :]
-                # self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(sensor_list), :]
-                
-                # self.wtd_df = self.wtd_df.set_index(["date", "sensor_id"])
-                # self.wtd_df = self.wtd_df.groupby(level='date').filter(lambda group: not group.isna().all().all())
-                # self.wtd_df = self.wtd_df.reset_index()
-        # Resampling 
-        
-        if self.config["frequency"] != "D":
-            self.wtd_df.sort_values(by='date', inplace = True)
-            self.wtd_df = self.wtd_df.set_index(["date"])
-            self.wtd_df = self.wtd_df.groupby([pd.Grouper(freq=self.config["frequency"], label = "left"), "sensor_id"]).mean()
-            self.wtd_df = self.wtd_df.reset_index()
-            
-        # Define attributes about dates and coordinates
-        self.dates = self.wtd_df["date"].unique()
-        self.sensor_id_list = self.wtd_df["sensor_id"].unique()
-        # use same sensors order
-        self.wtd_names["sensor_id"] = pd.Categorical(self.wtd_names["sensor_id"], ordered=True, categories=self.sensor_id_list)
-        self.wtd_names = self.wtd_names.sort_values('sensor_id')
-        self.wtd_names = self.wtd_names.reset_index(drop=True)
-        
-        # Find sensors' heights 
-        dtm_values = [self.dtm_roi.sel(x = self.wtd_names.geometry.x.values[i],
-                             y = self.wtd_names.geometry.y.values[i],
-                             method = "nearest").values.squeeze() for i in range(len(self.sensor_id_list))]
-                                
-        self.wtd_names["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
-        
-        ### Merge csv and shp into a joint spatio temporal representation
-        sensor_coord_x_list = []
-        sensor_coord_y_list = []
-        sensor_height = []
-
-        # Retrieve coordinates from id codes
-        for sensor in self.sensor_id_list:
-            coord_x = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.x.values[0]
-            coord_y = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.y.values[0]
-            height = self.wtd_names["height"].loc[self.wtd_names["sensor_id"] == sensor].values[0]
-            sensor_coord_x_list.append(coord_x)
-            sensor_coord_y_list.append(coord_y)
-            sensor_height.append(height)
-            
-        # Buil a dictionary of coordinates and id codes
-        from_id_to_coord_x_dict = {self.sensor_id_list[i]: sensor_coord_x_list[i] for i in range(len(sensor_coord_x_list))}
-        from_id_to_coord_y_dict = {self.sensor_id_list[i]: sensor_coord_y_list[i] for i in range(len(sensor_coord_y_list))}
-        from_id_height_dict = {self.sensor_id_list[i]: sensor_height[i] for i in range(len(sensor_height))}
-
-        # Map id codes to coordinates for all rows in the original ds
-        queries = list(self.wtd_df["sensor_id"].values)
-        coordinates_x = itemgetter(*queries)(from_id_to_coord_x_dict)
-        coordinates_y = itemgetter(*queries)(from_id_to_coord_y_dict)
-        heights = itemgetter(*queries)(from_id_height_dict)
-
-        # insert new columns containing coordinates
-        self.wtd_df["lon"] = coordinates_x
-        self.wtd_df["lat"] = coordinates_y
-        self.wtd_df["height"] = heights
-        
-        self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
-        
-        # Subset wtd data truncating the last `twindow` instances
-        last_date = self.dates.max() - np.timedelta64(self.twindow, self.config["frequency"])
-        self.input_dates = self.dates[self.dates <= last_date]
-        
-        # Create nan-mask
-        self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
-        
-        if fill_value:
-            self.fill_value = fill_value
-        else:
-            self.fill_value = 0
             
     def sparse_target_coords_object(self):
         self.sparse_target_coords = self.wtd_df.loc[pd.IndexSlice[self.input_dates[0], :],
@@ -446,11 +438,11 @@ class Dataset_Sparse(Dataset):
             idx = self.__len__() + idx
         
         # Retrieve date and coords for idx instance
-        start_date_input = np.datetime64(self.dates[idx])
-        start_date_output = np.datetime64(self.dates[idx+1])
+        start_date_input = np.datetime64(self.dates[idx]).astype(f"datetime64[{self.config['frequency']}]")
+        start_date_output = np.datetime64(self.dates[idx+1]).astype(f"datetime64[{self.config['frequency']}]")
         
-        end_date_input = start_date_input + np.timedelta64(self.twindow-1, self.config["frequency"])
-        end_date_output = start_date_output + np.timedelta64(self.twindow-1, self.config["frequency"])
+        end_date_input = start_date_input.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
+        end_date_output = start_date_output.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
         
         Z = torch.from_numpy(self.sparse_target_coords).to(torch.float32) 
         
@@ -473,7 +465,7 @@ class Dataset_Sparse(Dataset):
             var_names = [self.target, "nan_mask"]
         
         target_subset_ds = self.wtd_df[var_names].loc[pd.IndexSlice[start_date:end_date, :]] #.loc[self.wtd_df.index.get_level_values(0) == date]
-        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int) + 1
+        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int)# + 1
         
         target_tensor = []
         
@@ -511,7 +503,7 @@ class Dataset_Sparse(Dataset):
         
         if lags > 0:
             
-            start_date = start_date - np.timedelta64(lags, self.config["frequency"])
+            start_date = start_date.astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(lags, self.config["frequency"])
             
             weather_video = self.weather_xr.sel(time = slice(start_date,
                                                         end_date))
