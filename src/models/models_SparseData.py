@@ -445,6 +445,22 @@ class ST_Conditioning_Block(nn.Module):
         """
         
         return self.ST_layers(input)
+    
+class Topographical_Embdedding(nn.Module):
+    
+    def __init__(self, embedding_dim, activation):
+        super().__init__()
+        
+        self.activation = activation
+        
+        topo_embeddings = []
+        topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+        topo_embeddings.append(self.activation)
+        self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        
+    def forward(self, input):
+        
+        return self.topo_embeddings(input)
         
 class Spatial_Attention_Block(nn.Module):
     
@@ -454,7 +470,8 @@ class Spatial_Attention_Block(nn.Module):
                  heads,
                  output_channels,
                  activation,
-                 elementwise_affine):
+                 elementwise_affine,
+                 Topo_Embedder = None):
         super().__init__()
         
         self.elementwise_affine = elementwise_affine
@@ -464,11 +481,13 @@ class Spatial_Attention_Block(nn.Module):
         elif activation == "GELU":
             self.activation = nn.GELU()
 
-        
-        topo_embeddings = []
-        topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
-        topo_embeddings.append(self.activation)
-        self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        if Topo_Embedder is None:
+            topo_embeddings = []
+            topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+            topo_embeddings.append(self.activation)
+            self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        else:
+            self.topo_embeddings = Topo_Embedder
         
         value_embeddings = []
         value_embeddings.append(nn.Linear(input_channles, embedding_dim))
@@ -571,8 +590,9 @@ class Expert_alt(nn.Module):
 
         self.net = nn.Sequential(
             #RMSNorm(dim) if prenorm else None,
+            nn.LayerNorm(dim),
             nn.Linear(dim, dim_hidden),
-            nn.GELU(),
+            nn.LeakyReLU(),
             #GEGLU(dim_hidden, mult_bias = mult_bias),
             nn.Linear(dim_hidden, dim)
         )
@@ -602,7 +622,8 @@ class Spatial_Attention_Block_MoE(nn.Module):
                  output_channels,
                  activation,
                  elementwise_affine,
-                 STMoE_prenorm = False):
+                 STMoE_prenorm = False,
+                 Topo_Embedder = None):
         super().__init__()
         
         self.elementwise_affine = elementwise_affine
@@ -613,11 +634,13 @@ class Spatial_Attention_Block_MoE(nn.Module):
         elif activation == "GELU":
             self.activation = nn.GELU()
 
-        
-        topo_embeddings = []
-        topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
-        topo_embeddings.append(self.activation)
-        self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        if Topo_Embedder is None:
+            topo_embeddings = []
+            topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+            topo_embeddings.append(self.activation)
+            self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        else:
+            self.topo_embeddings = Topo_Embedder
         
         value_embeddings = []
         value_embeddings.append(nn.Linear(input_channles, embedding_dim))
@@ -979,6 +1002,9 @@ class SparseData_Transformer_MoE(nn.Module):
         
         ### Conditioning module - Transofrmer like architecture ###
         
+        self.topo_embedder = Topographical_Embdedding(embedding_dim = self.spatial_embedding_dim,
+                                                      activation = self.activation_fn)
+        
         self.SparseAutoreg_Module = Spatial_Attention_Block_MoE(
                                 embedding_dim = self.spatial_embedding_dim,
                                 input_channles = 4,
@@ -987,7 +1013,8 @@ class SparseData_Transformer_MoE(nn.Module):
                                 output_channels = self.spatial_embedding_dim,
                                 activation = self.activation,
                                 elementwise_affine= self.layernorm_affine,
-                                STMoE_prenorm = False)
+                                STMoE_prenorm = False,
+                                Topo_Embedder = self.topo_embedder)
         
         self.ST_Conditioning_Module = ST_Conditioning_Block(
                                                             in_channels = 6,
@@ -1006,7 +1033,8 @@ class SparseData_Transformer_MoE(nn.Module):
                  output_channels = self.spatial_embedding_dim,
                  activation=self.activation,
                  elementwise_affine=self.layernorm_affine,
-                 STMoE_prenorm = False)
+                 STMoE_prenorm = False,
+                 Topo_Embedder = self.topo_embedder)
         
         ### Joint Modoule ### 
         
@@ -1038,9 +1066,9 @@ class SparseData_Transformer_MoE(nn.Module):
                                         self.spatial_embedding_dim),
                                     self.activation_fn)
                                    
-        self.output = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
+        self.output = nn.Sequential(nn.LayerNorm(self.spatial_embedding_dim),
+                                    nn.Linear(self.spatial_embedding_dim,
                                             self.spatial_embedding_dim),
-                                    #nn.LayerNorm(self.spatial_embedding_dim),
                                     self.activation_fn,
                                     nn.Linear(self.spatial_embedding_dim, 1))
         
