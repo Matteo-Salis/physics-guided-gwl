@@ -47,14 +47,98 @@ class Dataset_CPoint_Sparse(Dataset):
         
         # Water Table Depth data loading 
         print("    Loading underground water data...", end = " ")
-        self.loading_point_wtd(fill_value = self.config["fill_value"])
+        self.loading_point_wtd()
         print("Done!")
         
         if self.config["normalization"] is True:
             
             self.normalize(date_max = np.datetime64(self.config["date_max_norm"]))
+            
+        print("    Building lagged dataframe...")
+        self.build_lagged_df()
+        print("Done!")
+            
+    def build_lagged_df(self):
         
-        #self.sparse_target_coords_object()
+        self.positional_encoding(mode = self.config["Positional_Encoding"])
+        
+        # Create lagged features
+        self.target_lags = self.config["target_lags"]
+        
+        # Unstack to get features: each column is a sensor_id, each row is a date
+        features = self.wtd_df[self.target].unstack(level=1)
+        features_pos_enc = self.wtd_df.loc[(features.index,self.sensor_id_list[0]), self.pos_enc_names].droplevel(1)
+        features = pd.concat([features_pos_enc, features], axis=1)
+        #lagged_features = [features.shift(lag).add_suffix(f'_lag{lag}') for lag in self.target_lags]
+        
+        lagged_features = []
+        lag_names = []
+        avail_mask_names = []
+        for lag in self.target_lags:
+            
+            temp_lagged_ds = features.shift(lag).add_suffix(f'_lag{lag}')
+            lag_names.extend(list(temp_lagged_ds.columns))
+            avail_mask_names.append(f"avail_mask_lag{lag}")
+            temp_lagged_ds[avail_mask_names[-1]] = (len(self.sensor_id_list) - temp_lagged_ds.isna().sum(axis=1)) > self.config["nan_treshold"]
+            lagged_features.append(temp_lagged_ds)
+        
+        features_lagged = pd.concat(lagged_features, axis=1)
+        #features_lagged["all_nan"] = features_lagged.isna().all(axis=1)
+        #num_features = len(self.sensor_id_list)*(len(self.target_lags)+1)
+        features_lagged["avail_mask"] = features_lagged[avail_mask_names].all(axis = 1)
+        #self.check_features_lagged = features_lagged
+        
+        # Reconstruct target by stacking the original dataframe
+        target_data = self.wtd_df[[self.target[0],"lat","lon","height",*self.pos_enc_names]]
+
+        # Build final dataset: join features with target (reset index to align properly)
+        features_lagged_reindex = features_lagged.loc[target_data.index.get_level_values(0)].reset_index(drop=True)
+        target_data = target_data.reset_index(drop=False)
+
+        self.lagged_df = pd.concat([target_data, features_lagged_reindex], axis=1)
+        
+        # Delete instance with no lagged measurement
+        self.lagged_df = self.lagged_df.loc[self.lagged_df["avail_mask"]]
+        avail_mask_names.append("avail_mask")
+        self.lagged_df = self.lagged_df.drop(avail_mask_names,
+                                       axis = 1)
+        
+        self.lag_names = lag_names
+        self.features_names = ["lat","lon","height",
+                               *self.pos_enc_names,
+                               *self.lag_names]
+        
+        #self.lagged_df = self.lagged_df.rename(columns={"x":"lon", "y":"lat"})
+        self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
+        
+        
+        # # Subset wtd data truncating the last `twindow` instances
+        # max_date = self.dates.max()  
+        # last_date = np.datetime64(max_date).astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(self.twindow, self.config["frequency"])
+        # self.input_dates = self.dates[self.dates <= last_date]
+        
+        # Create nan-mask
+        self.lagged_df = self.lagged_df.loc[~self.lagged_df[self.target].isna()]
+        
+        if self.config["fill_value"]:
+            self.fill_value = self.config["fill_value"]
+        else:
+            self.fill_value = 0
+    
+    def positional_encoding(self, mode):
+        
+        if mode == "OHE":
+            pass
+        if mode == "int":
+            pass
+        if mode == "sin":
+            doy_sin = np.sin((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366) 
+            doy_cos = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366)
+            self.pos_enc_names = ["doy_sin","doy_cos"]
+            #year_sin = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).year.values - 2000)/10)
+        
+        self.wtd_df[self.pos_enc_names[0]] = doy_sin
+        self.wtd_df[self.pos_enc_names[1]] = doy_cos
         
         
     def loading_weather(self):
@@ -83,7 +167,7 @@ class Dataset_CPoint_Sparse(Dataset):
                                                engine='fiona')
         self.dtm_roi = self.dtm_roi.rio.write_crs("epsg:4326")
     
-    def loading_point_wtd(self, fill_value = None):
+    def loading_point_wtd(self):
         
         # Water Table Depth data loading
         self.wtd_df = pd.read_csv(self.config["wtd_csv_path"], 
@@ -91,19 +175,19 @@ class Dataset_CPoint_Sparse(Dataset):
         self.wtd_df = self.wtd_df.astype({"date":'datetime64[ns]'})
 
         # Water Table Depth Sensors shapefile loading: 
-        self.wtd_names = gpd.read_file(self.config["wtd_shp"],
+        self.wtd_geodf = gpd.read_file(self.config["wtd_shp"],
                                              engine='fiona')
-        self.wtd_names = self.wtd_names.to_crs('epsg:4326')
+        self.wtd_geodf = self.wtd_geodf.to_crs('epsg:4326')
         
         # Subset Stations
         if self.config["discard_sensor_list"] is not None:
 
-            self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(self.config["discard_sensor_list"]), :]
+            self.wtd_geodf = self.wtd_geodf.loc[~self.wtd_geodf["sensor_id"].isin(self.config["discard_sensor_list"]), :]
             self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
         
         
         if self.config["sel_sensor_list"] is not None:
-            self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(self.config["sel_sensor_list"]), :]
+            self.wtd_geodf = self.wtd_geodf.loc[self.wtd_geodf["sensor_id"].isin(self.config["sel_sensor_list"]), :]
             self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(self.config["sel_sensor_list"]), :]
         
         # Resampling
@@ -118,27 +202,27 @@ class Dataset_CPoint_Sparse(Dataset):
         self.sensor_id_list = self.wtd_df["sensor_id"].unique()
         
         # use same sensors order
-        self.wtd_names["sensor_id"] = pd.Categorical(self.wtd_names["sensor_id"], ordered=True, categories=self.sensor_id_list)
-        self.wtd_names = self.wtd_names.sort_values('sensor_id')
-        self.wtd_names = self.wtd_names.reset_index(drop=True)
+        self.wtd_geodf["sensor_id"] = pd.Categorical(self.wtd_geodf["sensor_id"], ordered=True, categories=self.sensor_id_list)
+        self.wtd_geodf = self.wtd_geodf.sort_values('sensor_id')
+        self.wtd_geodf = self.wtd_geodf.reset_index(drop=True)
         
         # Find sensors' heights 
-        dtm_values = [self.dtm_roi.sel(x = self.wtd_names.geometry.x.values[i],
-                             y = self.wtd_names.geometry.y.values[i],
+        dtm_values = [self.dtm_roi.sel(x = self.wtd_geodf.geometry.x.values[i],
+                             y = self.wtd_geodf.geometry.y.values[i],
                              method = "nearest").values.squeeze() for i in range(len(self.sensor_id_list))]
                                 
-        self.wtd_names["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
+        self.wtd_geodf["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
         
         ## Build lagged_ds with target and features
         # attach height
-        self.wtd_names['x'] = self.wtd_names.geometry.x
-        self.wtd_names['y'] = self.wtd_names.geometry.y
+        self.wtd_geodf['lon'] = self.wtd_geodf.geometry.x
+        self.wtd_geodf['lat'] = self.wtd_geodf.geometry.y
 
         # Create a regular DataFrame with sensor_id as column
         #df_reset = df.reset_index()
 
         # Merge coordinates into df using sensor_id
-        self.wtd_df = self.wtd_df.merge(self.wtd_names[['sensor_id', 'y', 'x', 'height']], on='sensor_id', how='left')
+        self.wtd_df = self.wtd_df.merge(self.wtd_geodf[['sensor_id', 'lat', 'lon', 'height']], on='sensor_id', how='left')
         self.wtd_df = self.wtd_df.set_index(['date', 'sensor_id'])
         
         # Define Target
@@ -150,57 +234,6 @@ class Dataset_CPoint_Sparse(Dataset):
             
         if self.config["relative_target"] is True:
             self.relative_target()
-        
-        # Create lagged features
-        self.target_lags = self.config["target_lags"]
-        
-        # Unstack to get features: each column is a sensor_id, each row is a date
-        features = self.wtd_df[self.target].unstack(level=1)
-        #lagged_features = [features.shift(lag).add_suffix(f'_lag{lag}') for lag in self.target_lags]
-        
-        lagged_features = []
-        avail_mask_names = []
-        for lag in self.target_lags:
-            
-            temp_lagged_ds = features.shift(lag).add_suffix(f'_lag{lag}')
-            avail_mask_names.append(f"avail_mask_lag{lag}")
-            temp_lagged_ds[avail_mask_names[-1]] = (len(self.sensor_id_list) - temp_lagged_ds.isna().sum(axis=1)) > self.config["nan_treshold"]
-            lagged_features.append(temp_lagged_ds)
-        
-        features_lagged = pd.concat([features] + lagged_features, axis=1)
-        #features_lagged["all_nan"] = features_lagged.isna().all(axis=1)
-        #num_features = len(self.sensor_id_list)*(len(self.target_lags)+1)
-        features_lagged["avail_mask"] = temp_lagged_ds[avail_mask_names].all(axis = 1)
-        self.check_features_lagged = features_lagged
-        
-        # Reconstruct target by stacking the original dataframe
-        target = self.target_lags[[self.target,"y","x","height"]]
-
-        # Build final dataset: join features with target (reset index to align properly)
-        features_lagged_reindex = features_lagged.loc[target.index.get_level_values(0)].reset_index(drop=True)
-        target = target.reset_index(drop=False)
-
-        self.wtd_df = pd.concat([target, features_lagged_reindex], axis=1)
-        
-        # Delete instance with no lagged measurement
-        self.wtd_df = self.wtd_df.loc[self.wtd_df["avail_mask"] is True]
-        self.wtd_df = self.wtd_df.drop(avail_mask_names.append("avail_mask"),
-                                       axis = 1)
-        
-        
-        
-        # # Subset wtd data truncating the last `twindow` instances
-        # max_date = self.dates.max()  
-        # last_date = np.datetime64(max_date).astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(self.twindow, self.config["frequency"])
-        # self.input_dates = self.dates[self.dates <= last_date]
-        
-        # Create nan-mask
-        self.wtd_df["nan_mask"] = ~self.wtd_df["wtd"].isna()
-        
-        if fill_value:
-            self.fill_value = fill_value
-        else:
-            self.fill_value = 0
     
     
     def Euclidean(self,x1,x2,y1,y2):
@@ -244,8 +277,8 @@ class Dataset_CPoint_Sparse(Dataset):
             target_stds = target_stds.reshape(len(subset_wtd_df.index)//len(self.sensor_id_list),
                                                 len(self.sensor_id_list))[0,:]
             
-            target_means_gpd = gpd.GeoDataFrame({"mean": target_means}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
-            target_stds_gpd = gpd.GeoDataFrame({"std": target_stds}, geometry=self.wtd_names.geometry).set_crs(self.wtd_names.crs)
+            target_means_gpd = gpd.GeoDataFrame({"mean": target_means}, geometry=self.wtd_geodf.geometry).set_crs(self.wtd_geodf.crs)
+            target_stds_gpd = gpd.GeoDataFrame({"std": target_stds}, geometry=self.wtd_geodf.geometry).set_crs(self.wtd_geodf.crs)
             
             bbox = [self.dtm_roi.x.min().values,
                     self.dtm_roi.x.max().values,
@@ -285,7 +318,7 @@ class Dataset_CPoint_Sparse(Dataset):
         # target_means = []
         # target_stds = []
         # for sensor in self.sensor_id_list:
-        #     geom = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry
+        #     geom = self.wtd_geodf.loc[self.wtd_geodf["sensor_id"] == sensor].geometry
         #     target_means.append(self.target_means_xr.sel(lon = geom.x.values, lat = geom.y.values, method="nearest").values.flatten())
         #     target_stds.append(self.target_stds_xr.sel(lon = geom.x.values, lat = geom.y.values, method="nearest").values.flatten())
             
