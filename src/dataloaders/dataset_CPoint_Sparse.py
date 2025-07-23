@@ -10,9 +10,6 @@ import xarray
 
 import rioxarray
 import fiona
-from rasterio.enums import Resampling
-from geocube.api.core import make_geocube
-from shapely.geometry import box
 
 import torch
 from torch.utils.data import Dataset
@@ -22,6 +19,8 @@ import warnings
 
 class Dataset_CPoint_Sparse(Dataset):
     """Weather and Groundwater Dataset for the continuous case model"""
+
+    ### INIT 
 
     def __init__(self, config):
         """
@@ -54,92 +53,11 @@ class Dataset_CPoint_Sparse(Dataset):
             
             self.normalize(date_max = np.datetime64(self.config["date_max_norm"]))
             
-        print("    Building lagged dataframe...")
+        print("    Building lagged dataframe...", end = " ")
         self.build_lagged_df()
         print("Done!")
-            
-    def build_lagged_df(self):
         
-        self.positional_encoding(mode = self.config["Positional_Encoding"])
-        
-        # Create lagged features
-        self.target_lags = self.config["target_lags"]
-        
-        # Unstack to get features: each column is a sensor_id, each row is a date
-        features = self.wtd_df[self.target].unstack(level=1)
-        features_pos_enc = self.wtd_df.loc[(features.index,self.sensor_id_list[0]), self.pos_enc_names].droplevel(1)
-        features = pd.concat([features_pos_enc, features], axis=1)
-        #lagged_features = [features.shift(lag).add_suffix(f'_lag{lag}') for lag in self.target_lags]
-        
-        lagged_features = []
-        lag_names = []
-        avail_mask_names = []
-        for lag in self.target_lags:
-            
-            temp_lagged_ds = features.shift(lag).add_suffix(f'_lag{lag}')
-            lag_names.extend(list(temp_lagged_ds.columns))
-            avail_mask_names.append(f"avail_mask_lag{lag}")
-            temp_lagged_ds[avail_mask_names[-1]] = (len(self.sensor_id_list) - temp_lagged_ds.isna().sum(axis=1)) > self.config["nan_treshold"]
-            lagged_features.append(temp_lagged_ds)
-        
-        features_lagged = pd.concat(lagged_features, axis=1)
-        #features_lagged["all_nan"] = features_lagged.isna().all(axis=1)
-        #num_features = len(self.sensor_id_list)*(len(self.target_lags)+1)
-        features_lagged["avail_mask"] = features_lagged[avail_mask_names].all(axis = 1)
-        #self.check_features_lagged = features_lagged
-        
-        # Reconstruct target by stacking the original dataframe
-        target_data = self.wtd_df[[self.target[0],"lat","lon","height",*self.pos_enc_names]]
-
-        # Build final dataset: join features with target (reset index to align properly)
-        features_lagged_reindex = features_lagged.loc[target_data.index.get_level_values(0)].reset_index(drop=True)
-        target_data = target_data.reset_index(drop=False)
-
-        self.lagged_df = pd.concat([target_data, features_lagged_reindex], axis=1)
-        
-        # Delete instance with no lagged measurement
-        self.lagged_df = self.lagged_df.loc[self.lagged_df["avail_mask"]]
-        avail_mask_names.append("avail_mask")
-        self.lagged_df = self.lagged_df.drop(avail_mask_names,
-                                       axis = 1)
-        
-        self.lag_names = lag_names
-        self.features_names = ["lat","lon","height",
-                               *self.pos_enc_names,
-                               *self.lag_names]
-        
-        #self.lagged_df = self.lagged_df.rename(columns={"x":"lon", "y":"lat"})
-        self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
-        
-        
-        # # Subset wtd data truncating the last `twindow` instances
-        # max_date = self.dates.max()  
-        # last_date = np.datetime64(max_date).astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(self.twindow, self.config["frequency"])
-        # self.input_dates = self.dates[self.dates <= last_date]
-        
-        # Create nan-mask
-        self.lagged_df = self.lagged_df.loc[~self.lagged_df[self.target].isna()]
-        
-        if self.config["fill_value"]:
-            self.fill_value = self.config["fill_value"]
-        else:
-            self.fill_value = 0
-    
-    def positional_encoding(self, mode):
-        
-        if mode == "OHE":
-            pass
-        if mode == "int":
-            pass
-        if mode == "sin":
-            doy_sin = np.sin((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366) 
-            doy_cos = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366)
-            self.pos_enc_names = ["doy_sin","doy_cos"]
-            #year_sin = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).year.values - 2000)/10)
-        
-        self.wtd_df[self.pos_enc_names[0]] = doy_sin
-        self.wtd_df[self.pos_enc_names[1]] = doy_cos
-        
+    ### Data loading
         
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
@@ -218,9 +136,6 @@ class Dataset_CPoint_Sparse(Dataset):
         self.wtd_geodf['lon'] = self.wtd_geodf.geometry.x
         self.wtd_geodf['lat'] = self.wtd_geodf.geometry.y
 
-        # Create a regular DataFrame with sensor_id as column
-        #df_reset = df.reset_index()
-
         # Merge coordinates into df using sensor_id
         self.wtd_df = self.wtd_df.merge(self.wtd_geodf[['sensor_id', 'lat', 'lon', 'height']], on='sensor_id', how='left')
         self.wtd_df = self.wtd_df.set_index(['date', 'sensor_id'])
@@ -236,6 +151,8 @@ class Dataset_CPoint_Sparse(Dataset):
             self.relative_target()
     
     
+    ### Normalization
+        
     def Euclidean(self,x1,x2,y1,y2):
         return ((x1-x2)**2+(y1-y2)**2)**0.5
     
@@ -257,8 +174,7 @@ class Dataset_CPoint_Sparse(Dataset):
                 idx = data.apply(lambda row: self.Euclidean(row.geometry.x, lon_j, row.geometry.y, lat_i), axis = 1).argmin() 
                 array[i,j] = data.loc[idx, var]
         return array
-    
-        
+            
     def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
         
         subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
@@ -402,6 +318,82 @@ class Dataset_CPoint_Sparse(Dataset):
         self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
         self.weather_coords[:,:,2] = (self.weather_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         
+    ### Lagged Dataframe and Temporal Encoding
+    
+    def temporal_encoding(self, mode):
+        
+        if mode == "OHE":
+            pass
+        if mode == "int":
+            pass
+        if mode == "sin":
+            doy_sin = np.sin((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366) 
+            doy_cos = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).dayofyear.values)/366)
+            self.temp_enc_names = ["doy_sin","doy_cos"]
+            #year_sin = np.cos((2 * np.pi * self.wtd_df.index.get_level_values(0).year.values - 2000)/10)
+        
+        self.wtd_df[self.temp_enc_names[0]] = doy_sin
+        self.wtd_df[self.temp_enc_names[1]] = doy_cos
+    
+    def build_lagged_df(self):
+        
+        self.temporal_encoding(mode = self.config["temporal_encoding"])
+        
+        # Create lagged features
+        self.target_lags = self.config["target_lags"]
+        
+        # Unstack to get features: each column is a sensor_id, each row is a date
+        features = self.wtd_df[self.target].unstack(level=1)
+        features_temp_enc = self.wtd_df.loc[(features.index,self.sensor_id_list[0]), self.temp_enc_names].droplevel(1)
+        features = pd.concat([features_temp_enc, features], axis=1)
+        
+        lagged_features = []
+        lag_names = []
+        avail_mask_names = []
+        for lag in self.target_lags:
+            
+            temp_lagged_ds = features.shift(lag).add_suffix(f'_lag{lag}')
+            lag_names.extend(list(temp_lagged_ds.columns))
+            avail_mask_names.append(f"avail_mask_lag{lag}")
+            temp_lagged_ds[avail_mask_names[-1]] = (len(self.sensor_id_list) - temp_lagged_ds.isna().sum(axis=1)) > self.config["nan_treshold"]
+            lagged_features.append(temp_lagged_ds)
+        
+        features_lagged = pd.concat(lagged_features, axis=1)
+        features_lagged["avail_mask"] = features_lagged[avail_mask_names].all(axis = 1)
+        
+        # Reconstruct target by stacking the original dataframe
+        target_data = self.wtd_df[[self.target[0],"lat","lon","height",*self.temp_enc_names]]
+
+        # Build final dataset: join features with target (reset index to align properly)
+        features_lagged_reindex = features_lagged.loc[target_data.index.get_level_values(0)].reset_index(drop=True)
+        target_data = target_data.reset_index(drop=False)
+
+        self.lagged_df = pd.concat([target_data, features_lagged_reindex], axis=1)
+        
+        # Delete instance with no lagged measurement
+        self.lagged_df = self.lagged_df.loc[self.lagged_df["avail_mask"]]
+        avail_mask_names.append("avail_mask")
+        self.lagged_df = self.lagged_df.drop(avail_mask_names,
+                                       axis = 1)
+        
+        self.lag_names = lag_names
+        self.features_names = ["lat","lon","height",
+                               *self.temp_enc_names,
+                               *self.lag_names]
+        
+        self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
+        
+        # Create nan-mask
+        self.lagged_df = self.lagged_df.loc[~self.lagged_df[self.target].isna()]
+        
+        if self.config["fill_value"]:
+            self.fill_value = self.config["fill_value"]
+        else:
+            self.fill_value = 0
+    
+    
+    ### Utilities
+    
     def coordinates_xr(self, xr, coord_name = "latlon"):
         
         """
@@ -421,7 +413,7 @@ class Dataset_CPoint_Sparse(Dataset):
         return coords
 
             
-    def sparse_target_coords_object(self):
+    #def sparse_target_coords_object(self):
         self.sparse_target_coords = self.wtd_df.loc[pd.IndexSlice[self.input_dates[0], :],
                                                     ["lat","lon","height"]]
         
@@ -442,35 +434,41 @@ class Dataset_CPoint_Sparse(Dataset):
         self.wtd_df[f"{self.target}_r"] = self.wtd_df[self.target]/self.wtd_df["height"]
         self.target = f"{self.target}_r"
         
-        
     def get_iloc_from_date(self, date_max):
         """
         return iloc of last sensor before date_max
         """
-        ds_iloc = np.argwhere(self.input_dates <= date_max).max()
-        #row_num = self.wtd_df.index.get_loc(self.wtd_df[self.wtd_df.index.get_level_values(0) == date_max].iloc[-1].name)
-        return ds_iloc
         
-        # idx_subset = self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max]
-        # if idx_subset.size > 0:
-        #     max_idx = np.argmax(self.wtd_data_raserized.time.values[self.wtd_data_raserized.time.values < date_max])
-        # else:
-        #     max_idx = 0
-        # return max_idx
-        
+        iloc = self.lagged_df.index.get_loc(self.lagged_df[ds.lagged_df.index.get_level_values(0) <= date_max].iloc[-1].name)
+        return iloc
+
     def __len__(self):
-        #return len(self.wtd_data_raserized[self.target]) - self.twindow
-        
-        # data = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= self.input_dates.max(),
-        #                                                :]]
-        return len(self.input_dates)
+        return len(self.lagged_df)
+    
+    
+    ### GET
     
     def __getitem__(self, idx):
         
         if idx < 0:
             idx = self.__len__() + idx
+            
+            
+        # Get target
+        
+        # Get target's coordinates (lat, lon, height, temp_enc)
+        
+        ## Get features 
+        # lagged (lag, temp_enc, coord)
+        
+        # weather (video, temp_enc shift, coord)
+        
+        
+            
         
         # Retrieve date and coords for idx instance
+        
+        
         start_date_input = np.datetime64(self.dates[idx]).astype(f"datetime64[{self.config['frequency']}]")
         start_date_output = np.datetime64(self.dates[idx+1]).astype(f"datetime64[{self.config['frequency']}]")
         
