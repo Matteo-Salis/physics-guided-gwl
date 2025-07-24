@@ -149,6 +149,8 @@ class Dataset_CPoint_Sparse(Dataset):
             
         if self.config["relative_target"] is True:
             self.relative_target()
+            
+        self.target_coords = self.wtd_geodf[["lat","lon","height"]].values
     
     
     ### Normalization
@@ -303,9 +305,9 @@ class Dataset_CPoint_Sparse(Dataset):
         self.dtm_roi = (self.dtm_roi - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
         self.wtd_df["height"] = (self.wtd_df["height"] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         
-        # self.target_rasterized_coords[:,:,0] = (self.target_rasterized_coords[:,:,0] - self.norm_factors["lat_mean"].values)/self.norm_factors["lat_std"].values
-        # self.target_rasterized_coords[:,:,1] = (self.target_rasterized_coords[:,:,1] - self.norm_factors["lon_mean"].values)/self.norm_factors["lon_std"].values
-        # self.target_rasterized_coords[:,:,2] = (self.target_rasterized_coords[:,:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
+        self.target_coords[:,0] = (self.target_coords[:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+        self.target_coords[:,1] = (self.target_coords[:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+        self.target_coords[:,2] = (self.target_coords[:,2] - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
         
         norm_weather_var = list(self.weather_xr.keys())
         norm_weather_var = [var for var in norm_weather_var if var not in ["tmax","tmin"]]
@@ -453,135 +455,173 @@ class Dataset_CPoint_Sparse(Dataset):
         if idx < 0:
             idx = self.__len__() + idx
             
+        subset_df = self.lagged_df.iloc[idx]
             
-        # Get target
+        # Get target Y, Z
+        target = subset_df[self.target]
+        target_st_info = subset_df[["lat","lon","height",*self.temp_enc_names]].values
         
-        # Get target's coordinates (lat, lon, height, temp_enc)
+        # Get features X
+        ## lagged (lag, temp_enc, coord)
         
-        ## Get features 
-        # lagged (lag, temp_enc, coord)
+        lagged_features = subset_df[self.lag_names]
         
-        # weather (video, temp_enc shift, coord)
+        target_lags = lagged_features[~lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
+        target_lags = target_lags.reshape((len(self.target_lags),len(self.sensor_id_list)))
+        target_lags = np.concat([target_lags[:,:,None],
+                                np.repeat(self.target_coords[None,:,:],
+                                len(self.target_lags), axis=0)],
+                                axis=-1) 
         
+        ### Build spatio-temporal info
+        temp_encoding_lags = lagged_features[lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
+        temp_encoding_lags = temp_encoding_lags.reshape((len(self.target_lags),len(self.temp_enc_names)))
         
+        ##TODO: BUILD NAN MASK!!!
+        
+        target_lags_st_info = []
+        for i in range(len(self.target_lags)):
+            temp_encoding_expand = np.repeat(temp_encoding_lags[i,:][None,:],
+                                             len(self.sensor_id_list), axis=0)
             
+            target_lags_st_info.append(np.concat([self.target_coords,
+                                                  temp_encoding_expand], axis = 1))
+            
+        target_lags_st_info = np.stack(target_lags_st_info, axis = 0)
         
-        # Retrieve date and coords for idx instance
+        # Weather (video, temp_enc shift, coord) W
+        
+        # Output
+        Y = torch.tensor(target).to(torch.float32)
+        Z = torch.from_numpy(target_st_info).to(torch.float32)
+        X = [torch.from_numpy(target_lags).to(torch.float32),
+             torch.from_numpy(target_lags_st_info).to(torch.float32)]
         
         
-        start_date_input = np.datetime64(self.dates[idx]).astype(f"datetime64[{self.config['frequency']}]")
-        start_date_output = np.datetime64(self.dates[idx+1]).astype(f"datetime64[{self.config['frequency']}]")
+        return [X,Z,Y]
+        #W = 
         
-        end_date_input = start_date_input.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
-        end_date_output = start_date_output.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
         
-        Z = torch.from_numpy(self.sparse_target_coords).to(torch.float32) 
         
-        # Initial state WTD (t0) data        
-        X, X_mask = self.get_target_data(start_date_input, end_date_input, get_coord=True)
         
-        # Retrieve weather data
-        W = self.get_weather_video(start_date_output, end_date_output, lags = self.config["weather_lags"])
         
-        # Retrieve wtd values from t0+1 to T for the idx instance sensor
-        Y, Y_mask = self.get_target_data(start_date_output, end_date_output, get_coord=False)
         
-        return [X, Z, W, Y, X_mask, Y_mask]
+    #     # Retrieve date and coords for idx instance
+        
+        
+    #     start_date_input = np.datetime64(self.dates[idx]).astype(f"datetime64[{self.config['frequency']}]")
+    #     start_date_output = np.datetime64(self.dates[idx+1]).astype(f"datetime64[{self.config['frequency']}]")
+        
+    #     end_date_input = start_date_input.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
+    #     end_date_output = start_date_output.astype(f"datetime64[{self.config['frequency']}]") + np.timedelta64(self.twindow, self.config["frequency"])
+        
+    #     Z = torch.from_numpy(self.sparse_target_coords).to(torch.float32) 
+        
+    #     # Initial state WTD (t0) data        
+    #     X, X_mask = self.get_target_data(start_date_input, end_date_input, get_coord=True)
+        
+    #     # Retrieve weather data
+    #     W = self.get_weather_video(start_date_output, end_date_output, lags = self.config["weather_lags"])
+        
+    #     # Retrieve wtd values from t0+1 to T for the idx instance sensor
+    #     Y, Y_mask = self.get_target_data(start_date_output, end_date_output, get_coord=False)
+        
+    #     return [X, Z, W, Y, X_mask, Y_mask]
     
-    def get_target_data(self, start_date, end_date, get_coord = True, fill_na = True):
+    # def get_target_data(self, start_date, end_date, get_coord = True, fill_na = True):
         
-        if get_coord is True:
-            var_names = ["lat", "lon", "height", self.target, "nan_mask"]
-        else:
-            var_names = [self.target, "nan_mask"]
+    #     if get_coord is True:
+    #         var_names = ["lat", "lon", "height", self.target, "nan_mask"]
+    #     else:
+    #         var_names = [self.target, "nan_mask"]
         
-        target_subset_ds = self.wtd_df[var_names].loc[pd.IndexSlice[start_date:end_date, :]] #.loc[self.wtd_df.index.get_level_values(0) == date]
-        timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int)# + 1
+    #     target_subset_ds = self.wtd_df[var_names].loc[pd.IndexSlice[start_date:end_date, :]] #.loc[self.wtd_df.index.get_level_values(0) == date]
+    #     timesteps = (end_date-start_date).astype(f'timedelta64[{self.config["frequency"]}]').astype(int)# + 1
         
-        target_tensor = []
+    #     target_tensor = []
         
-        for var in var_names:
+    #     for var in var_names:
             
-            target_data = torch.from_numpy(target_subset_ds[var].values.reshape((timesteps, len(self.sensor_id_list))))
-            target_data = target_data.to(torch.float32) if var != "nan_mask" else target_data.to(torch.bool)
-            target_tensor.append(target_data)
+    #         target_data = torch.from_numpy(target_subset_ds[var].values.reshape((timesteps, len(self.sensor_id_list))))
+    #         target_data = target_data.to(torch.float32) if var != "nan_mask" else target_data.to(torch.bool)
+    #         target_tensor.append(target_data)
             
-        # target_t0_values = target_t0[self.target].values.reshape((timesteps, len(self.sensor_id_list)))
-        # target_t0_mask = target_t0["nan_mask"].values.reshape((timesteps, len(self.sensor_id_list)))
-        # target_t0_lat = target_t0["lat"].values.reshape((timesteps, len(self.sensor_id_list)))
-        # target_t0_lon = target_t0["lon"].values.reshape((timesteps, len(self.sensor_id_list)))
-        # target_t0_dtm = target_t0["height"].values.reshape((timesteps, len(self.sensor_id_list)))
+    #     # target_t0_values = target_t0[self.target].values.reshape((timesteps, len(self.sensor_id_list)))
+    #     # target_t0_mask = target_t0["nan_mask"].values.reshape((timesteps, len(self.sensor_id_list)))
+    #     # target_t0_lat = target_t0["lat"].values.reshape((timesteps, len(self.sensor_id_list)))
+    #     # target_t0_lon = target_t0["lon"].values.reshape((timesteps, len(self.sensor_id_list)))
+    #     # target_t0_dtm = target_t0["height"].values.reshape((timesteps, len(self.sensor_id_list)))
         
-        target_mask = target_tensor.pop().squeeze()
-        if fill_na is True:
-            target_tensor[-1] = target_tensor[-1].nan_to_num(self.fill_value)
+    #     target_mask = target_tensor.pop().squeeze()
+    #     if fill_na is True:
+    #         target_tensor[-1] = target_tensor[-1].nan_to_num(self.fill_value)
             
-        target_tensor = torch.stack(target_tensor, dim = -1).squeeze()
+    #     target_tensor = torch.stack(target_tensor, dim = -1).squeeze()
             
-            # target = [torch.from_numpy(target_t0_lat).to(torch.float32),
-            #     torch.from_numpy(target_t0_lon).to(torch.float32),
-            #     torch.from_numpy(target_t0_dtm).to(torch.float32),
-            #     torch.from_numpy(target_t0_values).to(torch.float32).nan_to_num(self.fill_value)
-            #     ]
+    #         # target = [torch.from_numpy(target_t0_lat).to(torch.float32),
+    #         #     torch.from_numpy(target_t0_lon).to(torch.float32),
+    #         #     torch.from_numpy(target_t0_dtm).to(torch.float32),
+    #         #     torch.from_numpy(target_t0_values).to(torch.float32).nan_to_num(self.fill_value)
+    #         #     ]
             
         
         
-        # target_mask = torch.from_numpy(target_t0_mask).to(torch.bool)
+    #     # target_mask = torch.from_numpy(target_t0_mask).to(torch.bool)
         
-        return target_tensor, target_mask
+    #     return target_tensor, target_mask
     
-    def get_weather_video(self, start_date, end_date, lags = 0):
+    # def get_weather_video(self, start_date, end_date, lags = 0):
         
-        if lags > 0:
+    #     if lags > 0:
             
-            start_date = start_date.astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(lags, self.config["frequency"])
+    #         start_date = start_date.astype(f"datetime64[{self.config['frequency']}]") - np.timedelta64(lags, self.config["frequency"])
             
-            weather_video = self.weather_xr.sel(time = slice(start_date,
-                                                        end_date))
-            shifted_weather_video = [weather_video.shift(time=lag).to_array()[:,lags:,:,:].values for lag in range(lags+1)]
-            shifted_weather_video = np.concat(shifted_weather_video, axis = 0)
-            W_video = torch.from_numpy(shifted_weather_video).to(torch.float32)
+    #         weather_video = self.weather_xr.sel(time = slice(start_date,
+    #                                                     end_date))
+    #         shifted_weather_video = [weather_video.shift(time=lag).to_array()[:,lags:,:,:].values for lag in range(lags+1)]
+    #         shifted_weather_video = np.concat(shifted_weather_video, axis = 0)
+    #         W_video = torch.from_numpy(shifted_weather_video).to(torch.float32)
             
-            weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
-            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
-            W_video = torch.cat([weather_coords,
-                                        W_video], axis=0)
+    #         weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+    #         weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+    #         W_video = torch.cat([weather_coords,
+    #                                     W_video], axis=0)
             
-            weather_doy_sin = np.sin((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
-            weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366)
-            weather_year = weather_video.time[lags:].dt.year.values - 2000
+    #         weather_doy_sin = np.sin((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
+    #         weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366)
+    #         weather_year = weather_video.time[lags:].dt.year.values - 2000
             
-            W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
-            W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
-            W_year = torch.from_numpy(weather_year).to(torch.float32)
+    #         W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+    #         W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+    #         W_year = torch.from_numpy(weather_year).to(torch.float32)
             
-            W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
+    #         W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
             
-        else:
+    #     else:
         
-            weather_video = self.weather_xr.sel(time = slice(start_date,
-                                                        end_date)) #slice include extremes
+    #         weather_video = self.weather_xr.sel(time = slice(start_date,
+    #                                                     end_date)) #slice include extremes
             
-            W_video = weather_video.to_array().values
-            W_video = torch.from_numpy(W_video).to(torch.float32)
+    #         W_video = weather_video.to_array().values
+    #         W_video = torch.from_numpy(W_video).to(torch.float32)
             
-            weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
-            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
-            W_video = torch.cat([weather_coords,
-                                        W_video], axis=0)
+    #         weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+    #         weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+    #         W_video = torch.cat([weather_coords,
+    #                                     W_video], axis=0)
         
-            weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-            weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-            weather_year = weather_video.time[lags:].dt.year.values - 2000
+    #         weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+    #         weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
+    #         weather_year = weather_video.time[lags:].dt.year.values - 2000
             
-            W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
-            W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
-            W_year = torch.from_numpy(weather_year).to(torch.float32)
+    #         W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+    #         W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+    #         W_year = torch.from_numpy(weather_year).to(torch.float32)
             
-            W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
+    #         W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
         
         
-        return [W_video, W_date]
+    #     return [W_video, W_date]
 
      
     

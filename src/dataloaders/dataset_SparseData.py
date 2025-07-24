@@ -524,7 +524,7 @@ class Dataset_Sparse(Dataset):
             W_video = torch.from_numpy(shifted_weather_video).to(torch.float32)
             
             weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
-            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1).clone()
             W_video = torch.cat([weather_coords,
                                         W_video], axis=0)
             
@@ -547,7 +547,7 @@ class Dataset_Sparse(Dataset):
             W_video = torch.from_numpy(W_video).to(torch.float32)
             
             weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
-            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+            weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1).clone()
             W_video = torch.cat([weather_coords,
                                         W_video], axis=0)
         

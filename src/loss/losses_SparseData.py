@@ -110,7 +110,7 @@ def loss_masked_focal_mse(Y_hat, Y, Y_mask, offset_perc = 0):
         offset = round(Y_hat.shape[1] * offset_perc)
         focal_weights = torch.arange(Y_hat.shape[1]+offset,offset,-1).to(Y_hat.device)/(Y_hat.shape[1] + offset)
         
-        focal_weights = focal_weights[None,:,None,None].expand(Y_hat.shape[0], -1, Y_hat.shape[2], Y_hat.shape[3])
+        focal_weights = focal_weights[None,:,None,None].expand(Y_hat.shape[0], -1, Y_hat.shape[2], Y_hat.shape[3]).clone()
         focal_weights = torch.where(Y_mask, focal_weights, 0)
         
         Y_filled = torch.where(Y_mask, Y, Y_hat)
@@ -133,7 +133,7 @@ def loss_masked_focal_mae(Y_hat, Y, Y_mask, offset_perc = 0):
         offset = round(Y_hat.shape[1] * offset_perc)
         focal_weights = torch.arange(Y_hat.shape[1]+offset,offset,-1).to(Y_hat.device)/(Y_hat.shape[1] + offset)
         
-        focal_weights = focal_weights[None,:,None,None].expand(Y_hat.shape[0], -1, Y_hat.shape[2], Y_hat.shape[3])
+        focal_weights = focal_weights[None,:,None,None].expand(Y_hat.shape[0], -1, Y_hat.shape[2], Y_hat.shape[3]).clone()
         focal_weights = torch.where(Y_mask, focal_weights, 0)
         
         Y_filled = torch.where(Y_mask, Y, Y_hat)
