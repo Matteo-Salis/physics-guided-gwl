@@ -116,7 +116,7 @@ class Dataset_CPoint_Sparse(Dataset):
             self.wtd_df = self.wtd_df.reset_index()
             
         # Define attributes about dates and coordinates
-        self.dates = self.wtd_df["date"].unique()
+        #self.all_dates = self.wtd_df["date"].unique()
         self.sensor_id_list = self.wtd_df["sensor_id"].unique()
         
         # use same sensors order
@@ -386,7 +386,9 @@ class Dataset_CPoint_Sparse(Dataset):
         self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
         
         # Create nan-mask
-        self.lagged_df = self.lagged_df.loc[~self.lagged_df[self.target].isna()]
+        self.lagged_df["nan_mask"] = ~self.lagged_df[self.target].isna()
+        
+        self.dates = self.lagged_df.index.get_level_values(0).unique()
         
         if self.config["fill_value"]:
             self.fill_value = self.config["fill_value"]
@@ -445,7 +447,7 @@ class Dataset_CPoint_Sparse(Dataset):
         return iloc
 
     def __len__(self):
-        return len(self.lagged_df)
+        return len(self.dates)
     
     
     ### GET
@@ -455,19 +457,26 @@ class Dataset_CPoint_Sparse(Dataset):
         if idx < 0:
             idx = self.__len__() + idx
             
-        subset_df = self.lagged_df.iloc[idx]
+        target_date = np.datetime64(self.dates[idx]) #.astype(f"datetime64[{self.config['frequency']}]")
+        
+            
+        subset_df = self.lagged_df.loc[pd.IndexSlice[target_date,:],:]
             
         # Get target Y, Z
-        target = subset_df[self.target]
+        target = subset_df[self.target].values
+        target_nan_mask = subset_df["nan_mask"].values
         target_st_info = subset_df[["lat","lon","height",*self.temp_enc_names]].values
         
         # Get features X
         ## lagged (lag, temp_enc, coord)
         
-        lagged_features = subset_df[self.lag_names]
+        lagged_features = subset_df[self.lag_names].iloc[0] # same data for all rows for that date
         
         target_lags = lagged_features[~lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
         target_lags = target_lags.reshape((len(self.target_lags),len(self.sensor_id_list)))
+        
+        target_lags_nan_mask = np.isnan(target_lags)
+        
         target_lags = np.concat([target_lags[:,:,None],
                                 np.repeat(self.target_coords[None,:,:],
                                 len(self.target_lags), axis=0)],
@@ -476,8 +485,6 @@ class Dataset_CPoint_Sparse(Dataset):
         ### Build spatio-temporal info
         temp_encoding_lags = lagged_features[lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
         temp_encoding_lags = temp_encoding_lags.reshape((len(self.target_lags),len(self.temp_enc_names)))
-        
-        ##TODO: BUILD NAN MASK!!!
         
         target_lags_st_info = []
         for i in range(len(self.target_lags)):
@@ -489,16 +496,46 @@ class Dataset_CPoint_Sparse(Dataset):
             
         target_lags_st_info = np.stack(target_lags_st_info, axis = 0)
         
+        
         # Weather (video, temp_enc shift, coord) W
+        start_weather_date = target_date - np.timedelta64(self.config["weather_lags"], self.config["frequency"])
+        weather_video = self.weather_xr.sel(time = slice(start_weather_date,
+                                                         target_date)).values
+        
+        W_video = torch.from_numpy(weather_video).to(torch.float32)
+            
+        weather_coords = torch.from_numpy(self.weather_coords).to(torch.float32)
+        weather_coords = torch.moveaxis(weather_coords, -1, 0).unsqueeze(1).expand(-1,W_video.shape[1],-1,-1)
+        W_video = torch.cat([weather_coords,
+                                    W_video], axis=0)
+        
+        target_st_info[:,0,-len(self.temp_enc_names):] # (2,2)
+            
+    #         weather_doy_sin = np.sin((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366) 
+    #         weather_doy_cos = np.cos((2 * np.pi * weather_video.time[lags:].dt.dayofyear.values)/366)
+    #         weather_year = weather_video.time[lags:].dt.year.values - 2000
+            
+    #         W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
+    #         W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
+    #         W_year = torch.from_numpy(weather_year).to(torch.float32)
+            
+    #         W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
         
         # Output
-        Y = torch.tensor(target).to(torch.float32)
+    
+        Y = [torch.from_numpy(target).to(torch.float32),
+             torch.from_numpy(target_nan_mask).to(torch.bool)]
+        
         Z = torch.from_numpy(target_st_info).to(torch.float32)
+        
         X = [torch.from_numpy(target_lags).to(torch.float32),
-             torch.from_numpy(target_lags_st_info).to(torch.float32)]
+             torch.from_numpy(target_lags_st_info).to(torch.float32),
+             torch.from_numpy(target_lags_nan_mask).to(torch.bool)]
         
         
-        return [X,Z,Y]
+        return [X,
+                Z,
+                Y,]
         #W = 
         
         
