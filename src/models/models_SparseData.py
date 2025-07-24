@@ -1077,9 +1077,9 @@ class SparseData_Transformer_MoE(nn.Module):
         
         ### Weather module ### 
         
-        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1)
+        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1).clone()
         ST_conditioning_input = torch.cat([ST_conditioning_input,
-                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1)],
+                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1).clone()],
                                           dim = -1) # B, D, S, C
         
         ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
@@ -1097,11 +1097,11 @@ class SparseData_Transformer_MoE(nn.Module):
                                                         dim = 1)
                 
                 causal_masks = ~causal_masks.to(torch.bool)
-                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
+                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).clone().to(W[0].device)
 
                 
         else:
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
+                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).clone().to(W[0].device)
         
         if self.training is True and teacher_forcing is True:
             Autoreg_st = []
@@ -1126,7 +1126,7 @@ class SparseData_Transformer_MoE(nn.Module):
                                                                     K = X_t[:,:,:3],
                                                                     V = X_t,
                                                                     Q = Z,
-                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
+                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1).clone()
                                                                     )
                 Autoreg_st.append(Autoreg_st_out)
                 Autoreg_aux_loss.append(Autoreg_st_aux_loss)
@@ -1201,7 +1201,7 @@ class SparseData_Transformer_MoE(nn.Module):
                 Autoreg_st_out, Autoreg_st_aux_loss, _ ,_ = self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
                                                                 V = Sparse_data,
                                                                 Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1))
+                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1).clone())
                 Autoreg_st_rlist.append(Autoreg_st_out)
                 Autoreg_aux_loss.append(Autoreg_st_aux_loss)
                 
