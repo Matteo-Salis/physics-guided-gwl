@@ -21,7 +21,15 @@ from st_moe_pytorch.st_moe_pytorch import AllGather
 import torch.distributed as dist
 from st_moe_pytorch import SparseMoEBlock
 
-##### Blocks ######
+#################
+### Utilities ###
+#################
+
+def weight_init(m):
+    if isinstance(m, nn.Linear):
+        nn.init.kaiming_uniform_(m.weight)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
 
 def densification_dropout(sample, p = 0.25):
         
@@ -39,6 +47,52 @@ def densification_dropout(sample, p = 0.25):
             new_X[batch,avail_X[dropout],-1] = 0
         
         return new_X, new_X_mask
+    
+class Embedding(nn.Module):
+    """
+    MLP Embedding
+    """
+    def __init__(self,
+                 in_channels,
+                 hidden_channels,
+                 out_channels,
+                 activation,
+                 LayerNorm = True):
+        super().__init__()
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
+        
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        
+        layers = []
+        
+        layers.append(nn.Linear(self.in_channels, self.hidden_channels))
+        layers.append(self.activation)
+        
+        if LayerNorm is True:
+            layers.append(nn.LayerNorm(self.hidden_channels))
+        layers.append(nn.Linear(self.hidden_channels, self.hidden_channels))
+        layers.append(self.activation)
+        
+        if LayerNorm is True:
+            layers.append(nn.LayerNorm(self.hidden_channels))
+        layers.append(nn.Linear(self.hidden_channels, self.out_channels))
+        layers.append(self.activation)
+        
+        self.ST_layers = nn.Sequential(*layers)
+            
+    def forward(self, input):
+        """
+        input (B, D, S, C_in)
+        output (B, D, S, C_out)
+        """
+        
+        return self.ST_layers(input)
 
 class MoveAxis(nn.Module):
     
@@ -279,11 +333,7 @@ class MHA_Block(nn.Module):
 ###########################################
 ############ SparseData Models ############
 ###########################################
-def weight_init(m):
-    if isinstance(m, nn.Linear):
-        nn.init.kaiming_uniform_(m.weight)
-        if m.bias is not None:
-            nn.init.zeros_(m.bias)
+
 
 class FiLM_Conditioning_Block(nn.Module):
     """
