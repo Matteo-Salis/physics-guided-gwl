@@ -2,24 +2,28 @@ from models.models_1d import *
 from models.models_2d import *
 #from models.models_2D import *
 from models.models_SparseData import *
+# from models.models_CPoint_Sparse import *
 
 def load_model(config):
-    twindow = config["twindow"]
 
     if config["model"] == "Discrete2DConcat1":
         model_name = "Concat1_2D"
+        twindow = config["twindow"]
         model =  Discrete2DConcat1(twindow)
     
     elif config["model"] == "Discrete2DConcat16":
         model_name = "Concat16_2D"
+        twindow = config["twindow"]
         model = Discrete2DConcat16(twindow)
     
     elif config["model"] == "Discrete2DConcat1_Time":
         model_name = "Concat1_T_2D"
+        twindow = config["twindow"]
         model = Discrete2DConcat1_Time(twindow)
     
     elif config["model"] == "Discrete2DConvLSTM":
         model_name = "ConvLSTM_2D"
+        twindow = config["twindow"]
         model = Discrete2DConvLSTM(twindow)
     
     elif config["model"] == "PICCNN_att_1D":
@@ -380,8 +384,28 @@ def load_model(config):
                 spatial_dropout = config["spatial_dropout"],
                 activation= config["activation"])
     
+    # elif config["model"] == "ST_MultiPoint_Net":
+        
+    #     model_name = "ST_MultiPoint_Net"
+    #     print(f"Model: {model_name}")
+        
+    #     model = ST_MultiPoint_Net(
+    #             value_dim_GW = config["GW_value_input_dim"],
+    #             value_dim_Weather = config["Weather_value_input_dim"], 
+    #             embedding_dim = config["embedding_dim"],
+    #             st_coords_dim = config["st_coords_input_dim"],
+    #             spatial_mha_heads = config["spatial_mha_heads"],
+    #             displacement_mod_blocks = 1,
+    #             displacement_mod_heads = 2,
+    #             GW_W_temp_dim = [len(config["target_lags"]),
+    #                              config["weather_lags"]+1],
+    #             # densification_dropout = ,
+    #             dropout = config["dropout"], 
+    #             activation = config["activation"])
+    
     else:
         raise Exception("Model name unknown.")
+    
     
     
     if config["pretrain_model"] is not None:

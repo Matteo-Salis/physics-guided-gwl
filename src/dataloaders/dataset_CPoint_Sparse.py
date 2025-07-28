@@ -32,7 +32,6 @@ class Dataset_CPoint_Sparse(Dataset):
         
         # Attributes init
         self.config = config
-        self.twindow = self.config["twindow"]
 
         # Meteorological data loading 
         print("    Loading weather data...", end = " ")
@@ -307,7 +306,7 @@ class Dataset_CPoint_Sparse(Dataset):
         
         self.target_coords[:,0] = (self.target_coords[:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
         self.target_coords[:,1] = (self.target_coords[:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-        self.target_coords[:,2] = (self.target_coords[:,2] - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
+        self.target_coords[:,2] = (self.target_coords[:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         
         norm_weather_var = list(self.weather_xr.keys())
         norm_weather_var = [var for var in norm_weather_var if var not in ["tmax","tmin"]]
@@ -389,7 +388,7 @@ class Dataset_CPoint_Sparse(Dataset):
         self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
         
         # Create nan-mask
-        self.lagged_df["nan_mask"] = ~self.lagged_df[self.target].isna()
+        self.lagged_df["nan_mask"] = self.lagged_df[self.target].isna()
         
         self.dates = self.lagged_df.index.get_level_values(0).unique()
         
@@ -456,23 +455,25 @@ class Dataset_CPoint_Sparse(Dataset):
     
     ### GET
     
-    def __getitem__(self, idx):
+    def get_target_values(self, subset_df):
         
-        if idx < 0:
-            idx = self.__len__() + idx
-            
-        target_date = np.datetime64(self.dates[idx]) #.astype(f"datetime64[{self.config['frequency']}]")
-        
-            
-        subset_df = self.lagged_df.loc[pd.IndexSlice[target_date,:],:]
-            
-        # Get target Y, Z
         target = subset_df[self.target].values
         target_nan_mask = subset_df["nan_mask"].values
+        
+        Y = [torch.from_numpy(target).to(torch.float32),
+             torch.from_numpy(target_nan_mask).to(torch.bool)]
+        
+        return Y
+    
+    def get_target_st_info(self, subset_df):
         target_st_info = subset_df[["lat","lon","height",*self.temp_enc_names]].values
         
-        # Get features X
-        ## lagged 
+        Z = torch.from_numpy(target_st_info).to(torch.float32)
+        
+        return Z
+    
+    
+    def get_lagged_features(self, subset_df):
         
         lagged_features = subset_df[self.lag_names].iloc[0] # same data for all rows for that date
         
@@ -495,8 +496,15 @@ class Dataset_CPoint_Sparse(Dataset):
             
         target_lags_st_info = np.stack(target_lags_st_info, axis = 0) # (D,S,C)
         
+        X = [torch.from_numpy(target_lags_values).to(torch.float32).nan_to_num(self.fill_value),
+             torch.from_numpy(target_lags_st_info).to(torch.float32),
+             torch.from_numpy(target_lags_nan_mask).to(torch.bool)]
         
-        # Weather W
+        return X
+        
+        
+    def get_weather_features(self, target_date):
+        
         start_weather_date = target_date - np.timedelta64(self.config["weather_lags"], self.config["frequency"])
         weather_video = self.weather_xr.sel(time = slice(start_weather_date,
                                                          target_date))
@@ -518,20 +526,31 @@ class Dataset_CPoint_Sparse(Dataset):
         weather_st_info = np.concat([weather_coords,weather_t_info],
                                     axis = 0)
         
-        
-        # Output
-        Y = [torch.from_numpy(target).to(torch.float32),
-             torch.from_numpy(target_nan_mask).to(torch.bool)]
-        
-        Z = torch.from_numpy(target_st_info).to(torch.float32)
-        
-        X = [torch.from_numpy(target_lags_values).to(torch.float32),
-             torch.from_numpy(target_lags_st_info).to(torch.float32),
-             torch.from_numpy(target_lags_nan_mask).to(torch.bool)]
-        
         W = [torch.from_numpy(weather_video).to(torch.float32),
              torch.from_numpy(weather_st_info).to(torch.float32),]
         
+        return W
+        
+    
+    def __getitem__(self, idx):
+        
+        if idx < 0:
+            idx = self.__len__() + idx
+            
+        target_date = np.datetime64(self.dates[idx]) #.astype(f"datetime64[{self.config['frequency']}]")
+            
+        subset_df = self.lagged_df.loc[pd.IndexSlice[target_date,:],:]
+            
+        # Get target Y, Z
+        Y = self.get_target_values(subset_df)
+        Z = self.get_target_st_info(subset_df)
+        
+        # Get features X
+        ## lagged 
+        X = self.get_lagged_features(subset_df)
+        
+        # Weather W
+        W = self.get_weather_features(target_date)
         
         return [X,
                 W,

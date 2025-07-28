@@ -1120,13 +1120,14 @@ class SparseData_Transformer_MoE(nn.Module):
                     X_t = X[:,timestep,:,:]
                     X_mask_t = X_mask[:,timestep,:]
                 
-                X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
+                #X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
+                X_mask_t = ~X_mask_t[:,None,:].repeat((self.spatial_heads,Z.shape[1],1))
                 
                 Autoreg_st_out, Autoreg_st_aux_loss, _ ,_ = self.SparseAutoreg_Module(
                                                                     K = X_t[:,:,:3],
                                                                     V = X_t,
                                                                     Q = Z,
-                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1).clone()
+                                                                    attn_mask = X_mask_t
                                                                     )
                 Autoreg_st.append(Autoreg_st_out)
                 Autoreg_aux_loss.append(Autoreg_st_aux_loss)
@@ -1196,12 +1197,13 @@ class SparseData_Transformer_MoE(nn.Module):
             # Unfolding time - iterate own prediction as input
             for timestep in tqdm(range(W[0].shape[2])):
                 
-                Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
+                #Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
+                Sparse_data_mask = ~Sparse_data_mask[:,None,:].repeat((self.spatial_heads, Z.shape[1], 1))
                 
                 Autoreg_st_out, Autoreg_st_aux_loss, _ ,_ = self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
                                                                 V = Sparse_data,
                                                                 Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1).clone())
+                                                                attn_mask = Sparse_data_mask)
                 Autoreg_st_rlist.append(Autoreg_st_out)
                 Autoreg_aux_loss.append(Autoreg_st_aux_loss)
                 
