@@ -103,7 +103,7 @@ class MoveAxis(nn.Module):
     
     def forward(self, x):
         return self.moveaxis(x)
-
+    
 class LayerNorm_MA(nn.Module):
     
     def __init__(self, normalized_shape, move_dim_from = None, move_dim_to = None, 
@@ -124,15 +124,64 @@ class LayerNorm_MA(nn.Module):
             
         norm_output = self.norm(input)
         return norm_output
+    
+class ST_Conditioning_Block(nn.Module):
+    """
+    FiLM Conditioning Layer
+    """
+    def __init__(self,
+                 in_channels,
+                 hidden_channels,
+                 out_channels,
+                 activation,
+                 LayerNorm = True):
+        super().__init__()
         
-class Conditioning_Attention_Block(nn.Module):
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
+        
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        
+        layers = []
+        
+        layers.append(nn.Linear(self.in_channels, self.hidden_channels))
+        layers.append(self.activation)
+        if LayerNorm is True:
+            layers.append(nn.LayerNorm(self.hidden_channels))
+        layers.append(nn.Linear(self.hidden_channels, self.hidden_channels))
+        layers.append(self.activation)
+        if LayerNorm is True:
+            layers.append(nn.LayerNorm(self.hidden_channels))
+        layers.append(nn.Linear(self.hidden_channels, self.out_channels))
+        layers.append(self.activation)
+        
+        self.ST_layers = nn.Sequential(*layers)
+            
+    def forward(self, input):
+        """
+        input (B, D, S, C_in)
+        output (B, D, S, C_out)
+        """
+        
+        return self.ST_layers(input)
+
+########################
+### Attention Blocks ###
+########################
+
+class Spatial_MHA_Block(nn.Module):
     
     def __init__(self,
-                 embedding_dim,
-                 heads,
-                 output_channels,
-                 activation,
-                 elementwise_affine):
+                embedding_dim,
+                heads,
+                output_channels,
+                activation,
+                elementwise_affine,
+                ):
         super().__init__()
         
         self.elementwise_affine = elementwise_affine
@@ -141,118 +190,35 @@ class Conditioning_Attention_Block(nn.Module):
             self.activation = nn.LeakyReLU()
         elif activation == "GELU":
             self.activation = nn.GELU()
+
         
-        cb_topo_emb = []
-        cb_topo_emb.append(nn.Linear(3, embedding_dim))
-        cb_topo_emb.append(self.activation)
-        self.cb_topo_emb = nn.Sequential(*cb_topo_emb)
-        
-        cb_value_emb = []
-        cb_value_emb.append(nn.Linear(4, embedding_dim))
-        cb_value_emb.append(self.activation)
-        self.cb_value_emb = nn.Sequential(*cb_value_emb)
-        
-        self.cb_multihead_att_1 = nn.MultiheadAttention(embedding_dim, heads,
+        self.multihead_att = nn.MultiheadAttention(embedding_dim, heads,
                                                    batch_first=True)
         
-        self.norm_linear_1 = nn.Sequential(
-                                    nn.LayerNorm(normalized_shape = int(embedding_dim*2), elementwise_affine=self.elementwise_affine),
-                                    nn.Linear(int(embedding_dim*2), int(embedding_dim*2)),
+        self.norm_linear = nn.Sequential(
+                                    nn.LayerNorm(normalized_shape = embedding_dim,
+                                                 elementwise_affine=self.elementwise_affine),
+                                    nn.Linear(embedding_dim, embedding_dim),
                                     self.activation,
-                                    nn.Linear(int(embedding_dim*2), output_channels),
-                                    self.activation
+                                    nn.Linear(embedding_dim, output_channels),
                                     )
         
-    def forward(self, X, Z, X_mask):
+    def forward(self, K, V, Q, attn_mask = None):
             
-            coords = torch.cat([X[:,:,:3],
-                                Z.flatten(start_dim = 1, end_dim = 2)],
-                               dim = 1)
+            output, _ = self.multihead_att(
+                                        query = Q, #(N,L,E)
+                                        key = K,
+                                        value = V,
+                                        attn_mask = attn_mask #(N,L,S) True is Not Allowed
+                                        )
+            output_skip = output
+            output = self.norm_linear(output)
+            output += output_skip
             
-            topographical_embedding = self.cb_topo_emb(coords)
-            
-            keys = topographical_embedding[:,:X.shape[1],:]
-            queries = topographical_embedding[:,X.shape[1]:,:]
-            values = self.cb_value_emb(X)
-            
-            target_Icond, _ = self.cb_multihead_att_1(
-                                            query = queries, #(N,L,E)
-                                            key = keys,
-                                            value = values,
-                                            key_padding_mask = ~X_mask, #(N,S)
-                                            )
-            
-            target_Icond = torch.cat([target_Icond,
-                                      queries], dim = -1)
-            
-            target_Icond = self.norm_linear_1(target_Icond)
-            
-            target_Icond = torch.moveaxis(target_Icond, -1, 1)
-            target_Icond = torch.reshape(target_Icond, (*target_Icond.shape[:2],
-                                         Z.shape[1], Z.shape[2]))
+            self.activation(output)
 
-            return target_Icond
-
-class Date_Conditioning_Block(nn.Module):
-    def __init__(self,
-                 n_channels,
-                 activation):
-        super().__init__()
-        
-        if activation == "LeakyReLU":
-            self.activation = nn.LeakyReLU()
-        elif activation == "GELU":
-            self.activation = nn.GELU()
-        
-        self.n_channels = n_channels
-        
-        for i in range(n_channels):
-            
-            setattr(self, f"fc_0_{i}",
-                    nn.Linear(2, 32))
-            setattr(self, f"activation_0_{i}",
-                    self.activation),
-            setattr(self, f"fc_1_{i}",
-                    nn.Linear(32, 2))
-            # setattr(self, f"activation_1_{i}",
-            #         nn.LeakyReLU()),
-            
-            
-    def forward(self, input):
-        outputs = []
-        for i in range(self.n_channels):
-            output = getattr(self, f"fc_0_{i}")(input)
-            output = getattr(self, f"activation_0_{i}")(output)
-            output = getattr(self, f"fc_1_{i}")(output)
-            # output = getattr(self, f"activation_1_{i}")(output)
-            
-            outputs.append(output)
-        
-        outputs = torch.stack(outputs, dim = 1)
-        
-        return outputs
-
-
-class Date_Conditioning_Block_alt(nn.Module):
-    def __init__(self,
-                 hidden_dimension):
-        super().__init__()
-        
-        self.hidden_dimension = hidden_dimension
-        
-        self.date_conditioning = nn.Sequential(nn.Linear(2, self.hidden_dimension),
-                                               nn.LeakyReLU())
-            
-            
-    def forward(self, input):
-        
-        output = self.date_conditioning(input)
-        
-        return output
-        
-        
-### Vision Transformer
-
+            return output
+      
 class MHA_Block(nn.Module):
     
     def __init__(self,
@@ -272,17 +238,15 @@ class MHA_Block(nn.Module):
             self.activation = nn.GELU()
         
         
-        # self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
-        #                                  elementwise_affine = self.elementwise_affine)
+        self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
+                                         elementwise_affine = self.elementwise_affine)
         
         self.mha = nn.MultiheadAttention(embedding_dim, heads,
                                          batch_first=True)
+
         
-        #self.dropout_1 = nn.Dropout1d(self.dropout_p)
-        
-        # self.norm_layer_2 = nn.LayerNorm(normalized_shape = embedding_dim,
-        #                                  elementwise_affine = self.elementwise_affine)
-        
+        self.norm_layer_2 = nn.LayerNorm(normalized_shape = embedding_dim,
+                                         elementwise_affine = self.elementwise_affine)
         
         self.mlp = nn.Sequential(
                                     nn.Linear(embedding_dim, embedding_dim),
@@ -290,12 +254,10 @@ class MHA_Block(nn.Module):
                                     nn.Linear(embedding_dim, embedding_dim),
                                     )
         
-        #self.dropout_2 = nn.Dropout1d(self.dropout_p)
-        
     def forward(self, input, attn_mask = None, mc_dropout = False):
         
-        skip_1 = input #.clone()
-        #output = self.norm_layer_1(input)
+        skip_1 = input
+        output = self.norm_layer_1(input)
         
         output, _ = self.mha(
                             query = input, #(N,L,E)
@@ -305,153 +267,197 @@ class MHA_Block(nn.Module):
                             is_causal = True if attn_mask is not None else False
                             )
         
-        # output = nn.functional.dropout1d(output.permute((0,2,1)),
-        #                                  p = self.dropout_p, training = self.training or mc_dropout)
+        output +=  skip_1
+        skip_2 = output 
         
-        # output = output.permute((0,2,1))
-        
-        output = output + skip_1
-        skip_2 = output #.clone()
-        
-        #output = self.norm_layer_2(output)
+        output = self.norm_layer_2(output)
         output = self.mlp(output)
         
-        output = nn.functional.dropout1d(output.permute((0,2,1)),
-                                         p = self.dropout_p, training = self.training or mc_dropout)
+        output += skip_2
         
-        output = output.permute((0,2,1))
-        
-        output = output + skip_2
-        
+        if self.dropout_p>0:
+            output = nn.functional.dropout1d(output.permute((0,2,1)),
+                                            p = self.dropout_p, training = self.training or mc_dropout)
+            
+            output = output.permute((0,2,1))
+            
         output = self.activation(output)
         
         return output
-        
 
+#### MoE ####
+      
+class MoE_alt(MoE):
+    # inspired by https://github.com/pytorch/pytorch/issues/1333
 
-
-###########################################
-############ SparseData Models ############
-###########################################
-
-
-class FiLM_Conditioning_Block(nn.Module):
-    """
-    FiLM Conditioning Layer
-    """
     def __init__(self,
-                 in_channels,
-                 hidden_channels,
-                 out_channels,
-                 activation,
-                 FiLMed_layers):
+            dim,
+            activation,
+            num_experts = 16,
+            expert_hidden_mult = 4,
+            threshold_train = 0.2,
+            threshold_eval = 0.2,
+            capacity_factor_train = 1.25,
+            capacity_factor_eval = 2.,
+            gating_top_n = 2,
+            balance_loss_coef = 1e-2,
+            router_z_loss_coef = 1e-3,
+            experts: nn.Module | None = None,
+            straight_through_dispatch_tensor = True,
+            differentiable_topk = False,
+            differentiable_topk_fused = True,
+            is_distributed = None,
+            allow_var_seq_len = False):      # loss weight for router z-loss):
+
+        super(MoE_alt, self).__init__(
+            dim = dim,
+            num_experts = num_experts,
+            gating_top_n = gating_top_n,
+            threshold_train = threshold_train,
+            threshold_eval = threshold_eval,
+            capacity_factor_train = capacity_factor_train,
+            capacity_factor_eval = capacity_factor_eval,
+            balance_loss_coef = balance_loss_coef,
+            router_z_loss_coef = router_z_loss_coef)
+        
+        experts = default(experts, lambda: [Expert_alt(dim = dim,
+                                                       hidden_mult = expert_hidden_mult,
+                                                       activation = activation) for _ in range(num_experts)])
+        self.experts = Experts(
+            experts,
+            is_distributed = is_distributed,
+            allow_var_seq_len = allow_var_seq_len
+        )
+        
+    def forward(self, x,
+        noise_gates = False,
+        noise_mult = 1.):
+            
+        return super(MoE_alt, self).forward(x, noise_gates, noise_mult)
+       
+class Expert_alt(nn.Module):
+    def __init__(
+        self,
+        dim,
+        activation,
+        hidden_mult = 4,
+        mult_bias = True,
+        prenorm = False
+    ):
         super().__init__()
+        dim_hidden = int(dim * hidden_mult * 2 / 3)
+
+        self.net = nn.Sequential(
+            #RMSNorm(dim) if prenorm else None,
+            nn.LayerNorm(dim),
+            nn.Linear(dim, dim_hidden),
+            activation,
+            #GEGLU(dim_hidden, mult_bias = mult_bias),
+            nn.Linear(dim_hidden, dim)
+        )
+
+        self.apply(self.init_)
+
+    def init_(self, module):
+        if isinstance(module, nn.Linear):
+            # dim = module.weight.shape[0]
+            # std = dim ** -0.5
+
+            # module.weight.data.uniform_(-std, std)
+            # module.bias.data.uniform_(-std, std)
+            
+            nn.init.kaiming_uniform_(module.weight)
+            nn.init.zeros_(module.bias)
+
+    def forward(self, x):
+        return self.net(x)
+    
+class Spatial_MHA_MoE_Block(nn.Module):
+    
+    def __init__(self,
+                embedding_dim,
+                heads,
+                num_experts,
+                output_channels,
+                activation,
+                elementwise_affine,
+                STMoE_prenorm = False,
+                ):
+        super().__init__()
+        
+        self.elementwise_affine = elementwise_affine
         
         if activation == "LeakyReLU":
             self.activation = nn.LeakyReLU()
         elif activation == "GELU":
             self.activation = nn.GELU()
+
         
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.out_channels = out_channels
-        self.FiLMed_layers = FiLMed_layers
+        self.multihead_att = nn.MultiheadAttention(embedding_dim, heads,
+                                                   batch_first=True)
         
-        for i in range(self.out_channels):
-            
-            setattr(self, f"fc_0_{i}",
-                    nn.Linear(self.in_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_0_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
-            setattr(self, f"fc_1_{i}",
-                    nn.Linear(self.hidden_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_1_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
-            setattr(self, f"fc_2_{i}",
-                    nn.Linear(self.hidden_channels, int(self.FiLMed_layers*2)))
-            setattr(self, f"act_2_{i}",
-                    self.activation),
-            
-            
-    def forward(self, input):
-        """
-        input (N, *, C)
-        output (N, C, *, 2)
-        """
-        outputs = []
-        for i in range(self.out_channels):
-            output = getattr(self, f"fc_0_{i}")(input)
-            output = getattr(self, f"act_and_norm_0_{i}")(output)
-            output = getattr(self, f"fc_1_{i}")(output)
-            output = getattr(self, f"act_and_norm_1_{i}")(output)
-            output = getattr(self, f"fc_2_{i}")(output)
-            output = getattr(self, f"act_2_{i}")(output)
-            
-            outputs.append(output)
+        moe = MoE_alt(
+                    dim = int(embedding_dim*2),
+                    activation = self.activation,
+                    num_experts = num_experts,               # increase the experts (# parameters) of your model without increasing computation
+                    gating_top_n = 2,               # default to top 2 gating, but can also be more (3 was tested in the paper with a lower threshold)
+                    threshold_train = 0.2,          # at what threshold to accept a token to be routed to second expert and beyond - 0.2 was optimal for 2 expert routing, and apparently should be lower for 3
+                    threshold_eval = 0.2,
+                    capacity_factor_train = 1.25,   # experts have fixed capacity per batch. we need some extra capacity in case gating is not perfectly balanced.
+                    capacity_factor_eval = 2.,      # capacity_factor_* should be set to a value >=1
+                    balance_loss_coef = 1e-2,       # multiplier on the auxiliary expert balancing auxiliary loss
+                    router_z_loss_coef = 1e-3,      # loss weight for router z-loss
+                )
         
-        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
+        self.moe_block = SparseMoEBlock(
+                            moe,
+                            add_ff_before = STMoE_prenorm,
+                            add_ff_after = STMoE_prenorm
+                        )
         
-        return outputs
+        self.linear = nn.Sequential(
+                                    nn.Linear(embedding_dim, output_channels),
+                                    )
+        
+    def forward(self, K, V, Q, attn_mask = None):
+            
+            output, _ = self.multihead_att(
+                                        query = Q, #(N,L,E)
+                                        key = K,
+                                        value = V,
+                                        attn_mask = attn_mask #(N,L,S) True is Not Allowed
+                                        )
+            output_skip = output
+            
+            output, total_aux_loss, balance_loss, router_z_loss = self.moe_block(output)
+            output = self.linear(output)
+            
+            output += output_skip
+            
+            self.activation(output)
+
+            return output, total_aux_loss, balance_loss, router_z_loss 
     
-class FiLM_Conditioning_Block_alt(nn.Module):
-    """
-    FiLM Conditioning Layer
-    """
-    def __init__(self,
-                 in_channels,
-                 hidden_channels,
-                 out_channels,
-                 activation,
-                 FiLMed_layers):
-        super().__init__()
-        
-        if activation == "LeakyReLU":
-            self.activation = nn.LeakyReLU()
-        elif activation == "GELU":
-            self.activation = nn.GELU()
-        
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.out_channels = out_channels
-        self.FiLMed_layers = FiLMed_layers
-        
-        for i in range(self.out_channels):
-            
-            setattr(self, f"fc_0_{i}",
-                    nn.Linear(self.in_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_0_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels)))
-            setattr(self, f"fc_1_{i}",
-                    nn.Linear(self.hidden_channels, self.hidden_channels))
-            setattr(self, f"act_and_norm_1_{i}",
-                    nn.Sequential(self.activation, nn.LayerNorm(self.hidden_channels))),
-            setattr(self, f"fc_2_{i}",
-                    nn.Linear(self.hidden_channels, self.FiLMed_layers))
-            setattr(self, f"act_2_{i}",
-                    self.activation),
-            
-            
-    def forward(self, input):
-        """
-        Only Addition factor
-        input (N, *, C)
-        output (N, C, *, 1)
-        """
-        outputs = []
-        for i in range(self.out_channels):
-            output = getattr(self, f"fc_0_{i}")(input)
-            output = getattr(self, f"act_and_norm_0_{i}")(output)
-            output = getattr(self, f"fc_1_{i}")(output)
-            output = getattr(self, f"act_and_norm_1_{i}")(output)
-            output = getattr(self, f"fc_2_{i}")(output)
-            output = getattr(self, f"act_2_{i}")(output)
-            
-            outputs.append(output)
-        
-        outputs = torch.stack(outputs, dim = 1).moveaxis(1,-1)
-        
-        return outputs
+###########################################
+############ Transformer Models ###########
+###########################################
     
+# class Topographical_Embdedding(nn.Module):
+    
+#     def __init__(self, embedding_dim, activation):
+#         super().__init__()
+        
+#         self.activation = activation
+        
+#         topo_embeddings = []
+#         topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+#         topo_embeddings.append(self.activation)
+#         self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        
+#     def forward(self, input):
+        
+#         return self.topo_embeddings(input)
+
 class ST_Conditioning_Block(nn.Module):
     """
     FiLM Conditioning Layer
@@ -580,176 +586,7 @@ class Spatial_Attention_Block(nn.Module):
             weather_out = self.norm_linear(weather_out)
 
             return weather_out
-
-class MoE_alt(MoE):
-    # inspired by https://github.com/pytorch/pytorch/issues/1333
-
-    def __init__(self,
-            dim,
-            num_experts = 16,
-            expert_hidden_mult = 4,
-            threshold_train = 0.2,
-            threshold_eval = 0.2,
-            capacity_factor_train = 1.25,
-            capacity_factor_eval = 2.,
-            gating_top_n = 2,
-            balance_loss_coef = 1e-2,
-            router_z_loss_coef = 1e-3,
-            experts: nn.Module | None = None,
-            straight_through_dispatch_tensor = True,
-            differentiable_topk = False,
-            differentiable_topk_fused = True,
-            is_distributed = None,
-            allow_var_seq_len = False):      # loss weight for router z-loss):
-
-        super(MoE_alt, self).__init__(
-            dim = dim,
-            num_experts = num_experts,
-            gating_top_n = gating_top_n,
-            threshold_train = threshold_train,
-            threshold_eval = threshold_eval,
-            capacity_factor_train = capacity_factor_train,
-            capacity_factor_eval = capacity_factor_eval,
-            balance_loss_coef = balance_loss_coef,
-            router_z_loss_coef = router_z_loss_coef)
         
-        experts = default(experts, lambda: [Expert_alt(dim = dim, hidden_mult = expert_hidden_mult) for _ in range(num_experts)])
-        self.experts = Experts(
-            experts,
-            is_distributed = is_distributed,
-            allow_var_seq_len = allow_var_seq_len
-        )
-        
-    def forward(self, x,
-        noise_gates = False,
-        noise_mult = 1.):
-            
-        return super(MoE_alt, self).forward(x, noise_gates, noise_mult)
-        
-
-class Expert_alt(nn.Module):
-    def __init__(
-        self,
-        dim,
-        hidden_mult = 4,
-        mult_bias = True,
-        prenorm = False
-    ):
-        super().__init__()
-        dim_hidden = int(dim * hidden_mult * 2 / 3)
-
-        self.net = nn.Sequential(
-            #RMSNorm(dim) if prenorm else None,
-            nn.LayerNorm(dim),
-            nn.Linear(dim, dim_hidden),
-            nn.LeakyReLU(),
-            #GEGLU(dim_hidden, mult_bias = mult_bias),
-            nn.Linear(dim_hidden, dim)
-        )
-
-        self.apply(self.init_)
-        #print("Alt expert")
-
-    def init_(self, module):
-        if isinstance(module, nn.Linear):
-            dim = module.weight.shape[0]
-            std = dim ** -0.5
-
-            module.weight.data.uniform_(-std, std)
-            module.bias.data.uniform_(-std, std)
-
-    def forward(self, x):
-        #print("Alt expert")
-        return self.net(x)
-
-class Spatial_Attention_Block_MoE(nn.Module):
-    
-    def __init__(self,
-                 embedding_dim,
-                 input_channles,
-                 heads,
-                 num_experts,
-                 output_channels,
-                 activation,
-                 elementwise_affine,
-                 STMoE_prenorm = False,
-                 Topo_Embedder = None):
-        super().__init__()
-        
-        self.elementwise_affine = elementwise_affine
-        self.num_experts = num_experts
-        
-        if activation == "LeakyReLU":
-            self.activation = nn.LeakyReLU()
-        elif activation == "GELU":
-            self.activation = nn.GELU()
-
-        if Topo_Embedder is None:
-            topo_embeddings = []
-            topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
-            topo_embeddings.append(self.activation)
-            self.topo_embeddings = nn.Sequential(*topo_embeddings)
-        else:
-            self.topo_embeddings = Topo_Embedder
-        
-        value_embeddings = []
-        value_embeddings.append(nn.Linear(input_channles, embedding_dim))
-        value_embeddings.append(self.activation)
-        self.value_embeddings = nn.Sequential(*value_embeddings)
-        
-        self.cb_multihead_att_1 = nn.MultiheadAttention(embedding_dim, heads,
-                                                   batch_first=True)
-        
-        moe = MoE_alt(
-                    dim = int(embedding_dim*2),
-                    num_experts = num_experts,               # increase the experts (# parameters) of your model without increasing computation
-                    gating_top_n = 2,               # default to top 2 gating, but can also be more (3 was tested in the paper with a lower threshold)
-                    threshold_train = 0.2,          # at what threshold to accept a token to be routed to second expert and beyond - 0.2 was optimal for 2 expert routing, and apparently should be lower for 3
-                    threshold_eval = 0.2,
-                    capacity_factor_train = 1.25,   # experts have fixed capacity per batch. we need some extra capacity in case gating is not perfectly balanced.
-                    capacity_factor_eval = 2.,      # capacity_factor_* should be set to a value >=1
-                    balance_loss_coef = 1e-2,       # multiplier on the auxiliary expert balancing auxiliary loss
-                    router_z_loss_coef = 1e-3,      # loss weight for router z-loss
-                )
-        
-        self.moe_block = SparseMoEBlock(
-                            moe,
-                            add_ff_before = STMoE_prenorm,
-                            add_ff_after = STMoE_prenorm
-                        )
-        
-        self.linear = nn.Sequential(
-                                    nn.Linear(int(embedding_dim*2), output_channels),
-                                    self.activation,
-                                    )
-        
-    def forward(self, K, V, Q, attn_mask = None):
-            
-            coords = torch.cat([K,
-                                Q],
-                               dim = 1)
-            
-            topographical_embedding = self.topo_embeddings(coords)
-            
-            keys = topographical_embedding[:,:K.shape[1],:]
-            queries = topographical_embedding[:,K.shape[1]:,:]
-            values = self.value_embeddings(V)
-            
-            output, _ = self.cb_multihead_att_1(
-                                            query = queries, #(N,L,E)
-                                            key = keys,
-                                            value = values,
-                                            attn_mask = attn_mask #(N,L,S) True is Not Allowed
-                                            )
-            
-            output = torch.cat([output,
-                                queries], dim = -1)
-            
-            output, total_aux_loss, balance_loss, router_z_loss = self.moe_block(output)
-            
-            output = self.linear(output)
-        
-            return output, total_aux_loss, balance_loss, router_z_loss
 
 class SparseData_Transformer(nn.Module):
     
@@ -1012,6 +849,96 @@ class SparseData_Transformer(nn.Module):
             Output_st = Output_st.squeeze()
             
             return Output_st
+        
+class Spatial_Attention_Block_MoE(nn.Module):
+    
+    def __init__(self,
+                 embedding_dim,
+                 input_channles,
+                 heads,
+                 num_experts,
+                 output_channels,
+                 activation,
+                 elementwise_affine,
+                 STMoE_prenorm = False,
+                 Topo_Embedder = None):
+        super().__init__()
+        
+        self.elementwise_affine = elementwise_affine
+        self.num_experts = num_experts
+        
+        if activation == "LeakyReLU":
+            self.activation = nn.LeakyReLU()
+        elif activation == "GELU":
+            self.activation = nn.GELU()
+
+        if Topo_Embedder is None:
+            topo_embeddings = []
+            topo_embeddings.append(nn.Linear(3, embedding_dim)) #(3: lat, lon, height)
+            topo_embeddings.append(self.activation)
+            self.topo_embeddings = nn.Sequential(*topo_embeddings)
+        else:
+            self.topo_embeddings = Topo_Embedder
+        
+        value_embeddings = []
+        value_embeddings.append(nn.Linear(input_channles, embedding_dim))
+        value_embeddings.append(self.activation)
+        self.value_embeddings = nn.Sequential(*value_embeddings)
+        
+        self.cb_multihead_att_1 = nn.MultiheadAttention(embedding_dim, heads,
+                                                   batch_first=True)
+        
+        moe = MoE_alt(
+                    activation=self.activation,
+                    dim = int(embedding_dim*2),
+                    num_experts = num_experts,               # increase the experts (# parameters) of your model without increasing computation
+                    gating_top_n = 2,               # default to top 2 gating, but can also be more (3 was tested in the paper with a lower threshold)
+                    threshold_train = 0.2,          # at what threshold to accept a token to be routed to second expert and beyond - 0.2 was optimal for 2 expert routing, and apparently should be lower for 3
+                    threshold_eval = 0.2,
+                    capacity_factor_train = 1.25,   # experts have fixed capacity per batch. we need some extra capacity in case gating is not perfectly balanced.
+                    capacity_factor_eval = 2.,      # capacity_factor_* should be set to a value >=1
+                    balance_loss_coef = 1e-2,       # multiplier on the auxiliary expert balancing auxiliary loss
+                    router_z_loss_coef = 1e-3,      # loss weight for router z-loss
+                )
+        
+        self.moe_block = SparseMoEBlock(
+                            moe,
+                            add_ff_before = STMoE_prenorm,
+                            add_ff_after = STMoE_prenorm
+                        )
+        
+        self.linear = nn.Sequential(
+                                    nn.Linear(int(embedding_dim*2), output_channels),
+                                    self.activation,
+                                    )
+        
+    def forward(self, K, V, Q, attn_mask = None):
+            
+            coords = torch.cat([K,
+                                Q],
+                               dim = 1)
+            
+            topographical_embedding = self.topo_embeddings(coords)
+            
+            keys = topographical_embedding[:,:K.shape[1],:]
+            queries = topographical_embedding[:,K.shape[1]:,:]
+            values = self.value_embeddings(V)
+            
+            output, _ = self.cb_multihead_att_1(
+                                            query = queries, #(N,L,E)
+                                            key = keys,
+                                            value = values,
+                                            attn_mask = attn_mask #(N,L,S) True is Not Allowed
+                                            )
+            
+            output = torch.cat([output,
+                                queries], dim = -1)
+            
+            output, total_aux_loss, balance_loss, router_z_loss = self.moe_block(output)
+            
+            output = self.linear(output)
+        
+            return output, total_aux_loss, balance_loss, router_z_loss
 
 class SparseData_Transformer_MoE(nn.Module):
     
@@ -1354,6 +1281,7 @@ class MHA_STMoE_Block(nn.Module):
         
         
         moe = MoE_alt(
+                    activation=self.activation,
                     dim = embedding_dim,
                     num_experts = num_experts,               # increase the experts (# parameters) of your model without increasing computation
                     gating_top_n = 2,               # default to top 2 gating, but can also be more (3 was tested in the paper with a lower threshold)
