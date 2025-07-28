@@ -299,41 +299,19 @@ class Dataset_Sparse(Dataset):
         
         # Subset Stations
         if self.config["discard_sensor_list"] is not None:
-            # discard_sensor_list = ["00405910001",
-            #                         "00119710001",
-            #                         "00127210003",
-            #                         "00117110001",
-            #                         "00421710001",
-            #                         "00121510001",
-            #                         "00104810001",
-            #                         "00127210005",
-            #                         "00402910001",
-            #                         "00403410001",
-            #                         "00126010001",
-            #                         "00105110001"]
+
             self.wtd_names = self.wtd_names.loc[~self.wtd_names["sensor_id"].isin(self.config["discard_sensor_list"]), :]
             self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
         
-        
-                # sensor_list = ["00417910001",
-                #                "00105910001",
-                #                "00425010001",
-                #                "00109010001",
-                #                "00127210001"
-                #                ]
-                
-                # self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(sensor_list), :]
-                # self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(sensor_list), :]
-                
-                # self.wtd_df = self.wtd_df.set_index(["date", "sensor_id"])
-                # self.wtd_df = self.wtd_df.groupby(level='date').filter(lambda group: not group.isna().all().all())
-                # self.wtd_df = self.wtd_df.reset_index()
-        # Resampling
         
         if self.config["sel_sensor_list"] is not None:
             self.wtd_names = self.wtd_names.loc[self.wtd_names["sensor_id"].isin(self.config["sel_sensor_list"]), :]
             self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(self.config["sel_sensor_list"]), :]
         
+        if self.config["subset_from_date"] is not None:
+            self.wtd_df = self.wtd_df.loc[self.wtd_df["date"]>=np.datetime64(self.config["subset_from_date"]), :]
+        
+        # Resampling
         if self.config["frequency"] != "D":
             self.wtd_df.sort_values(by='date', inplace = True)
             self.wtd_df = self.wtd_df.set_index(["date"])
@@ -355,37 +333,44 @@ class Dataset_Sparse(Dataset):
                                 
         self.wtd_names["height"] = np.array(dtm_values).squeeze() #add dtm values in the geopandas
         
-        ### Merge csv and shp into a joint spatio temporal representation
-        sensor_coord_x_list = []
-        sensor_coord_y_list = []
-        sensor_height = []
+        # ### Merge csv and shp into a joint spatio temporal representation
+        # sensor_coord_x_list = []
+        # sensor_coord_y_list = []
+        # sensor_height = []
 
-        # Retrieve coordinates from id codes
-        for sensor in self.sensor_id_list:
-            coord_x = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.x.values[0]
-            coord_y = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.y.values[0]
-            height = self.wtd_names["height"].loc[self.wtd_names["sensor_id"] == sensor].values[0]
-            sensor_coord_x_list.append(coord_x)
-            sensor_coord_y_list.append(coord_y)
-            sensor_height.append(height)
+        # # Retrieve coordinates from id codes
+        # for sensor in self.sensor_id_list:
+        #     coord_x = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.x.values[0]
+        #     coord_y = self.wtd_names.loc[self.wtd_names["sensor_id"] == sensor].geometry.y.values[0]
+        #     height = self.wtd_names["height"].loc[self.wtd_names["sensor_id"] == sensor].values[0]
+        #     sensor_coord_x_list.append(coord_x)
+        #     sensor_coord_y_list.append(coord_y)
+        #     sensor_height.append(height)
             
-        # Buil a dictionary of coordinates and id codes
-        from_id_to_coord_x_dict = {self.sensor_id_list[i]: sensor_coord_x_list[i] for i in range(len(sensor_coord_x_list))}
-        from_id_to_coord_y_dict = {self.sensor_id_list[i]: sensor_coord_y_list[i] for i in range(len(sensor_coord_y_list))}
-        from_id_height_dict = {self.sensor_id_list[i]: sensor_height[i] for i in range(len(sensor_height))}
+        # # Buil a dictionary of coordinates and id codes
+        # from_id_to_coord_x_dict = {self.sensor_id_list[i]: sensor_coord_x_list[i] for i in range(len(sensor_coord_x_list))}
+        # from_id_to_coord_y_dict = {self.sensor_id_list[i]: sensor_coord_y_list[i] for i in range(len(sensor_coord_y_list))}
+        # from_id_height_dict = {self.sensor_id_list[i]: sensor_height[i] for i in range(len(sensor_height))}
 
-        # Map id codes to coordinates for all rows in the original ds
-        queries = list(self.wtd_df["sensor_id"].values)
-        coordinates_x = itemgetter(*queries)(from_id_to_coord_x_dict)
-        coordinates_y = itemgetter(*queries)(from_id_to_coord_y_dict)
-        heights = itemgetter(*queries)(from_id_height_dict)
+        # # Map id codes to coordinates for all rows in the original ds
+        # queries = list(self.wtd_df["sensor_id"].values)
+        # coordinates_x = itemgetter(*queries)(from_id_to_coord_x_dict)
+        # coordinates_y = itemgetter(*queries)(from_id_to_coord_y_dict)
+        # heights = itemgetter(*queries)(from_id_height_dict)
 
-        # insert new columns containing coordinates
-        self.wtd_df["lon"] = coordinates_x
-        self.wtd_df["lat"] = coordinates_y
-        self.wtd_df["height"] = heights
+        # # insert new columns containing coordinates
+        # self.wtd_df["lon"] = coordinates_x
+        # self.wtd_df["lat"] = coordinates_y
+        # self.wtd_df["height"] = heights
         
-        self.wtd_df = self.wtd_df.set_index(["date","sensor_id"])
+        ## Build lagged_ds with target and features
+        # attach height
+        self.wtd_names['lon'] = self.wtd_names.geometry.x
+        self.wtd_names['lat'] = self.wtd_names.geometry.y
+
+        # Merge coordinates into df using sensor_id
+        self.wtd_df = self.wtd_df.merge(self.wtd_names[['sensor_id', 'lat', 'lon', 'height']], on='sensor_id', how='left')
+        self.wtd_df = self.wtd_df.set_index(['date', 'sensor_id'])
         
         # Subset wtd data truncating the last `twindow` instances
         max_date = self.dates.max()  
@@ -553,13 +538,13 @@ class Dataset_Sparse(Dataset):
         
             weather_doy_sin = np.sin((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
             weather_doy_cos = np.cos((2 * np.pi * weather_video.time.dt.dayofyear.values)/366) 
-            weather_year = weather_video.time[lags:].dt.year.values - 2000
+            #weather_year = weather_video.time[lags:].dt.year.values - 2000
             
             W_doy_sin = torch.from_numpy(weather_doy_sin).to(torch.float32)
             W_doy_cos = torch.from_numpy(weather_doy_cos).to(torch.float32)
-            W_year = torch.from_numpy(weather_year).to(torch.float32)
+            #W_year = torch.from_numpy(weather_year).to(torch.float32)
             
-            W_date = torch.stack([W_doy_sin, W_doy_cos, W_year], dim = -1)
+            W_date = torch.stack([W_doy_sin, W_doy_cos], dim = -1)
         
         
         return [W_video, W_date]
@@ -572,7 +557,7 @@ if __name__ == "__main__":
         config = json.load(f)
     print(f"Read data.json: {config}")
 
-    ds = Dataset_2D(config)
+    ds = Dataset_Sparse(config)
     print("Dataset created.")
     print(f"Length of the dataset: {ds.__len__()}")
     print(f"Item -1: {ds[-1]}")

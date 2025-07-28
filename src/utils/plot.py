@@ -369,8 +369,9 @@ def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
     dtm_grid = dataset.dtm_roi.sel(x = x, y = y,
                     method = "nearest").values #(1,H,W)
 
-    coords[:,:,0] = (coords[:,:,0] - dataset.norm_factors["lat_mean"])/dataset.norm_factors["lat_std"]
-    coords[:,:,1] = (coords[:,:,1] - dataset.norm_factors["lon_mean"])/dataset.norm_factors["lon_std"]
+    if dataset.config["normalization"] is True:
+        coords[:,:,0] = (coords[:,:,0] - dataset.norm_factors["lat_mean"])/dataset.norm_factors["lat_std"]
+        coords[:,:,1] = (coords[:,:,1] - dataset.norm_factors["lon_mean"])/dataset.norm_factors["lon_std"]
 
     Z = np.concat([coords, np.moveaxis(dtm_grid, 0, -1)], axis=-1)
 
@@ -422,6 +423,44 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
                     X_mask = X_mask.unsqueeze(0).to(device),
                     teacher_forcing = teacher_forcing
                     )
+    
+    return [Y.detach().cpu(),
+            Y_hat.detach().cpu()]
+    
+    
+def compute_predictions_CSparse(date, dataset, model, device, X_deque = None, Z_grid = None, ):
+    
+    
+    
+    subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
+    
+    W = dataset.get_weather_features(date)
+        
+    #if get_true_X_data or X is None:
+    X = dataset.get_lagged_features(subset_df)
+    
+    if X_deque is not None:
+        for X_iter_idx in range(len(X_deque)):
+            X[0][-(X_iter_idx+1),:] = X_deque[-(X_iter_idx+1)]
+            X[2] = torch.ones_like(X[2]).to(torch.bool)
+        
+    if Z_grid is None:
+        Z = dataset.get_target_st_info(subset_df)
+    else:
+        Z = torch.from_numpy(Z_grid).to(torch.float32)
+        (doy_sin, doy_cos), _ = dataset.temporal_encoding(mode = "sin", dates = pd.DatetimeIndex([date]))
+        Z = torch.cat([Z,
+                       torch.ones((Z.shape[0],1))*doy_sin,
+                       torch.ones((Z.shape[0],1))*doy_cos],
+                      dim = -1) 
+        
+    
+    Y = dataset.get_target_values(subset_df)
+    
+    Y_hat = model(X = X.unsqueeze(0).to(device),
+                W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
+                Z = Z.unsqueeze(0).to(device)
+                )
     
     return [Y.detach().cpu(),
             Y_hat.detach().cpu()]
