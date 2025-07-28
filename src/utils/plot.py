@@ -428,21 +428,14 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
             Y_hat.detach().cpu()]
     
     
-def compute_predictions_CSparse(date, dataset, model, device, X_deque = None, Z_grid = None, ):
-    
-    
+def compute_predictions_CSparse(date, dataset, model, device, X = None, Z_grid = None, get_Z = False):
     
     subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
     
     W = dataset.get_weather_features(date)
         
-    #if get_true_X_data or X is None:
-    X = dataset.get_lagged_features(subset_df)
-    
-    if X_deque is not None:
-        for X_iter_idx in range(len(X_deque)):
-            X[0][-(X_iter_idx+1),:] = X_deque[-(X_iter_idx+1)]
-            X[2] = torch.ones_like(X[2]).to(torch.bool)
+    if X is None:
+        X = dataset.get_lagged_features(subset_df)
         
     if Z_grid is None:
         Z = dataset.get_target_st_info(subset_df)
@@ -452,18 +445,26 @@ def compute_predictions_CSparse(date, dataset, model, device, X_deque = None, Z_
         Z = torch.cat([Z,
                        torch.ones((Z.shape[0],1))*doy_sin,
                        torch.ones((Z.shape[0],1))*doy_cos],
-                      dim = -1) 
+                      dim = -1).to(torch.float32)
         
     
-    Y = dataset.get_target_values(subset_df)
+    Y, _ = dataset.get_target_values(subset_df)
     
-    Y_hat = model(X = X.unsqueeze(0).to(device),
-                W = [W[0].unsqueeze(0).to(device), W[1].unsqueeze(0).to(device)],
+    Y_hat = model(X = [X[0].unsqueeze(0).to(device),
+                       X[1].unsqueeze(0).to(device),
+                       X[2].unsqueeze(0).to(device)],
+                W = [W[0].unsqueeze(0).to(device),
+                     W[1].unsqueeze(0).to(device)],
                 Z = Z.unsqueeze(0).to(device)
                 )
     
-    return [Y.detach().cpu(),
+    output = [Y.detach().cpu(),
             Y_hat.detach().cpu()]
+    
+    if get_Z is True:
+        output.append(Z)
+    
+    return output
     
     
 def build_ds_from_pred(y_hat, start_date, twindow, freq, sensor_names):
