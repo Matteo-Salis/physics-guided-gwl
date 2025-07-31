@@ -17,7 +17,7 @@ import torch.nn as nn
 
 import warnings
 
-class Dataset_CPoint_Sparse(Dataset):
+class Dataset_ST_MultiPoint(Dataset):
     """Weather and Groundwater Dataset for the continuous case model"""
 
     ### INIT 
@@ -564,7 +564,7 @@ if __name__ == "__main__":
         config = json.load(f)
     print(f"Read data.json: {config}")
 
-    ds = Dataset_CPoint_Sparse(config)
+    ds = Dataset_ST_MultiPoint(config)
     print("Dataset created.")
     print(f"Length of the dataset: {ds.__len__()}")
     print(f"Item -1: {ds[-1]}")

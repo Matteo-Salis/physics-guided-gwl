@@ -1,0 +1,55 @@
+import numpy as np
+import torch
+from torch.utils.data.sampler import SequentialSampler, RandomSampler
+
+from dataloaders.dataset_ST_MultiPoint import Dataset_ST_MultiPoint
+
+
+def load_dataset(config):
+    
+    if config["dataset_type"] == "ST_MultiPoint":
+        return Dataset_ST_MultiPoint(config)
+    else:
+        raise Exception("Model name unknown.")
+    
+
+def get_dataloader(dataset, config):
+
+    if config["all_dataset"] is True:
+        max_ds_elems = dataset.__len__()
+    else:
+        max_ds_elems = config["max_ds_elems"]
+        
+        
+    if type(config["test_split_p"]) is str:
+        
+        train_idx = int(dataset.get_iloc_from_date(date_max = np.datetime64(config["test_split_p"])))
+        test_idx = int(max_ds_elems - train_idx)
+    else:
+        test_split_p = config["test_split_p"]
+        train_split_p = 1 - test_split_p
+        
+        train_idx = int(max_ds_elems*train_split_p)
+        test_idx = int(max_ds_elems*test_split_p)
+
+    train_idxs, test_idxs = np.arange(train_idx + 1), np.arange(train_idx + 1,
+                                                            train_idx + test_idx)
+
+    # Print info 
+    print(f"Traing size: {train_idx} - Start: {np.datetime64(dataset.dates[train_idxs[0]]).astype('datetime64[D]')} - End: {np.datetime64(dataset.dates[train_idxs[-1]]).astype('datetime64[D]')};\nTest size: {test_idx} - Start: {np.datetime64(dataset.dates[test_idxs[0]]).astype('datetime64[D]')} - End: {np.datetime64(dataset.dates[test_idxs[-1]]).astype('datetime64[D]')}")
+
+
+    # Subset
+    train_set = torch.utils.data.Subset(dataset, train_idxs)
+    test_set = torch.utils.data.Subset(dataset, test_idxs)
+
+    # Dataloaders
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=config["batch_size"],
+                                                shuffle=config["random_sampler"])
+    
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=config["batch_size"],
+                                                shuffle=False)
+    
+    return train_loader, test_loader
+
+
