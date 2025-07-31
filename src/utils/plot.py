@@ -428,7 +428,11 @@ def compute_predictions(start_date, twindow, dataset, model, device, Z_grid = No
             Y_hat.detach().cpu()]
     
     
-def compute_predictions_CSparse(date, dataset, model, device, X = None, Z_grid = None, get_Z = False):
+#######################
+#### ST MultiPoint ####
+#######################
+    
+def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_grid = None, get_Z = False):
     
     subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
     
@@ -465,6 +469,63 @@ def compute_predictions_CSparse(date, dataset, model, device, X = None, Z_grid =
         output.append(Z)
     
     return output
+
+
+def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred, Z_grid = None, iter_pred = False):
+    start_date_idx = dataset.dates.get_loc(start_date)
+    
+    predictions = []
+    true = []
+    
+    if iter_pred is False:
+    
+        for i in tqdm(range(n_pred)):
+            Y , Y_hat = plot.compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
+                                            ds,
+                                            model,
+                                            device,
+                                            Z_grid = Z_grid,
+                                            get_Z = False)
+            
+            predictions.append(Y_hat)
+            true.append(Y)
+            
+    else:
+        X = None
+        X_deque = [deque(maxlen=len(dataset.target_lags)),
+             deque(maxlen=len(dataset.target_lags)),
+             deque(maxlen=len(dataset.target_lags))]
+        
+        for i in tqdm(range(n_pred)):
+            Y , Y_hat, Z_pred = plot.compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
+                                            ds,
+                                            model,
+                                            device,
+                                            X = X,
+                                            Z_grid = Z_grid,
+                                            get_Z = True,
+                                            )
+            
+            X_deque[0].append(Y_hat)
+            X_deque[1].append(Z_pred)
+            X_deque[2].append(torch.zeros_like(Y_hat).to(torch.bool))
+            
+            predictions.append(Y_hat)
+            true.append(Y)
+            
+            if i >= len(dataset.target_lags):
+                X = [torch.stack(list(X_deque[0])),
+                     torch.stack(list(X_deque[1])),
+                     torch.stack(list(X_deque[2]))]
+            
+    true = torch.stack(true, dim = 0)
+    predictions = torch.stack(predictions, dim = 0)
+        
+    return [true, predictions]
+
+
+############
+############
     
     
 def build_ds_from_pred(y_hat, start_date, twindow, freq, sensor_names):
