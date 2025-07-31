@@ -65,17 +65,18 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                     # Plots
                     #model.eval()
                     with torch.no_grad():
-                        wandb_time_series(dataset, model, device,
-                              start_dates_plot, n_pred_plot,
-                              sensors_to_plot,
-                              eval_mode = False)
-                        
-                        wandb_video(dataset, model, device,
-                                    start_dates_plot, n_pred_plot,
-                                    t_step_to_plot,
-                                    lat_points = lat_lon_points[0],
-                                    lon_points= lat_lon_points[1],
-                                    eval_mode = False)
+                        if (epoch+1) % 25 == 0:
+                            wandb_time_series(dataset, model, device,
+                                start_dates_plot, n_pred_plot,
+                                sensors_to_plot,
+                                eval_mode = False)
+                            
+                            wandb_video(dataset, model, device,
+                                        start_dates_plot, n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = False)
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")

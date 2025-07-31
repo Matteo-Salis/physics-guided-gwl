@@ -47,17 +47,18 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                 print("Test_data_loss: ", loss.item())
                                 wandb.log({"Test_data_loss":loss.item()})
                             
-                            wandb_time_series(dataset, model, device,
-                              start_dates_plot, n_pred_plot,
-                              sensors_to_plot,
-                              eval_mode=False)
-                            
-                            wandb_video(dataset, model, device,
-                                    start_dates_plot, n_pred_plot,
-                                    t_step_to_plot,
-                                    lat_points = lat_lon_points[0],
-                                    lon_points= lat_lon_points[1],
-                                    eval_mode = False)
+                            if (epoch+1) % 25 == 0:
+                              wandb_time_series(dataset, model, device,
+                                start_dates_plot, n_pred_plot,
+                                sensors_to_plot,
+                                eval_mode=False)
+                              
+                              wandb_video(dataset, model, device,
+                                      start_dates_plot, n_pred_plot,
+                                      t_step_to_plot,
+                                      lat_points = lat_lon_points[0],
+                                      lon_points= lat_lon_points[1],
+                                      eval_mode = False)
                             
                             if (epoch+1) % 50 == 0:
                             
