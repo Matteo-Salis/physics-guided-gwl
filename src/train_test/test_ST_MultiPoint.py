@@ -65,12 +65,12 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                               print("Computing iterated predictions...")
                               
                               wandb_time_series(dataset, model, device,
-                                start_dates_plot, n_pred_plot,
+                                [start_dates_plot[-1]], n_pred_plot,
                                 sensors_to_plot,
                                 eval_mode = True)
                               
                               wandb_video(dataset, model, device,
-                                      start_dates_plot, n_pred_plot,
+                                      [start_dates_plot[-1]], n_pred_plot,
                                       t_step_to_plot,
                                       lat_points = lat_lon_points[0],
                                       lon_points= lat_lon_points[1],
