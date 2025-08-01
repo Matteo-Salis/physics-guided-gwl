@@ -12,6 +12,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataloaders.dataset_1d import Dataset_1D
 
+from torch.autograd import Variable
+
 from st_moe_pytorch import MoE
 from st_moe_pytorch.st_moe_pytorch import Experts
 from st_moe_pytorch.st_moe_pytorch import exists
@@ -401,7 +403,145 @@ class Spatial_Attention_Block_MoE(nn.Module):
 ### Models ###
 ##############
 
+   
 class ST_MultiPoint_Net(nn.Module):
+    
+    def __init__(self,
+                value_dim_GW = 6,
+                value_dim_Weather = 9, 
+                embedding_dim = 16,
+                st_coords_dim = 5,
+                spatial_mha_heads = 2,
+                joint_mod_blocks = 1,
+                joint_mod_heads = 2,
+                GW_W_temp_dim = [2,5],
+                dropout = 0.2, 
+                activation = "GELU"):
+        
+        super().__init__()
+        
+        self.value_dim_GW = value_dim_GW
+        self.value_dim_Weather = value_dim_Weather
+        self.embedding_dim = embedding_dim
+        self.st_coords_dim = st_coords_dim
+        self.spatial_mha_heads = spatial_mha_heads
+        self.joint_mod_blocks = joint_mod_blocks
+        self.joint_mod_heads = joint_mod_heads
+        self.GW_W_temp_dim = GW_W_temp_dim
+        # self.densification_dropout_p = densification_dropout
+        self.dropout = dropout
+        self.activation = activation
+        
+        if self.activation == "LeakyReLU":
+            self.activation_fn = nn.LeakyReLU()
+        elif self.activation == "GELU":
+            self.activation_fn = nn.GELU()
+        
+        ### Embedding #####
+        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        ### Spatial Modules #####
+        self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        self.Weather_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        ### Joint Modules #####
+        
+        self.Linear = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        for i in range(self.joint_mod_blocks):
+            setattr(self, f"Joint_Module_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.joint_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
+            
+        
+        ### Output Layers #####
+        
+        self.Output = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim),
+                                    self.activation_fn,
+                                    nn.Linear(self.embedding_dim, 1))        
+        
+    def forward(self, X, W, Z, mc_dropout = False):
+        
+        ### Embedding #####
+        
+        GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
+                               X[1]], dim = -1)) #N, D, S, C
+        
+        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        
+        Z_st_coords = self.ST_coords_Embedding(Z)
+        
+        Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
+        Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        
+        GW_out = []
+        Weather_out = []
+        
+        for GW_lag in range(GW_values.shape[1]):
+            
+            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+                                         V = GW_values[:,GW_lag,:,:],
+                                         Q = Z_st_coords,
+                                         attn_mask = attn_mask))
+            
+        for Weather_lag in range(Weather_values.shape[1]):
+            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+                                                        V = Weather_values[:,Weather_lag,:,:],
+                                                        Q = Z_st_coords))
+        
+        GW_out = torch.stack(GW_out, dim = -1)
+        Weather_out = torch.stack(Weather_out, dim = -1)
+        
+        # Displacement modules
+        Output = torch.cat([GW_out.flatten(-2,-1),
+                                  Weather_out.flatten(-2,-1)], dim = -1)
+        
+        Output = self.Linear(Output)
+        
+        for i in range(self.joint_mod_blocks):
+            
+                Output = getattr(self, f"Joint_Module_{i}")(Output,
+                                                        mc_dropout = self.training or mc_dropout)
+        
+        # Skip connection with last observation
+        
+        Output = self.Output(Output)
+        
+        return Output.squeeze()
+
+class ST_MultiPoint_DisNet(nn.Module):
     
     def __init__(self,
                 value_dim_GW = 6,
@@ -412,7 +552,6 @@ class ST_MultiPoint_Net(nn.Module):
                 displacement_mod_blocks = 1,
                 displacement_mod_heads = 2,
                 GW_W_temp_dim = [2,5],
-                # densification_dropout = 0.45,
                 dropout = 0.2, 
                 activation = "GELU"):
         
@@ -539,1212 +678,191 @@ class ST_MultiPoint_Net(nn.Module):
         
         Output = self.Output(Output)
         
-        return Output.squeeze()
-        
-        
+        return Output.squeeze()        
 
-class SparseData_Transformer(nn.Module):
+
+#### Physics Constraint Displacement
+### inspired by: https://github.com/emited/flow/tree/master
+
+class DenseGridGen(nn.Module):
+
+    def __init__(self, transpose=True):
+        super(DenseGridGen, self).__init__()
+        self.transpose = transpose
+        self.register_buffer('grid', torch.Tensor())
+
+    def forward(self, x):
+
+        if self.transpose:
+            x = x.transpose(1, 2).transpose(2, 3)
+
+        g0 = torch.linspace(-1, 1, x.size(2)
+                            ).unsqueeze(0).repeat(x.size(1), 1)
+        g1 = torch.linspace(-1, 1, x.size(1)
+                            ).unsqueeze(1).repeat(1, x.size(2))
+        grid = torch.cat([g0.unsqueeze(-1), g1.unsqueeze(-1)], -1)
+        self.grid.resize_(grid.size()).copy_(grid)
+
+        bgrid = Variable(self.grid)
+        bgrid = bgrid.unsqueeze(0).expand(x.size(0), *bgrid.size())
+
+        return bgrid - x
+
+class GaussianWarpingScheme(nn.Module):
+    def __init__(self, padding_mode='zeros', F=3, std=0.25):
+        super(GaussianWarpingScheme, self).__init__()
+        self.grid = DenseGridGen()
+        self.F = F
+        self.std = std
+        self.padding_mode = padding_mode
+
+    def forward(self, im, w):
+        return F.grid_sample(im, self.grid(w), padding_mode=self.padding_mode, mode='gaussian', F=self.F, std=self.std)
+
+class ST_MultiPoint_PhyDisNet(nn.Module):
     
     def __init__(self,
-                weather_CHW_dim = [7, 9, 12],
-                target_dim = [14, 31],
-                spatial_embedding_dim = 16,
-                spatial_heads = 2,
-                fusion_embedding_dim = 128,
-                st_heads = 4,
-                st_mha_blocks = 3,
-                densification_dropout = 0.45,
-                spatial_dropout = 0.2, # TODO
-                layernorm_affine = True,
+                value_dim_GW = 6,
+                value_dim_Weather = 9, 
+                embedding_dim = 16,
+                st_coords_dim = 5,
+                spatial_mha_heads = 2,
+                displacement_mod_blocks = 1,
+                displacement_mod_heads = 2,
+                GW_W_temp_dim = [2,5],
+                dropout = 0.2, 
                 activation = "GELU"):
         
         super().__init__()
         
-        self.weather_dim = weather_CHW_dim
-        self.target_dim = target_dim
-        self.spatial_embedding_dim = spatial_embedding_dim
-        self.spatial_heads = spatial_heads
-        self.fusion_embedding_dim = fusion_embedding_dim
-        self.st_heads = st_heads
-        self.st_mha_blocks = st_mha_blocks
-        self.densification_dropout_p = densification_dropout
-        self.layernorm_affine = layernorm_affine
-        self.spatial_dropout = spatial_dropout
+        self.value_dim_GW = value_dim_GW
+        self.value_dim_Weather = value_dim_Weather
+        self.embedding_dim = embedding_dim
+        self.st_coords_dim = st_coords_dim
+        self.spatial_mha_heads = spatial_mha_heads
+        self.displacement_mod_blocks = displacement_mod_blocks
+        self.displacement_mod_heads = displacement_mod_heads
+        self.GW_W_temp_dim = GW_W_temp_dim
+        self.dropout = dropout
         self.activation = activation
         
         if self.activation == "LeakyReLU":
             self.activation_fn = nn.LeakyReLU()
         elif self.activation == "GELU":
             self.activation_fn = nn.GELU()
-            
         
-        ### Conditioning module - Transofrmer like architecture ###
-        
-        self.SparseAutoreg_Module = Spatial_Attention_Block(
-                                embedding_dim = self.spatial_embedding_dim,
-                                input_channles = 4,
-                                heads = self.spatial_heads,
-                                output_channels = self.spatial_embedding_dim,
-                                activation = self.activation,
-                                elementwise_affine= self.layernorm_affine)
-        
-        self.ST_Conditioning_Module = ST_Conditioning_Block(
-                                                            in_channels = 5,
-                                                            hidden_channels = 32, 
-                                                            out_channels = 1, 
-                                                            LayerNorm = False,
-                                                            activation = self.activation)
-
-        ### Weather module ### 
-        
-        self.Weather_Module = Spatial_Attention_Block(
-                 embedding_dim = self.spatial_embedding_dim,
-                 input_channles = self.weather_dim[0],
-                 heads = self.spatial_heads,
-                 output_channels = self.spatial_embedding_dim,
-                 activation=self.activation,
-                 elementwise_affine=self.layernorm_affine)
-        
-        ### Joint Modoule ### 
-        
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2),
-                                                       self.fusion_embedding_dim),
-                                             self.activation_fn)
-        
-        ### Flatten Space-Time Dimension
-        
-        ### Spatio-Temporal Positional Embedding        
-        # self.positional_embedding = self.PositionEmbedding(math.prod(self.target_dim),
-        #                                                    self.fusion_embedding_dim)
-        
-        ### Causal Mask 
-        self.causal_mask = torch.tril(torch.ones((self.target_dim[0], self.target_dim[0]))) # Tempooral Mask
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 0)
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 1)
-        self.causal_mask = ~self.causal_mask.to(torch.bool)
-        
-        for i in range(self.st_mha_blocks):
-            setattr(self, f"MHA_Block_{i}",
-                    MHA_Block(self.fusion_embedding_dim, self.st_heads,
-                              self.activation,
-                              elementwise_affine = self.layernorm_affine,
-                              dropout_p = self.spatial_dropout))
-            
-            
-        ### De-Flatten Space-Time Dimension
-        
-        self.linear = nn.Sequential(nn.Linear(self.fusion_embedding_dim,
-                                        self.spatial_embedding_dim),
-                                    self.activation_fn)
-                                   
-        self.output = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
-                                            self.spatial_embedding_dim),
-                                    #nn.LayerNorm(self.spatial_embedding_dim),
-                                    self.activation_fn,
-                                    nn.Linear(self.spatial_embedding_dim, 1))
-        
-    def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False):
-        
-        ### Weather module ### 
-        
-        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1)
-        ST_conditioning_input = torch.cat([ST_conditioning_input,
-                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1)],
-                                          dim = -1) # B, D, S, C
-        
-        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
-        ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
-        
-        if [W[0].shape[2], Z.shape[1]] != self.target_dim:
-                
-                print("Computing Causal-Mask...")
-            
-                # Causal Mask
-                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                            dim = 0)
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                        dim = 1)
-                
-                causal_masks = ~causal_masks.to(torch.bool)
-                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
-
-                
-        else:
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
-        
-        if self.training is True and teacher_forcing is True:
-            Autoreg_st = []
-            Weather_st = []
-            
-            for timestep in range(X.shape[1]):
-                 
-                if self.densification_dropout_p>0:
-                    X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
-                                                           X_mask[:,timestep,:]],
-                                                        p = self.densification_dropout_p)
-                else:
-                    X_t = X[:,timestep,:,:]
-                    X_mask_t = X_mask[:,timestep,:]
-                
-                X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
-                
-                Autoreg_st.append(self.SparseAutoreg_Module(
-                                                                    K = X_t[:,:,:3],
-                                                                    V = X_t,
-                                                                    Q = Z,
-                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
-                                                                    ))
-                
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Weather_st.append(self.Weather_Module(
-                                                                K = Weather_Keys,
-                                                                V = Weather_Values,
-                                                                Q = Z
-                                                                ))
-                
-            Autoreg_st = torch.stack(Autoreg_st, dim = 1)
-            Weather_st = torch.stack(Weather_st, dim = 1)
-
-            Fused_st = torch.cat([Autoreg_st,
-                                    Weather_st], 
-                                    dim = -1)
-            
-            Fused_st_extent = Fused_st.shape[1:3]
-            Fused_st = torch.flatten(Fused_st, 1, 2)
-            
-            Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
-                                                p = self.spatial_dropout, training = True)
-            
-            Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
-            Fused_st += ST_Conditionings
-            
-            for i in range(self.st_mha_blocks):
-            
-                Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st, causal_masks, self.training)
-            
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1])) 
-            
-            Fused_st = self.linear(Fused_st)
-            
-            Fused_st = Fused_st + Autoreg_st
-            
-            Output_st = self.output(Fused_st)
-            
-            return Output_st.squeeze()
-        
-        else:
-            
-            Sparse_data = X
-            Sparse_data_mask = X_mask
-            
-            Autoreg_st_rlist = []
-            Weather_st_rlist = []
-                
-            # Unfolding time - iterate own prediction as input
-            for timestep in tqdm(range(W[0].shape[2])):
-                
-                Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
-                
-                Autoreg_st_rlist.append(self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
-                                                                V = Sparse_data,
-                                                                Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1)))
-                
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Weather_st_rlist.append(self.Weather_Module(
-                                                        K = Weather_Keys,
-                                                        V = Weather_Values,
-                                                        Q = Z
-                                                        ))
-                
-                Autoreg_st = torch.stack(Autoreg_st_rlist, dim = 1)
-                Weather_st = torch.stack(Weather_st_rlist, dim = 1)
-                Fused_st = torch.cat([Autoreg_st,
-                                    Weather_st], 
-                                    dim = -1)
-                
-                Fused_st_extent = Fused_st.shape[1:3]
-                Fused_st = torch.flatten(Fused_st, 1, 2)
-                
-                Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
-                                                p = self.spatial_dropout, training = mc_dropout)
-                
-                Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
-                Fused_st = Fused_st + ST_Conditionings[:,:Fused_st.shape[1],:]
-                
-                causal_mask = causal_masks[:,
-                                          :math.prod(Fused_st_extent),
-                                          :math.prod(Fused_st_extent)]
-                
-                for i in range(self.st_mha_blocks):
-            
-                    Fused_st = getattr(self, f"MHA_Block_{i}")(Fused_st,
-                                                                   causal_mask,
-                                                                   mc_dropout)
-                
-                
-                Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
-                
-                Fused_st = self.linear(Fused_st)
-                Fused_st = Fused_st + Autoreg_st
-            
-                Output_st = self.output(Fused_st)
-            
-                Sparse_data = torch.cat([Z.clone(),
-                                       Output_st[:,-1,:,:]],
-                                      dim=-1)
-
-                Sparse_data_mask = torch.ones((Sparse_data[:,:,0].shape)).to(torch.bool).to(Sparse_data.device)
-            
-            Output_st = Output_st.squeeze()
-            
-            return Output_st
-
-class SparseData_Transformer_MoE(nn.Module):
-    
-    def __init__(self,
-                weather_CHW_dim = [7, 9, 12],
-                target_dim = [14, 31],
-                spatial_embedding_dim = 16,
-                spatial_heads = 2,
-                fusion_embedding_dim = 128,
-                st_heads = 4,
-                num_experts = 8,
-                st_mha_blocks = 3,
-                densification_dropout = 0.45,
-                spatial_dropout = 0.2, # TODO
-                layernorm_affine = True,
-                activation = "GELU"):
-        
-        super().__init__()
-        
-        self.weather_dim = weather_CHW_dim
-        self.target_dim = target_dim
-        self.spatial_embedding_dim = spatial_embedding_dim
-        self.spatial_heads = spatial_heads
-        self.fusion_embedding_dim = fusion_embedding_dim
-        self.st_heads = st_heads
-        self.num_experts = num_experts
-        self.st_mha_blocks = st_mha_blocks
-        self.densification_dropout_p = densification_dropout
-        self.layernorm_affine = layernorm_affine
-        self.spatial_dropout = spatial_dropout
-        self.activation = activation
-        
-        if self.activation == "LeakyReLU":
-            self.activation_fn = nn.LeakyReLU()
-        elif self.activation == "GELU":
-            self.activation_fn = nn.GELU()
-            
-        
-        ### Conditioning module - Transofrmer like architecture ###
-        
-        self.topo_embedder = Topographical_Embdedding(embedding_dim = self.spatial_embedding_dim,
-                                                      activation = self.activation_fn)
-        
-        self.SparseAutoreg_Module = Spatial_Attention_Block_MoE(
-                                embedding_dim = self.spatial_embedding_dim,
-                                input_channles = 4,
-                                heads = self.spatial_heads,
-                                num_experts= self.num_experts,
-                                output_channels = self.spatial_embedding_dim,
-                                activation = self.activation,
-                                elementwise_affine= self.layernorm_affine,
-                                STMoE_prenorm = False,
-                                Topo_Embedder = self.topo_embedder)
-        
-        self.ST_Conditioning_Module = ST_Conditioning_Block(
-                                                            in_channels = 6,
-                                                            hidden_channels = 32, 
-                                                            out_channels = 1, 
-                                                            LayerNorm = False,
-                                                            activation = self.activation)
-
-        ### Weather module ### 
-        
-        self.Weather_Module = Spatial_Attention_Block_MoE(
-                 embedding_dim = self.spatial_embedding_dim,
-                 input_channles = self.weather_dim[0],
-                 heads = self.spatial_heads,
-                 num_experts= self.num_experts,
-                 output_channels = self.spatial_embedding_dim,
-                 activation=self.activation,
-                 elementwise_affine=self.layernorm_affine,
-                 STMoE_prenorm = False,
-                 Topo_Embedder = self.topo_embedder)
-        
-        ### Joint Modoule ### 
-        
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
-                                                       self.fusion_embedding_dim),
-                                             self.activation_fn)
-        
-        ### Causal Mask 
-        self.causal_mask = torch.tril(torch.ones((self.target_dim[0], self.target_dim[0]))) # Tempooral Mask
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 0)
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 1)
-        self.causal_mask = ~self.causal_mask.to(torch.bool)
-        
-        for i in range(self.st_mha_blocks):
-            setattr(self, f"MHA_STMoE_Block_{i}",
-                    MHA_STMoE_Block(self.fusion_embedding_dim,
-                              self.st_heads,
-                              self.num_experts,
-                              self.activation,
-                              elementwise_affine = self.layernorm_affine,
-                              dropout_p = self.spatial_dropout))
-            
-            
-        ### De-Flatten Space-Time Dimension
-        
-        self.linear = nn.Sequential(nn.Linear(self.fusion_embedding_dim,
-                                        self.spatial_embedding_dim),
-                                    self.activation_fn)
-                                   
-        self.output = nn.Sequential(nn.LayerNorm(self.spatial_embedding_dim),
-                                    nn.Linear(self.spatial_embedding_dim,
-                                            self.spatial_embedding_dim),
-                                    self.activation_fn,
-                                    nn.Linear(self.spatial_embedding_dim, 1))
-        
-    def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False,
-                get_aux_loss = False):
-        
-        ### Weather module ### 
-        
-        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1).clone()
-        ST_conditioning_input = torch.cat([ST_conditioning_input,
-                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1).clone()],
-                                          dim = -1) # B, D, S, C
-        
-        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
-        ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
-        
-        if [W[0].shape[2], Z.shape[1]] != self.target_dim:
-                
-                print("Computing Causal-Mask...")
-            
-                # Causal Mask
-                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                            dim = 0)
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                        dim = 1)
-                
-                causal_masks = ~causal_masks.to(torch.bool)
-                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).clone().to(W[0].device)
-
-                
-        else:
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).clone().to(W[0].device)
-        
-        if self.training is True and teacher_forcing is True:
-            Autoreg_st = []
-            Weather_st = []
-            Autoreg_aux_loss = []
-            Weather_aux_loss = []
-            total_aux_loss = []
-            
-            for timestep in range(X.shape[1]):
-                 
-                if self.densification_dropout_p>0:
-                    X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
-                                                           X_mask[:,timestep,:]],
-                                                        p = self.densification_dropout_p)
-                else:
-                    X_t = X[:,timestep,:,:]
-                    X_mask_t = X_mask[:,timestep,:]
-                
-                X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
-                
-                Autoreg_st_out, Autoreg_st_aux_loss, _ ,_ = self.SparseAutoreg_Module(
-                                                                    K = X_t[:,:,:3],
-                                                                    V = X_t,
-                                                                    Q = Z,
-                                                                    attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1).clone()
-                                                                    )
-                Autoreg_st.append(Autoreg_st_out)
-                Autoreg_aux_loss.append(Autoreg_st_aux_loss)
-                
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Weather_st_out, Weather_st_aux_loss, _ , _  = self.Weather_Module(
-                                                                K = Weather_Keys,
-                                                                V = Weather_Values,
-                                                                Q = Z
-                                                                )
-                Weather_st.append(Weather_st_out)
-                Weather_aux_loss.append(Weather_st_aux_loss)
-                
-            Autoreg_aux_loss = torch.tensor(Autoreg_aux_loss).mean()
-            Weather_aux_loss = torch.tensor(Weather_aux_loss).mean()
-            Autoreg_st = torch.stack(Autoreg_st, dim = 1)
-            Weather_st = torch.stack(Weather_st, dim = 1)
-
-            # Fused_st = torch.cat([Autoreg_st,
-            #                         Weather_st], 
-            #                         dim = -1)
-            
-            Fused_st = Autoreg_st + Weather_st
-            
-            Fused_st_extent = Fused_st.shape[1:3]
-            Fused_st = torch.flatten(Fused_st, 1, 2)
-            
-            Fused_st =  nn.functional.dropout1d(torch.moveaxis(Fused_st, 1, -1),
-                                                p = self.spatial_dropout, training = True)
-            
-            Fused_st = self.Fusion_Embedding(torch.moveaxis(Fused_st, 1, -1))
-            Fused_st += ST_Conditionings
-            
-            for i in range(self.st_mha_blocks):
-            
-                Fused_st, aux_loss, _ , _ = getattr(self, f"MHA_STMoE_Block_{i}")(Fused_st, causal_masks, self.training)
-                total_aux_loss.append(aux_loss)
-            
-            total_aux_loss = torch.tensor(total_aux_loss).sum()
-            total_aux_loss += Autoreg_aux_loss + Weather_aux_loss
-            
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1])) 
-            
-            Fused_st = self.linear(Fused_st)
-            
-            Fused_st = Fused_st + Autoreg_st
-            
-            Output_st = self.output(Fused_st).squeeze()
-            
-            if get_aux_loss is True:
-                return [Output_st, total_aux_loss]
-            else:
-                return Output_st
-        
-        else:
-            
-            Sparse_data = X
-            Sparse_data_mask = X_mask
-            
-            Autoreg_st_rlist = []
-            Weather_st_rlist = []
-            Autoreg_aux_loss = []
-            Weather_aux_loss = []
-            total_aux_loss = []
-                
-            # Unfolding time - iterate own prediction as input
-            for timestep in tqdm(range(W[0].shape[2])):
-                
-                Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
-                
-                Autoreg_st_out, Autoreg_st_aux_loss, _ ,_ = self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
-                                                                V = Sparse_data,
-                                                                Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1).clone())
-                Autoreg_st_rlist.append(Autoreg_st_out)
-                Autoreg_aux_loss.append(Autoreg_st_aux_loss)
-                
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                
-                Weather_st_out, Weather_st_aux_loss, _ , _ = self.Weather_Module(
-                                                        K = Weather_Keys,
-                                                        V = Weather_Values,
-                                                        Q = Z
-                                                        )
-                Weather_st_rlist.append(Weather_st_out)
-                Weather_aux_loss.append(Weather_st_aux_loss)
-                
-                Autoreg_st = torch.stack(Autoreg_st_rlist, dim = 1)
-                Weather_st = torch.stack(Weather_st_rlist, dim = 1)
-                # Fused_st = torch.cat([Autoreg_st,
-                #                     Weather_st], 
-                #                     dim = -1)
-                
-                Fused_st = Autoreg_st + Weather_st
-                
-                Fused_st_extent = Fused_st.shape[1:3]
-                Fused_st = torch.flatten(Fused_st, 1, 2)
-                
-                Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
-                                                p = self.spatial_dropout, training = mc_dropout)
-                
-                Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
-                Fused_st = Fused_st + ST_Conditionings[:,:Fused_st.shape[1],:]
-                
-                causal_mask = causal_masks[:,
-                                          :math.prod(Fused_st_extent),
-                                          :math.prod(Fused_st_extent)]
-                
-                for i in range(self.st_mha_blocks):
-            
-                    Fused_st, aux_loss, _ , _ = getattr(self, f"MHA_STMoE_Block_{i}")(Fused_st,
-                                                                   causal_mask,
-                                                                   mc_dropout)
-                    total_aux_loss.append(aux_loss)
-                
-                
-                Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
-                
-                Fused_st = self.linear(Fused_st)
-                Fused_st = Fused_st + Autoreg_st
-            
-                Output_st = self.output(Fused_st)
-            
-                Sparse_data = torch.cat([Z.clone(),
-                                       Output_st[:,-1,:,:]],
-                                      dim=-1)
-
-                Sparse_data_mask = torch.ones((Sparse_data[:,:,0].shape)).to(torch.bool).to(Sparse_data.device)
-            
-            
-            Autoreg_aux_loss = torch.tensor(Autoreg_aux_loss).mean()
-            Weather_aux_loss = torch.tensor(Weather_aux_loss).mean()
-            total_aux_loss = torch.tensor(total_aux_loss).mean()
-            total_aux_loss += Autoreg_aux_loss + Weather_aux_loss
-            
-            Output_st = Output_st.squeeze()
-            
-            if get_aux_loss is True:
-                    return [Output_st, total_aux_loss]
-            else:
-                return Output_st
-
-#### ST MoE ####
-
-class MHA_STMoE_Block(nn.Module):
-    
-    def __init__(self,
-                 embedding_dim,
-                 heads,
-                 num_experts,
-                 activation,
-                 dropout_p,
-                 elementwise_affine,
-                 STMoE_prenorm = False):
-        super().__init__()
-        
-        self.elementwise_affine = elementwise_affine
-        self.dropout_p = dropout_p
-        
-        if activation == "LeakyReLU":
-            self.activation = nn.LeakyReLU()
-        elif activation == "GELU":
-            self.activation = nn.GELU()
-        
-        
-        # self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim, 
-        #                                  elementwise_affine = self.elementwise_affine)
-        
-        self.mha = nn.MultiheadAttention(embedding_dim, heads,
-                                         batch_first=True)
-        
-        
-        moe = MoE_alt(
-                    dim = embedding_dim,
-                    num_experts = num_experts,               # increase the experts (# parameters) of your model without increasing computation
-                    gating_top_n = 2,               # default to top 2 gating, but can also be more (3 was tested in the paper with a lower threshold)
-                    threshold_train = 0.2,          # at what threshold to accept a token to be routed to second expert and beyond - 0.2 was optimal for 2 expert routing, and apparently should be lower for 3
-                    threshold_eval = 0.2,
-                    capacity_factor_train = 1.25,   # experts have fixed capacity per batch. we need some extra capacity in case gating is not perfectly balanced.
-                    capacity_factor_eval = 2.,      # capacity_factor_* should be set to a value >=1
-                    balance_loss_coef = 1e-2,       # multiplier on the auxiliary expert balancing auxiliary loss
-                    router_z_loss_coef = 1e-3,      # loss weight for router z-loss
-                )
-        
-        self.moe_block = SparseMoEBlock(
-                            moe,
-                            add_ff_before = STMoE_prenorm,
-                            add_ff_after = STMoE_prenorm
-                        )
-        
-    def forward(self, input, attn_mask = None, mc_dropout = False):
-        
-        skip_1 = input #.clone()
-        #output = self.norm_layer_1(input)
-        
-        output, _ = self.mha(
-                            query = input, #(N,L,E)
-                            key = input,
-                            value = input,
-                            attn_mask = attn_mask,
-                            is_causal = True if attn_mask is not None else False
-                            )
-        
-        output = output + skip_1
-        output, total_aux_loss, balance_loss, router_z_loss = self.moe_block(output)
-        
-        output = nn.functional.dropout1d(output.permute((0,2,1)),
-                                        p = self.dropout_p, training = mc_dropout)    
-        output = output.permute((0,2,1))
-        
-        return output, total_aux_loss, balance_loss, router_z_loss
-
-class SparseData_STMoE(nn.Module):
-    
-    def __init__(self,
-                weather_CHW_dim = [23, 9, 12],
-                target_dim = [14, 31],
-                spatial_embedding_dim = 16,
-                spatial_heads = 2,
-                fusion_embedding_dim = 128,
-                st_heads = 4,
-                st_mha_blocks = 3,
-                num_experts = 16,
-                densification_dropout = 0.45,
-                spatial_dropout = 0.2, # TODO
-                layernorm_affine = True,
-                activation = "GELU"):
-        
-        super().__init__()
-        
-        self.weather_dim = weather_CHW_dim
-        self.target_dim = target_dim
-        self.spatial_embedding_dim = spatial_embedding_dim
-        self.spatial_heads = spatial_heads
-        self.fusion_embedding_dim = fusion_embedding_dim
-        self.st_heads = st_heads
-        self.st_mha_blocks = st_mha_blocks
-        self.num_experts = num_experts
-        self.densification_dropout_p = densification_dropout
-        self.layernorm_affine = layernorm_affine
-        self.spatial_dropout = spatial_dropout
-        self.activation = activation
-        
-        if self.activation == "LeakyReLU":
-            self.activation_fn = nn.LeakyReLU()
-        elif self.activation == "GELU":
-            self.activation_fn = nn.GELU()
-            
-        
-        ### Conditioning module - Transofrmer like architecture ###
-        
-        self.SparseAutoreg_Module = Spatial_Attention_Block(
-                                embedding_dim = self.spatial_embedding_dim,
-                                input_channles = 4,
-                                heads = self.spatial_heads,
-                                output_channels = self.spatial_embedding_dim,
-                                activation = self.activation,
-                                elementwise_affine= self.layernorm_affine)
-        
-        self.ST_Conditioning_Module = ST_Conditioning_Block(
-                                                            in_channels = 6,
-                                                            hidden_channels = 16, 
-                                                            out_channels = 1, 
-                                                            activation = self.activation) 
-
-        ### Weather module ### 
-        
-        self.Weather_Module = Spatial_Attention_Block(
-                 embedding_dim = self.spatial_embedding_dim,
-                 input_channles = self.weather_dim[0],
-                 heads = self.spatial_heads,
-                 output_channels = self.spatial_embedding_dim,
-                 activation=self.activation,
-                 elementwise_affine=self.layernorm_affine)
-        
-        ### Joint Modoule ### 
-        
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
-                                                       self.fusion_embedding_dim),
-                                             self.activation_fn)
-        
-        ### Flatten Space-Time Dimension
-        
-        ### Causal Mask 
-        self.causal_mask = torch.tril(torch.ones((self.target_dim[0], self.target_dim[0]))) # Tempooral Mask
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 0)
-        self.causal_mask = self.causal_mask.repeat_interleave(self.target_dim[1], # Repeating for spatial extent
-                                                        dim = 1)
-        self.causal_mask = ~self.causal_mask.to(torch.bool)
-        
-        for i in range(self.st_mha_blocks):
-            setattr(self, f"MHA_STMoE_Block_{i}",
-                    MHA_STMoE_Block(self.fusion_embedding_dim,
-                                self.st_heads,
-                                self.num_experts,
+        ### Embedding #####
+        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        ### Spatial Modules #####
+        self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        self.Weather_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        ### Displacement Modules #####
+        
+        self.Linear = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        for i in range(self.displacement_mod_blocks):
+            setattr(self, f"Displacement_Module_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.displacement_mod_heads,
                                 self.activation,
-                                elementwise_affine = self.layernorm_affine,
-                                dropout_p = self.spatial_dropout))
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
             
             
-        ### De-Flatten Space-Time Dimension
+        self.Warping_Scheme = GaussianWarpingScheme()
+            
         
-        self.linear = nn.Sequential(
-                                    nn.Linear(self.fusion_embedding_dim,
-                                                self.spatial_embedding_dim),
-                                    self.activation_fn)
-                                   
-        self.output = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
-                                            self.spatial_embedding_dim),
-                                    nn.LayerNorm(self.spatial_embedding_dim),
+        ### Output Layers #####
+        
+        self.Output = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim),
                                     self.activation_fn,
-                                    nn.Linear(self.spatial_embedding_dim, 1))
+                                    nn.Linear(self.embedding_dim, 1))        
         
+    def forward(self, X, W, Z, mc_dropout = False):
         
+        ### Embedding #####
         
-    def forward(self, X, Z, W, X_mask, teacher_forcing = False, mc_dropout = False,
-                get_aux_loss = False):
+        GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
+                               X[1]], dim = -1)) #N, D, S, C
         
-        ST_conditioning_input = W[1][:,:,None,:].expand(-1,-1,Z.shape[1],-1)
-        ST_conditioning_input = torch.cat([ST_conditioning_input,
-                                           Z[:,None,:,:].expand(-1,W[1].shape[1],-1,-1)],
-                                          dim = -1) # B, D, S, C
+        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
         
-        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) # N,D,S,2*FiLMed,C # ST N,D,S,C_out
-        ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
+        Z_st_coords = self.ST_coords_Embedding(Z)
         
-        if [W[0].shape[2], Z.shape[1]] != self.target_dim:
-                
-                print("Computing Causal Mask...")
+        Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
+        Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        
+        GW_out = []
+        Weather_out = []
+        
+        for GW_lag in range(GW_values.shape[1]):
             
-                # Causal Mask
-                causal_masks = torch.tril(torch.ones(W[0].shape[2], W[0].shape[2])) # Tempooral Mask
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                            dim = 0)
-                causal_masks = causal_masks.repeat_interleave(Z.shape[1],  # Repeating for spatial extent
-                                                        dim = 1)
-                
-                causal_masks = ~causal_masks.to(torch.bool)
-                causal_masks = causal_masks[None,:,:].expand(int(W[0].shape[0]*self.st_heads), -1,-1).to(W[0].device)
-
-                
-        else:
-                causal_masks = self.causal_mask[None,:,:].expand(int(W[0].shape[0]*self.st_heads),-1,-1).to(W[0].device)
-        
-        if self.training is True and teacher_forcing is True:
-            Autoreg_st = []
-            Weather_st = []
+            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+                                         V = GW_values[:,GW_lag,:,:],
+                                         Q = Z_st_coords,
+                                         attn_mask = attn_mask))
             
-            for timestep in range(X.shape[1]):
-                 
-                if self.densification_dropout_p>0:
-                    X_t, X_mask_t = densification_dropout([X[:,timestep,:,:],
-                                                           X_mask[:,timestep,:]],
-                                                        p = self.densification_dropout_p)
-                else:
-                    X_t = X[:,timestep,:,:]
-                    X_mask_t = X_mask[:,timestep,:]
-                
-                X_mask_t = torch.repeat_interleave(X_mask_t, self.spatial_heads, dim = 0)
-                
-                Autoreg_st.append(self.SparseAutoreg_Module(
-                                                            K = X_t[:,:,:3],
-                                                            V = X_t,
-                                                            Q = Z,
-                                                            attn_mask = ~X_mask_t[:,None,:].expand(-1,Z.shape[1],-1)
-                                                            ))
-                
-                Weather_Keys = W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1).permute((0,2,1)) # 
-                Weather_Values = W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1).permute((0,2,1))
-                Weather_st.append(self.Weather_Module(
-                                                    K = Weather_Keys,
-                                                    V = Weather_Values,
-                                                    Q = Z
-                                                    ))
-                
-            Autoreg_st = torch.stack(Autoreg_st, dim = 1)
-            Weather_st = torch.stack(Weather_st, dim = 1)
-
-            # Fused_st = torch.cat([Autoreg_st,
-            #                         Weather_st], 
-            #                         dim = -1)
+        for Weather_lag in range(Weather_values.shape[1]):
+            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+                                                        V = Weather_values[:,Weather_lag,:,:],
+                                                        Q = Z_st_coords))
+        
+        GW_out = torch.stack(GW_out, dim = -1)
+        Weather_out = torch.stack(Weather_out, dim = -1)
+        
+        # Displacement modules
+        Displacement = torch.cat([GW_out.flatten(-2,-1),
+                                  Weather_out.flatten(-2,-1)], dim = -1)
+        
+        Displacement = self.Linear(Displacement)
+        
+        for i in range(self.displacement_mod_blocks):
             
-            Fused_st = Autoreg_st + Weather_st
-            
-            Fused_st_extent = Fused_st.shape[1:3]
-            Fused_st = torch.flatten(Fused_st, 1, 2)
-            
-            Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
-                                                p = self.spatial_dropout, training = True)
-            
-            Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
-            
-            Fused_st += ST_Conditionings
-            
-            total_aux_loss = []
-            
-            for i in range(self.st_mha_blocks):
-            
-                Fused_st, aux_loss, _, _= getattr(self, f"MHA_STMoE_Block_{i}")(Fused_st, causal_masks,
-                                                                                mc_dropout = True)
-                total_aux_loss.append(aux_loss)
-            
-            total_aux_loss = torch.tensor(total_aux_loss).sum()
-            
-            Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))
-            
-            Fused_st = self.linear(Fused_st)
-            
-            Fused_st = Fused_st + Autoreg_st
-             
-            Output_st = self.output(Fused_st)
-            
-            if get_aux_loss is True:
-                return [Output_st.squeeze(), total_aux_loss]
-            else:
-                return Output_st.squeeze()
-        
-        else:
-            
-            Sparse_data = X
-            Sparse_data_mask = X_mask
-            
-            Autoreg_st_rlist = []
-            Weather_st_rlist = []
-            
-            total_aux_loss = []
-                
-            # Unfolding time - iterate own prediction as input
-            for timestep in tqdm(range(W[0].shape[2])):
-                
-                Sparse_data_mask = torch.repeat_interleave(Sparse_data_mask, self.spatial_heads, dim = 0)
-                
-                Autoreg_st_rlist.append(self.SparseAutoreg_Module(K = Sparse_data[:,:,:3],
-                                                                V = Sparse_data,
-                                                                Q = Z,
-                                                                attn_mask = ~Sparse_data_mask[:,None,:].expand(-1,Z.shape[1],-1))
-                                )
-                
-                Weather_Keys = torch.moveaxis(W[0][:,:3,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-                Weather_Values = torch.moveaxis(W[0][:,:,timestep,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-                Weather_st_rlist.append(self.Weather_Module(
-                                                        K = Weather_Keys,
-                                                        V = Weather_Values,
-                                                        Q = Z
-                                                        )
-                                )
-                
-                Autoreg_st = torch.stack(Autoreg_st_rlist, dim = 1)
-                Weather_st = torch.stack(Weather_st_rlist, dim = 1)
-                # Fused_st = torch.cat([Autoreg_st,
-                #                     Weather_st], 
-                #                     dim = -1)
-                
-                Fused_st = Autoreg_st + Weather_st
-                
-                Fused_st_extent = Fused_st.shape[1:3]
-                Fused_st = torch.flatten(Fused_st, 1, 2)
-                
-                Fused_st =  nn.functional.dropout1d(Fused_st.permute((0,2,1)),
-                                                p = self.spatial_dropout, training = mc_dropout)
-                
-                Fused_st = self.Fusion_Embedding(Fused_st.permute((0,2,1)))
-                Fused_st = Fused_st + ST_Conditionings[:,:Fused_st.shape[1],:]
-                                               
-                causal_mask = causal_masks[:,
-                                          :math.prod(Fused_st_extent),
-                                          :math.prod(Fused_st_extent)]
-                
-                for i in range(self.st_mha_blocks):
-            
-                    Fused_st, aux_loss, _, _ = getattr(self, f"MHA_STMoE_Block_{i}")(Fused_st,
-                                                                   causal_mask, mc_dropout = mc_dropout)
-                    
-                    if timestep == W[0].shape[2]-1:
-                        total_aux_loss.append(aux_loss)
-                
-                
-                Fused_st = torch.reshape(Fused_st, (Fused_st.shape[0],*Fused_st_extent,Fused_st.shape[-1]))        
-                
-                Fused_st = self.linear(Fused_st)
-            
-                Fused_st = Fused_st + Autoreg_st
-                
-                Output_st = self.output(Fused_st)
-                
-                Sparse_data = torch.cat([Z.clone(),
-                                       Output_st[:,-1,:,:]],
-                                      dim=-1)
-                
-                Sparse_data_mask = torch.ones((Sparse_data[:,:,0].shape)).to(torch.bool).to(Sparse_data.device)
-            
-            total_aux_loss = torch.tensor(total_aux_loss).sum()
-            
-            if get_aux_loss is True:
-                    return [Output_st.squeeze(), total_aux_loss]
-            else:
-                return Output_st.squeeze()
-###########################################
-
-
-class Spatial_STMoE(nn.Module):
-    
-    def __init__(self,
-                weather_CHW_dim = [23, 9, 12],
-                target_dim = [14, 31],
-                spatial_embedding_dim = 16,
-                spatial_heads = 2,
-                fusion_embedding_dim = 32,
-                fusion_heads = 2,
-                num_experts = 16,
-                densification_dropout = 0.45,
-                spatial_dropout = 0.2,
-                layernorm_affine = True,
-                activation = "GELU"):
-        
-        super().__init__()
-        
-        self.weather_dim = weather_CHW_dim
-        self.target_dim = target_dim
-        self.spatial_embedding_dim = spatial_embedding_dim
-        self.spatial_heads = spatial_heads
-        self.fusion_embedding_dim = fusion_embedding_dim
-        self.fusion_heads = fusion_heads
-        self.num_experts = num_experts
-        self.densification_dropout_p = densification_dropout
-        self.layernorm_affine = layernorm_affine
-        self.spatial_dropout = spatial_dropout
-        self.activation = activation
-        
-        if self.activation == "LeakyReLU":
-            self.activation_fn = nn.LeakyReLU()
-        elif self.activation == "GELU":
-            self.activation_fn = nn.GELU()
-            
-        
-        ### Conditioning module - Transofrmer like architecture ###
-        
-        self.SparseAutoreg_Module = Spatial_Attention_Block_MoE(
-                                embedding_dim = self.spatial_embedding_dim,
-                                input_channles = 4,
-                                heads = self.spatial_heads,
-                                num_experts= self.num_experts,
-                                output_channels = self.spatial_embedding_dim,
-                                activation = self.activation,
-                                elementwise_affine= self.layernorm_affine,
-                                STMoE_prenorm = True)
-        
-        self.ST_Conditioning_Module = ST_Conditioning_Block(
-                                                            in_channels = 5,
-                                                            hidden_channels = 32, 
-                                                            out_channels = 1, 
-                                                            activation = self.activation,
-                                                            LayerNorm = True) 
-
-        ### Weather module ### 
-        
-        self.Weather_Module = Spatial_Attention_Block_MoE(
-                 embedding_dim = self.spatial_embedding_dim,
-                 input_channles = self.weather_dim[0],
-                 heads = self.spatial_heads,
-                 num_experts= self.num_experts,
-                 output_channels = self.spatial_embedding_dim,
-                 activation=self.activation,
-                 elementwise_affine=self.layernorm_affine,
-                 STMoE_prenorm = True)
-        
-        ### Joint Modoule ### 
-        
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(int(self.spatial_embedding_dim*2),
-                                                       self.fusion_embedding_dim),
-                                            #nn.LayerNorm(self.fusion_embedding_dim),
-                                            self.activation_fn)
-        
-        self.Fusion_Module = MHA_STMoE_Block(self.fusion_embedding_dim,
-                                self.fusion_heads,
-                                self.num_experts,
-                                self.activation,
-                                elementwise_affine = self.layernorm_affine,
-                                dropout_p = self.spatial_dropout,
-                                STMoE_prenorm = True)
-        
-                                   
-        self.output = nn.Sequential(nn.Linear(self.fusion_embedding_dim, spatial_embedding_dim),
-                                    #nn.LayerNorm(self.spatial_embedding_dim),
-                                    self.activation_fn,
-                                    nn.Linear(self.spatial_embedding_dim, 1))
+                Displacement = getattr(self, f"Displacement_Module_{i}")(Displacement,
+                                                                         mc_dropout = self.training or mc_dropout)
         
         
-    def forward(self, X, Z, W, X_mask, mc_dropout = False,
-                get_aux_loss = False):
+        # Skip connection with last observation
         
-        ST_conditioning_input = W[1][:,None,:].expand(-1,Z.shape[1],-1)
-        ST_conditioning_input = torch.cat([ST_conditioning_input,
-                                           Z], #.expand(-1,W[1].shape[1],-1,-1)]
-                                          dim = -1) # B, S, C
+        Output = GW_out[:,:,:,-1] + Displacement
         
-        ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) 
-        #ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
+        Output = self.Warping_Scheme(GW_out[:,:,:,-1].unsqueeze(1),
+                                     Displacement)
         
-        if self.densification_dropout_p>0:
-            GW_Values, GW_mask = densification_dropout([X,
-                                                X_mask],
-                                                p = self.densification_dropout_p)
-        else:
-            GW_Values = X
-            GW_mask = X_mask
-                
-        GW_mask = torch.repeat_interleave(GW_mask, self.spatial_heads, dim = 0)
+        Output = self.Output(Output)
         
-        GW_out, GW_aux_loss, _, _ = self.SparseAutoreg_Module(
-                                        K = GW_Values[:,:,:3],
-                                        V = GW_Values,
-                                        Q = Z,
-                                        attn_mask = ~GW_mask[:,None,:].expand(-1,Z.shape[1],-1)
-                                        )
-        
-        Weather_Keys = torch.moveaxis(W[0][:,:3,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-        Weather_Values = torch.moveaxis(W[0][:,:,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-        Weather_out, Weather_aux_loss, _, _ = self.Weather_Module(
-                                        K = Weather_Keys,
-                                        V = Weather_Values,
-                                        Q = Z
-                                        )
-
-        GW_Weather_Fusion = torch.cat([GW_out,
-                                    Weather_out], 
-                                    dim = -1)
-            
-        #Fused_st_extent = Fused_st.shape[1:3]
-        #Fused_st = torch.flatten(Fused_st, 1, 2)
-            
-        GW_Weather_Fusion = self.Fusion_Embedding(GW_Weather_Fusion)
-            
-        GW_Weather_Fusion += ST_Conditionings
-        
-        GW_Weather_Fusion, GW_Weather_aux_loss, _, _ = self.Fusion_Module(GW_Weather_Fusion,
-                                                                          mc_dropout = self.training or mc_dropout)
-            
-        total_aux_loss = torch.tensor([GW_Weather_aux_loss,
-                                       Weather_aux_loss,
-                                       GW_aux_loss]).sum()
-            
-        Output = self.output(GW_Weather_Fusion)
-            
-        #Fused_st = Fused_st + Autoreg_st
-             
-        if get_aux_loss is True:
-            return [Output.squeeze(), total_aux_loss]
-        else:
-            return Output.squeeze()
-    
-
-class Spatial_STMoE_Light(nn.Module):
-    
-    def __init__(self,
-                weather_CHW_dim = [23, 9, 12],
-                target_dim = [14, 31],
-                spatial_embedding_dim = 16,
-                spatial_heads = 2,
-                num_experts = 16,
-                densification_dropout = 0.45,
-                spatial_dropout = 0.2,
-                layernorm_affine = True,
-                activation = "GELU"):
-        
-        super().__init__()
-        
-        self.weather_dim = weather_CHW_dim
-        self.target_dim = target_dim
-        self.spatial_embedding_dim = spatial_embedding_dim
-        self.spatial_heads = spatial_heads
-        self.num_experts = num_experts
-        self.densification_dropout_p = densification_dropout
-        self.layernorm_affine = layernorm_affine
-        self.spatial_dropout = spatial_dropout
-        self.activation = activation
-        
-        if self.activation == "LeakyReLU":
-            self.activation_fn = nn.LeakyReLU()
-        elif self.activation == "GELU":
-            self.activation_fn = nn.GELU()
-            
-        
-        ### Conditioning module - Transofrmer like architecture ###
-        
-        self.SparseAutoreg_Module = Spatial_Attention_Block_MoE(
-                                embedding_dim = self.spatial_embedding_dim,
-                                input_channles = 4,
-                                heads = self.spatial_heads,
-                                num_experts= self.num_experts,
-                                output_channels = self.spatial_embedding_dim,
-                                activation = self.activation,
-                                elementwise_affine= self.layernorm_affine)
-        
-        # self.ST_Conditioning_Module = ST_Conditioning_Block(
-        #                                                     in_channels = 5,
-        #                                                     hidden_channels = 32, 
-        #                                                     out_channels = 1, 
-        #                                                     activation = self.activation) 
-
-        ### Weather module ### 
-        
-        self.Weather_Module = Spatial_Attention_Block_MoE(
-                 embedding_dim = self.spatial_embedding_dim,
-                 input_channles = self.weather_dim[0],
-                 heads = self.spatial_heads,
-                 num_experts= self.num_experts,
-                 output_channels = self.spatial_embedding_dim,
-                 activation=self.activation,
-                 elementwise_affine=self.layernorm_affine)
-        
-        ### Joint Modoule ### 
-        
-        self.Fusion_Embedding = nn.Sequential(nn.Linear(self.spatial_embedding_dim,
-                                                       self.spatial_embedding_dim),
-                                            #nn.LayerNorm(self.spatial_embedding_dim),
-                                            self.activation_fn)
-                                   
-        self.output = nn.Sequential(nn.Linear(self.spatial_embedding_dim, 1))
-        
-        
-    def forward(self, X, Z, W, X_mask, mc_dropout = False,
-                get_aux_loss = False):
-        
-        # ST_conditioning_input = W[1][:,None,:].expand(-1,Z.shape[1],-1)
-        # ST_conditioning_input = torch.cat([ST_conditioning_input,
-        #                                    Z], #.expand(-1,W[1].shape[1],-1,-1)]
-        #                                   dim = -1) # B, S, C
-        
-        # ST_Conditionings = self.ST_Conditioning_Module(ST_conditioning_input) 
-        # #ST_Conditionings = torch.flatten(ST_Conditionings, 1, 2)
-        
-        if self.densification_dropout_p>0:
-            GW_Values, GW_mask = densification_dropout([X,
-                                                X_mask],
-                                                p = self.densification_dropout_p)
-        else:
-            GW_Values = X
-            GW_mask = X_mask
-                
-        GW_mask = torch.repeat_interleave(GW_mask, self.spatial_heads, dim = 0)
-        
-        GW_out, GW_aux_loss, _, _ = self.SparseAutoreg_Module(
-                                        K = GW_Values[:,:,:3],
-                                        V = GW_Values,
-                                        Q = Z,
-                                        attn_mask = ~GW_mask[:,None,:].expand(-1,Z.shape[1],-1)
-                                        )
-        
-        Weather_Keys = torch.moveaxis(W[0][:,:3,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1) # 
-        Weather_Values = torch.moveaxis(W[0][:,:,:,:].flatten(start_dim = -2, end_dim = -1), 1, -1)
-        Weather_out, Weather_aux_loss, _, _ = self.Weather_Module(
-                                        K = Weather_Keys,
-                                        V = Weather_Values,
-                                        Q = Z
-                                        )
-        
-        GW_Weather_Fusion = GW_out + Weather_out #+ ST_Conditionings  
-            
-        GW_Weather_Fusion = self.Fusion_Embedding(GW_Weather_Fusion)
-            
-        total_aux_loss = torch.tensor([Weather_aux_loss,
-                                       GW_aux_loss]).sum()
-            
-        Output = self.output(GW_Weather_Fusion)
-            
-        #Fused_st = Fused_st + Autoreg_st
-             
-        if get_aux_loss is True:
-            return [Output.squeeze(), total_aux_loss]
-        else:
-            return Output.squeeze()
-
+        return Output.squeeze()        
 
 
 ###########################################    

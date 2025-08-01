@@ -183,6 +183,7 @@ def wandb_time_series(dataset, model, device,
                     sensors_to_plot,
                     eval_mode):
     
+        title_ext = "_iter" if eval_mode else ""
         
         for date in start_dates_input:
     
@@ -205,9 +206,9 @@ def wandb_time_series(dataset, model, device,
                 
                 municipality = dataset.wtd_geodf["munic"].loc[dataset.wtd_geodf["sensor_id"] == sensor_id].values[0]
                 
-                wandb.log({f"{municipality}_ts_{date} -":wandb.Image(plot_time_series(
+                wandb.log({f"{municipality}_ts_{date}{title_ext}":wandb.Image(plot_time_series(
                                                                             prediction_ds[sensor_id], true_ds[sensor_id],
-                                                                            title = f"{sensor_id} - {municipality} - from {date}",
+                                                                            title = f"Prediction{title_ext} {sensor_id} - {municipality} - from {date}",
                                                                             save_dir = None,
                                                                             print_plot = False))})
                 
@@ -276,7 +277,7 @@ def wandb_video(dataset, model, device,
                                       
             for t_step in t_step_to_plot:
                 
-                wandb.log({f"map_prediction_{date_seq[t_step]} -":wandb.Image(
+                wandb.log({f"map_prediction{title_ext}_{date_seq[t_step]} -":wandb.Image(
                     plot_map(predictions_xr[t_step], predictions_xr_wtd[t_step],
                             title = f"Map prediction{title_ext}",
                             vmin = [vmin_H,vmin_WTD],
