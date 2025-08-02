@@ -18,7 +18,8 @@ from collections import deque
 #### ST MultiPoint ####
 #######################
     
-def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_grid = None, get_Z = False):
+def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_grid = None, get_Z = False,
+                                   get_displacement_terms = False):
     
     subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
     
@@ -40,16 +41,33 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
     
     Y, _ = dataset.get_target_values(subset_df)
     
-    Y_hat = model(X = [X[0].unsqueeze(0).to(device),
-                       X[1].unsqueeze(0).to(device),
-                       X[2].unsqueeze(0).to(device)],
-                W = [W[0].unsqueeze(0).to(device),
-                     W[1].unsqueeze(0).to(device)],
-                Z = Z.unsqueeze(0).to(device)
-                )
-    
-    output = [Y.detach().cpu(),
+    if get_displacement_terms is False:
+        Y_hat = model(X = [X[0].unsqueeze(0).to(device),
+                        X[1].unsqueeze(0).to(device),
+                        X[2].unsqueeze(0).to(device)],
+                    W = [W[0].unsqueeze(0).to(device),
+                        W[1].unsqueeze(0).to(device)],
+                    Z = Z.unsqueeze(0).to(device)
+                    )
+        
+        output = [Y.detach().cpu(),
             Y_hat.detach().cpu()]
+    
+    else:
+        
+        Y_hat, Displacement_GW, Displacement_S, Permeability = model(X = [X[0].unsqueeze(0).to(device),
+                        X[1].unsqueeze(0).to(device),
+                        X[2].unsqueeze(0).to(device)],
+                    W = [W[0].unsqueeze(0).to(device),
+                        W[1].unsqueeze(0).to(device)],
+                    Z = Z.unsqueeze(0).to(device),
+                    get_displacement_terms = get_displacement_terms)
+        
+        output = [Y.detach().cpu(),
+            Y_hat.detach().cpu(),
+            Displacement_GW.detach().cpu(),
+            Displacement_S.detach().cpu(),
+            Permeability.detach().cpu()]
     
     if get_Z is True:
         output.append(Z)
@@ -57,25 +75,40 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
     return output
 
 
-def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred, Z_grid = None, iter_pred = False):
+def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred,
+                                      Z_grid = None, iter_pred = False,
+                                      get_displacement_terms = False):
     
     start_date_idx = dataset.dates.get_loc(start_date)
     
     predictions = []
     true = []
+    if get_displacement_terms is True:
+        Displacement_GW = []
+        Displacement_S = []
+        Permeability = []
     
     if iter_pred is False:
     
         for i in tqdm(range(n_pred)):
-            Y , Y_hat = compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
+            pred_list = compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
                                             dataset,
                                             model,
                                             device,
                                             Z_grid = Z_grid,
-                                            get_Z = False)
+                                            get_Z = False,
+                                            get_displacement_terms = get_displacement_terms)
+            
+            Y = pred_list[0]
+            Y_hat = pred_list[1]
             
             predictions.append(Y_hat)
             true.append(Y)
+            
+            if get_displacement_terms is True:
+                Displacement_GW.append(pred_list[2])
+                Displacement_S.append(pred_list[3])
+                Permeability.append(pred_list[4])
             
     else:
         X = None
@@ -84,14 +117,17 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
              deque(maxlen=len(dataset.target_lags))]
         
         for i in tqdm(range(n_pred)):
-            Y , Y_hat, Z_pred = compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
+            pred_list = compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
                                             dataset,
                                             model,
                                             device,
                                             X = X,
                                             Z_grid = Z_grid,
                                             get_Z = True,
-                                            )
+                                            get_displacement_terms = get_displacement_terms)
+            Y = pred_list[0]
+            Y_hat = pred_list[1]
+            Z_pred = pred_list[-1]
             
             X_deque[0].append(Y_hat)
             X_deque[1].append(Z_pred)
@@ -100,6 +136,11 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             predictions.append(Y_hat)
             true.append(Y)
             
+            if get_displacement_terms is True:
+                Displacement_GW.append(pred_list[2])
+                Displacement_S.append(pred_list[3])
+                Permeability.append(pred_list[4])
+            
             if i >= len(dataset.target_lags):
                 X = [torch.stack(list(X_deque[0])),
                      torch.stack(list(X_deque[1])),
@@ -107,8 +148,18 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             
     true = torch.stack(true, dim = 0)
     predictions = torch.stack(predictions, dim = 0)
+    
+    output_list = [true, predictions]
+    
+    if get_displacement_terms is True:
+        Displacement_GW = torch.stack(Displacement_GW)
+        output_list.append(Displacement_GW)
+        Displacement_S = torch.stack(Displacement_S)
+        output_list.append(Displacement_S)
+        Permeability = torch.stack(Permeability)
+        output_list.append(Permeability)
         
-    return [true, predictions]
+    return output_list
     
     
 def build_ds_from_pred(y, dataset, start_date, n_pred, sensor_names):
