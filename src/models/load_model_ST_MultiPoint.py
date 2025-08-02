@@ -22,7 +22,7 @@ def load_model(config):
                 activation = config["activation"])
         
     
-    if config["model"] == "ST_MultiPoint_DisNet":
+    elif config["model"] == "ST_MultiPoint_DisNet":
         
         model_name = "ST_MultiPoint_DisNet"
         print(f"Model: {model_name}")
@@ -37,9 +37,48 @@ def load_model(config):
                 displacement_mod_heads = config["displacement_mod_heads"],
                 GW_W_temp_dim = [len(config["target_lags"]),
                                  config["weather_lags"]+1],
-                # densification_dropout = ,
                 dropout = config["dropout"], 
                 activation = config["activation"])
+        
+    elif config["model"] == "ST_MultiPoint_DisNet_K":
+        
+        model_name = "ST_MultiPoint_DisNet_K"
+        print(f"Model: {model_name}")
+        
+        model = ST_MultiPoint_DisNet_K(
+                value_dim_GW = config["GW_value_input_dim"],
+                value_dim_Weather = config["Weather_value_input_dim"], 
+                embedding_dim = config["embedding_dim"],
+                s_coords_dim = config["s_coords_input_dim"],
+                st_coords_dim = config["st_coords_input_dim"],
+                spatial_mha_heads = config["spatial_mha_heads"],
+                displacement_mod_blocks = config["displacement_mod_blocks"],
+                displacement_mod_heads = config["displacement_mod_heads"],
+                GW_W_temp_dim = [len(config["target_lags"]),
+                                 config["weather_lags"]+1],
+                dropout = config["dropout"], 
+                activation = config["activation"])
+        
+    elif config["model"] == "ST_MultiPoint_DisNet_alt":
+        
+        model_name = "ST_MultiPoint_DisNet_alt"
+        print(f"Model: {model_name}")
+        
+        model = ST_MultiPoint_DisNet_alt(
+                value_dim_GW = config["GW_value_input_dim"],
+                value_dim_Weather = config["Weather_value_input_dim"], 
+                embedding_dim = config["embedding_dim"],
+                st_coords_dim = config["st_coords_input_dim"],
+                spatial_mha_heads = config["spatial_mha_heads"],
+                displacement_mod_blocks = config["displacement_mod_blocks"],
+                displacement_mod_heads = config["displacement_mod_heads"],
+                GW_W_temp_dim = [len(config["target_lags"]),
+                                 config["weather_lags"]+1],
+                dropout = config["dropout"], 
+                activation = config["activation"])
+    
+    elif config["model"] == "ST_MultiPoint_PhyDisNet":
+        pass
     
     else:
         raise Exception("Model name unknown.")
@@ -53,6 +92,8 @@ def load_model(config):
         print("Done!")
     
     
+    
+    #model = model.apply(weight_init)
     return model, model_name
     
     

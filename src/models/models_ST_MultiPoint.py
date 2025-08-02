@@ -565,6 +565,377 @@ class ST_MultiPoint_DisNet(nn.Module):
         self.displacement_mod_blocks = displacement_mod_blocks
         self.displacement_mod_heads = displacement_mod_heads
         self.GW_W_temp_dim = GW_W_temp_dim
+        self.dropout = dropout
+        self.activation = activation
+        
+        if self.activation == "LeakyReLU":
+            self.activation_fn = nn.LeakyReLU()
+        elif self.activation == "GELU":
+            self.activation_fn = nn.GELU()
+        
+        ### Embedding #####
+        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        ### Spatial Modules #####
+        self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        self.Weather_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        ### Displacement Modules #####
+        
+        ## GW
+        self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        ## Source/Sink 
+        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[1])),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        for i in range(self.displacement_mod_blocks):
+            setattr(self, f"Displacement_Module_GW_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.displacement_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
+            
+            setattr(self, f"Displacement_Module_S_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.displacement_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
+        
+        ### Output Layers #####
+        
+        self.Linear_Lag = nn.Sequential(self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1))
+        self.Linear_2_GW = nn.Sequential(self.activation_fn,
+                                         nn.Linear(self.embedding_dim, 1))
+        self.Linear_2_S = nn.Sequential(self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1))  
+        
+        # self.Output = nn.Sequential(self.activation_fn,
+        #                                 nn.Linear(1, 1))      
+        
+    def forward(self, X, W, Z, mc_dropout = False):
+        
+        ### Embedding #####
+        
+        GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
+                               X[1]], dim = -1)) #N, D, S, C
+        
+        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        
+        Z_st_coords = self.ST_coords_Embedding(Z)
+        
+        Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
+        Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        
+        GW_out = []
+        Weather_out = []
+        
+        for GW_lag in range(GW_values.shape[1]):
+            
+            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+                                         V = GW_values[:,GW_lag,:,:],
+                                         Q = Z_st_coords,
+                                         attn_mask = attn_mask))
+            
+        for Weather_lag in range(Weather_values.shape[1]):
+            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+                                                        V = Weather_values[:,Weather_lag,:,:],
+                                                        Q = Z_st_coords))
+        
+        GW_out = torch.stack(GW_out, dim = -1)
+        Weather_out = torch.stack(Weather_out, dim = -1)
+        
+        ### Displacement modules
+        
+        Displacement_GW = GW_out.flatten(-2,-1)
+        Displacement_GW = self.Linear_GW(Displacement_GW)
+        
+        Displacement_S =  Weather_out.flatten(-2,-1)
+        Displacement_S = self.Linear_S(Displacement_S)
+        
+        for i in range(self.displacement_mod_blocks):
+            
+                Displacement_GW = getattr(self, f"Displacement_Module_GW_{i}")(Displacement_GW,
+                                                                         mc_dropout = self.training or mc_dropout)
+                
+                Displacement_S = getattr(self, f"Displacement_Module_S_{i}")(Displacement_S,
+                                                                         mc_dropout = self.training or mc_dropout)
+        
+        
+        # Squeeze channel dim
+        
+        GW_out = self.Linear_Lag(GW_out[:,:,:,-1])
+        Displacement_GW = self.Linear_2_GW(Displacement_GW)
+        Displacement_S = self.Linear_2_S(Displacement_S)
+        
+        GW_out += Displacement_GW + Displacement_S
+        
+        # GW_out = self.Output(GW_out)
+        
+        
+        return GW_out.squeeze()
+
+
+class ST_MultiPoint_DisNet_K(nn.Module):
+    
+    def __init__(self,
+                value_dim_GW = 6,
+                value_dim_Weather = 9, 
+                embedding_dim = 16,
+                s_coords_dim = 3,
+                st_coords_dim = 5,
+                spatial_mha_heads = 2,
+                displacement_mod_blocks = 1,
+                displacement_mod_heads = 2,
+                GW_W_temp_dim = [2,5],
+                dropout = 0.2, 
+                activation = "GELU"):
+        
+        super().__init__()
+        
+        self.value_dim_GW = value_dim_GW
+        self.value_dim_Weather = value_dim_Weather
+        self.embedding_dim = embedding_dim
+        self.s_coords_dim = s_coords_dim
+        self.st_coords_dim = st_coords_dim
+        self.spatial_mha_heads = spatial_mha_heads
+        self.displacement_mod_blocks = displacement_mod_blocks
+        self.displacement_mod_heads = displacement_mod_heads
+        self.GW_W_temp_dim = GW_W_temp_dim
+        self.dropout = dropout
+        self.activation = activation
+        
+        if self.activation == "LeakyReLU":
+            self.activation_fn = nn.LeakyReLU()
+        elif self.activation == "GELU":
+            self.activation_fn = nn.GELU()
+        
+        ### Embedding #####
+        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = False)
+        
+        
+        ### Permeability Module ####
+        
+        self.Permeability = Embedding(in_channels = self.s_coords_dim,
+                                    hidden_channels = self.embedding_dim,
+                                    out_channels= 1,
+                                    activation = self.activation,
+                                    LayerNorm = False)
+        
+        ### Spatial Modules #####
+        self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        self.Weather_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        ### Displacement Modules #####
+        
+        ## GW
+        self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        ## Source/Sink 
+        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[1])),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        for i in range(self.displacement_mod_blocks):
+            setattr(self, f"Displacement_Module_GW_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.displacement_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
+            
+            setattr(self, f"Displacement_Module_S_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.displacement_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = self.dropout))
+        
+        ### Output Layers #####
+        
+        self.Linear_Lag = nn.Sequential(self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1))
+        self.Linear_2_GW = nn.Sequential(self.activation_fn,
+                                         nn.Linear(self.embedding_dim, 2))
+        
+        self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
+                                          self.activation_fn,
+                                          nn.Linear(self.embedding_dim, self.embedding_dim),
+                                          self.activation_fn,
+                                          nn.Linear(self.embedding_dim, self.embedding_dim),
+                                          self.activation_fn,
+                                          nn.Linear(self.embedding_dim,1))
+        
+        self.Linear_2_S = nn.Sequential(self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1))  
+        
+        # self.Output = nn.Sequential(self.activation_fn,
+        #                                 nn.Linear(1, 1))      
+        
+    def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False):
+        
+        ### Embedding #####
+        
+        GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
+                               X[1]], dim = -1)) #N, D, S, C
+        
+        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        
+        Z_st_coords = self.ST_coords_Embedding(Z)
+        
+        Permeability = self.Permeability(Z[:,:,:self.s_coords_dim])
+        
+        Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
+        Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        
+        GW_out = []
+        Weather_out = []
+        
+        for GW_lag in range(GW_values.shape[1]):
+            
+            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+                                         V = GW_values[:,GW_lag,:,:],
+                                         Q = Z_st_coords,
+                                         attn_mask = attn_mask))
+            
+        for Weather_lag in range(Weather_values.shape[1]):
+            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+                                                        V = Weather_values[:,Weather_lag,:,:],
+                                                        Q = Z_st_coords))
+        
+        GW_out = torch.stack(GW_out, dim = -1)
+        Weather_out = torch.stack(Weather_out, dim = -1)
+        
+        ### Displacement modules
+        
+        Displacement_GW = GW_out.flatten(-2,-1)
+        Displacement_GW = self.Linear_GW(Displacement_GW)
+        
+        Displacement_S =  Weather_out.flatten(-2,-1)
+        Displacement_S = self.Linear_S(Displacement_S)
+        
+        for i in range(self.displacement_mod_blocks):
+            
+                Displacement_GW = getattr(self, f"Displacement_Module_GW_{i}")(Displacement_GW,
+                                                                         mc_dropout = self.training or mc_dropout)
+                
+                Displacement_S = getattr(self, f"Displacement_Module_S_{i}")(Displacement_S,
+                                                                         mc_dropout = self.training or mc_dropout)
+        
+        
+        # Squeeze channel dim
+        
+        GW_out = self.Linear_Lag(GW_out[:,:,:,-1])
+        
+        # GW Continuity equation estimation
+        Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
+        Displacement_GW = Permeability * Displacement_GW # Weight by Permeabilities
+        Displacement_GW = self.GW_diffusion(Displacement_GW)
+        
+        Displacement_S = self.Linear_2_S(Displacement_S)
+        
+        GW_out += Displacement_GW + Displacement_S
+        
+        #GW_out = self.Output(GW_out)
+        
+        if get_displacement_terms is False:
+            
+            return GW_out.squeeze()
+        
+        else: 
+            
+            return [GW_out.squeeze(),
+                    Displacement_GW.squeeze(),
+                    Displacement_S.squeeze(),
+                    Permeability]
+    
+    
+class ST_MultiPoint_DisNet_alt(nn.Module):
+    
+    def __init__(self,
+                value_dim_GW = 6,
+                value_dim_Weather = 9, 
+                embedding_dim = 16,
+                st_coords_dim = 5,
+                spatial_mha_heads = 2,
+                displacement_mod_blocks = 1,
+                displacement_mod_heads = 2,
+                GW_W_temp_dim = [2,5],
+                dropout = 0.2, 
+                activation = "GELU"):
+        
+        super().__init__()
+        
+        self.value_dim_GW = value_dim_GW
+        self.value_dim_Weather = value_dim_Weather
+        self.embedding_dim = embedding_dim
+        self.st_coords_dim = st_coords_dim
+        self.spatial_mha_heads = spatial_mha_heads
+        self.displacement_mod_blocks = displacement_mod_blocks
+        self.displacement_mod_heads = displacement_mod_heads
+        self.GW_W_temp_dim = GW_W_temp_dim
         # self.densification_dropout_p = densification_dropout
         self.dropout = dropout
         self.activation = activation
@@ -679,6 +1050,7 @@ class ST_MultiPoint_DisNet(nn.Module):
         Output = self.Output(Output)
         
         return Output.squeeze()        
+  
 
 
 #### Physics Constraint Displacement
