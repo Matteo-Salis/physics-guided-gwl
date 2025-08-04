@@ -763,9 +763,9 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                             LayerNorm = False)
         
         
-        ### Permeability Module ####
+        ### HydrConductivity Module ####
         
-        self.Permeability = Embedding(in_channels = self.s_coords_dim,
+        self.HydrConductivity = Embedding(in_channels = self.s_coords_dim,
                                     hidden_channels = self.embedding_dim,
                                     out_channels= 1,
                                     activation = self.activation,
@@ -787,12 +787,12 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ### Displacement Modules #####
         
         ## GW
-        self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
-                                                self.embedding_dim),
-                                      self.activation_fn)
+        # self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
+        #                                         self.embedding_dim),
+        #                               self.activation_fn)
         
         ## Source/Sink 
-        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[1])),
+        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
                                                 self.embedding_dim),
                                       self.activation_fn)
         
@@ -843,7 +843,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         Z_st_coords = self.ST_coords_Embedding(Z)
         
-        Permeability = self.Permeability(Z[:,:,:self.s_coords_dim])
+        HydrConductivity = self.HydrConductivity(Z[:,:,:self.s_coords_dim])
         
         Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
         Weather_values = self.Value_Embedding_Weather(Weather_values_input)
@@ -870,10 +870,11 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Displacement modules
         
-        Displacement_GW = GW_out.flatten(-2,-1)
-        Displacement_GW = self.Linear_GW(Displacement_GW)
+        Displacement_GW = GW_out[:,:,:,-1].clone() #.flatten(-2,-1)
+        #Displacement_GW = self.Linear_GW(Displacement_GW)
         
-        Displacement_S =  Weather_out.flatten(-2,-1)
+        Displacement_S = torch.cat([GW_out,
+                                    Weather_out], dim = -1).flatten(-2,-1)
         Displacement_S = self.Linear_S(Displacement_S)
         
         for i in range(self.displacement_mod_blocks):
@@ -891,12 +892,12 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
-        Displacement_GW = Permeability * Displacement_GW # Weight by Permeabilities
+        Displacement_GW = HydrConductivity * Displacement_GW # Weight by HydrConductivity: ISOTROPIC Conductivity Field
         Displacement_GW = self.GW_diffusion(Displacement_GW)
         
         Displacement_S = self.Linear_2_S(Displacement_S)
         
-        GW_out += Displacement_GW + Displacement_S
+        GW_out += Displacement_GW + Displacement_S # Euler method
         
         #GW_out = self.Output(GW_out)
         
@@ -909,7 +910,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
             return [GW_out.squeeze(),
                     Displacement_GW.squeeze(),
                     Displacement_S.squeeze(),
-                    Permeability]
+                    HydrConductivity]
     
     
 class ST_MultiPoint_DisNet_alt(nn.Module):

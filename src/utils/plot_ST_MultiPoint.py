@@ -12,6 +12,8 @@ import matplotlib.animation as animation
 from torchview import draw_graph
 
 from collections import deque
+
+from matplotlib.colors import TwoSlopeNorm
     
     
 #######################
@@ -55,7 +57,7 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
     
     else:
         
-        Y_hat, Displacement_GW, Displacement_S, Permeability = model(X = [X[0].unsqueeze(0).to(device),
+        Y_hat, Displacement_GW, Displacement_S, hydrConductivity = model(X = [X[0].unsqueeze(0).to(device),
                         X[1].unsqueeze(0).to(device),
                         X[2].unsqueeze(0).to(device)],
                     W = [W[0].unsqueeze(0).to(device),
@@ -67,7 +69,7 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
             Y_hat.detach().cpu(),
             Displacement_GW.detach().cpu(),
             Displacement_S.detach().cpu(),
-            Permeability.detach().cpu()]
+            hydrConductivity.detach().cpu()]
     
     if get_Z is True:
         output.append(Z)
@@ -86,7 +88,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
     if get_displacement_terms is True:
         Displacement_GW = []
         Displacement_S = []
-        Permeability = []
+        hydrConductivity = []
     
     if iter_pred is False:
     
@@ -108,7 +110,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             if get_displacement_terms is True:
                 Displacement_GW.append(pred_list[2])
                 Displacement_S.append(pred_list[3])
-                Permeability.append(pred_list[4])
+                hydrConductivity.append(pred_list[4])
             
     else:
         X = None
@@ -139,7 +141,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             if get_displacement_terms is True:
                 Displacement_GW.append(pred_list[2])
                 Displacement_S.append(pred_list[3])
-                Permeability.append(pred_list[4])
+                hydrConductivity.append(pred_list[4])
             
             if i >= len(dataset.target_lags):
                 X = [torch.stack(list(X_deque[0])),
@@ -156,8 +158,8 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
         output_list.append(Displacement_GW)
         Displacement_S = torch.stack(Displacement_S)
         output_list.append(Displacement_S)
-        Permeability = torch.stack(Permeability)
-        output_list.append(Permeability)
+        hydrConductivity = torch.stack(hydrConductivity)
+        output_list.append(hydrConductivity)
         
     return output_list
     
@@ -335,6 +337,115 @@ def wandb_video(dataset, model, device,
                             vmax = [vmax_H,vmax_WTD],
                             save_dir = None,
                             print_plot = False))})
+                
+                
+def wandb_video_displacements(dataset, model, device,
+                start_dates_input, n_pred,
+                t_step_to_plot,
+                lat_points,
+                lon_points,
+                eval_mode):
+    
+
+        Z_grid = grid_generation(dataset, lat_points,lon_points)
+        Z_grid_matrix = Z_grid.reshape(lat_points,lon_points,3)
+        title_ext = "_iter" if eval_mode else ""
+        
+        for date in start_dates_input:
+    
+            
+            _, predictions, displacement_gw, displacement_s, hydrConductivity = compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                  np.datetime64(date),
+                                                                  n_pred,
+                                                                  Z_grid = Z_grid,
+                                                                  iter_pred = eval_mode,
+                                                                  get_displacement_terms = True)
+            
+            predictions_grid = predictions.reshape(n_pred,lat_points,lon_points)
+            displacement_gw_grid = displacement_gw.reshape(n_pred,lat_points,lon_points)
+            displacement_s_grid = displacement_s.reshape(n_pred,lat_points,lon_points)
+            hydrConductivity_grid = hydrConductivity.reshape(n_pred,lat_points,lon_points)
+            
+            # Denormalization
+            if dataset.config["normalization"] is True:
+                Z_grid_matrix_lat = (Z_grid_matrix[:,:,0]*dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
+                Z_grid_matrix_lon = (Z_grid_matrix[:,:,1]*dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
+                dtm = (Z_grid_matrix[:,:,2]*dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
+                
+                if dataset.config["target_norm_type"] is not None:
+                    predictions_grid = (predictions_grid * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+                    displacement_gw_grid = displacement_gw_grid * dataset.norm_factors["target_stds"]
+                    displacement_s_grid = displacement_s_grid * dataset.norm_factors["target_stds"]
+                    hydrConductivity_grid = hydrConductivity_grid * dataset.norm_factors["target_stds"]
+            else:
+                Z_grid_matrix_lat = Z_grid_matrix[:,:,0]
+                Z_grid_matrix_lon = Z_grid_matrix[:,:,1]
+                dtm = Z_grid_matrix[:,:,2]
+        
+            
+            
+            # Build xr
+            start_date_idx = dataset.dates.get_loc(np.datetime64(date))
+            date_seq = [dataset.dates[start_date_idx+i] for i in range(n_pred)]
+            
+            predictions_xr = xarray.DataArray(data = predictions_grid,
+                                coords = dict(
+                                            lat=("lat", Z_grid_matrix_lat[:,0]),
+                                            lon=("lon", Z_grid_matrix_lon[0,:]),
+                                            time=date_seq),
+                                dims = ["time","lat", "lon"]
+                                )
+            
+            displacement_gw_xr = xarray.DataArray(data = displacement_gw_grid,
+                                coords = dict(
+                                            lat=("lat", Z_grid_matrix_lat[:,0]),
+                                            lon=("lon", Z_grid_matrix_lon[0,:]),
+                                            time=date_seq),
+                                dims = ["time","lat", "lon"]
+                                )
+            
+            displacement_s_xr = xarray.DataArray(data = displacement_s_grid,
+                                coords = dict(
+                                            lat=("lat", Z_grid_matrix_lat[:,0]),
+                                            lon=("lon", Z_grid_matrix_lon[0,:]),
+                                            time=date_seq),
+                                dims = ["time","lat", "lon"]
+                                )
+            
+            hydrConductivity_xr = xarray.DataArray(data = hydrConductivity_grid,
+                                coords = dict(
+                                            lat=("lat", Z_grid_matrix_lat[:,0]),
+                                            lon=("lon", Z_grid_matrix_lon[0,:]),
+                                            time=date_seq),
+                                dims = ["time","lat", "lon"]
+                                )
+            
+            if dataset.config["piezo_head"] is True and dataset.config["relative_target"] is False:
+                predictions_xr_wtd = dtm - predictions_xr
+                
+            else:
+                print("Can't produce wtd... aborting map plots!")
+                return
+                
+            vmin_H = predictions_xr.min().values
+            vmax_H = predictions_xr.max().values
+            vmin_WTD = predictions_xr_wtd.min().values
+            vmax_WTD = predictions_xr_wtd.max().values
+                                      
+            for t_step in t_step_to_plot:
+                
+                wandb.log({f"map_prediction{title_ext}_{date_seq[t_step]} -":wandb.Image(
+                    plot_pred_displacement_maps(predictions_xr[t_step],
+                                                predictions_xr_wtd[t_step],
+                                                displacement_gw_xr[t_step],
+                                                displacement_s_xr[t_step],
+                                                hydrConductivity_xr[t_step],
+                                                title = f"Map prediction{title_ext}",
+                                                vmin = [vmin_H,vmin_WTD],
+                                                vmax = [vmax_H,vmax_WTD],
+                                                save_dir = None,
+                                                print_plot = False))})
+        
         
 
     
@@ -358,7 +469,7 @@ def plot_map(predictions_xr,
         vmin_H = vmin[0]
         vmin_WTD = vmin[1]
     
-    if vmax is not None:
+    if vmax is None:
         vmax_H = predictions_xr.max().values
         vmax_WTD = predictions_xr_wtd.max().values
     else:
@@ -385,7 +496,77 @@ def plot_map(predictions_xr,
         
     else:
         return fig 
+
+def plot_pred_displacement_maps(predictions_xr,
+            predictions_xr_wtd,
+            displacement_gw_xr,
+            displacement_s_xr,
+            hydrConductivity_xr,
+            title,
+            vmin = None,
+            vmax = None,
+            save_dir = None, 
+            print_plot = False):
     
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(1,5, figsize = (12,2.25))
+    fig.suptitle(title)
+    
+    if vmin is None:
+        vmin_H = predictions_xr.min().values
+        vmin_WTD = predictions_xr_wtd.min().values
+    else:
+        vmin_H = vmin[0]
+        vmin_WTD = vmin[1]
+    
+    if vmax is None:
+        vmax_H = predictions_xr.max().values
+        vmax_WTD = predictions_xr_wtd.max().values
+    else:
+        vmax_H = vmax[0]
+        vmax_WTD = vmax[1]
+
+    im0 = predictions_xr.plot(ax = ax[0],
+                vmin = vmin_H,
+                vmax = vmax_H)
+    ax[0].set_title("Prediction H [m]")
+    ax[0].tick_params(labelsize=6)  # Set tick label size
+    
+    
+    im1 = predictions_xr_wtd.plot(ax = ax[1],
+                vmin = vmin_WTD,
+                vmax = vmax_WTD)
+    ax[1].set_title("Prediction WTD [m]")
+    ax[1].tick_params(labelsize=6)  # Set tick label size
+    
+    norm = TwoSlopeNorm(vcenter=0)
+    
+    im2 = displacement_gw_xr.plot(ax = ax[2],
+                cmap = "seismic_r", norm = norm)
+    ax[2].set_title("Displacement - H [m]")
+    ax[2].tick_params(labelsize=6)  # Set tick label size
+    
+    im3 = displacement_s_xr.plot(ax = ax[3],
+                cmap = "seismic_r", norm = norm)
+    ax[3].set_title("Displacement - S [m]")
+    ax[3].tick_params(labelsize=6)  # Set tick label size
+    
+    im4 = hydrConductivity_xr.plot(ax = ax[4])
+    ax[4].set_title("hydrConductivity [m/w]")
+    # cbar = plt.colorbar(im4, ax = ax[4], fraction=0.05, pad=0.04)
+    ax[4].tick_params(labelsize=6)  # Set tick label size
+
+    plt.tight_layout()
+    
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
+    
+    if print_plot is True:
+        plt.plot()
+        
+    else:
+        return fig 
     
     
 ###### OLD ##########

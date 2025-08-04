@@ -16,6 +16,7 @@ def training_model(config):
             lat_lon_points = config["lat_lon_npoints"]
             plot_arch = config["plot_arch"]
             l2_alpha = config["l2_alpha"]
+            plot_displacements = True if "_K" in config["model"] else False
             
             return partial(pure_dl_trainer, 
                            start_dates_plot = start_dates_plot_training,
@@ -24,7 +25,8 @@ def training_model(config):
                            t_step_to_plot = map_t_step_to_plot,
                            lat_lon_points = lat_lon_points,
                            plot_arch = plot_arch,
-                           l2_alpha = l2_alpha)
+                           l2_alpha = l2_alpha,
+                           plot_displacements = plot_displacements)
             
     else:
         print("No Dataset type found!!!")
