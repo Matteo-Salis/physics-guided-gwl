@@ -5,12 +5,12 @@ import wandb
 from torchview import draw_graph
 from utils.plot_ST_MultiPoint import *
 from torch import autograd
-from loss.losses_ST_MultiPoint import loss_l2_regularization
+from loss.losses_ST_MultiPoint import *
 
 
 def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
                       start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
-                      device = "cuda", plot_arch = True, l2_alpha = 0):  
+                      device = "cuda", plot_arch = True, l2_alpha = 0, plot_displacements = False):  
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -71,12 +71,20 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                 sensors_to_plot,
                                 eval_mode = False)
                             
-                            wandb_video(dataset, model, device,
-                                        start_dates_plot, n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = False)
+                            if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                            start_dates_plot, n_pred_plot,
+                                            t_step_to_plot,
+                                            lat_points = lat_lon_points[0],
+                                            lon_points= lat_lon_points[1],
+                                            eval_mode = False)
+                            else:
+                                wandb_video_displacements(dataset, model, device,
+                                            start_dates_plot, n_pred_plot,
+                                            t_step_to_plot,
+                                            lat_points = lat_lon_points[0],
+                                            lon_points= lat_lon_points[1],
+                                            eval_mode = False)
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
@@ -93,102 +101,136 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                               sensors_to_plot,
                               eval_mode = True)
                             
-                            wandb_video(dataset, model, device,
-                                    [start_dates_plot[-1]], n_pred_plot,
-                                    t_step_to_plot,
-                                    lat_points = lat_lon_points[0],
-                                    lon_points= lat_lon_points[1],
-                                    eval_mode = True)
+                            if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                        [start_dates_plot[-1]], n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = True)
+                            
+                            else:
+                                wandb_video_displacements(dataset, model, device,
+                                        [start_dates_plot[-1]], n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = True)
                             
                             
-# def train_pinns_model_SparseData(epoch, dataset, model, train_loader,
-#                       loss_fn, loss_physics_fn, losses_coeff, physics_guide_alpha,
-#                       optimizer, model_dir, model_name,
-#                       start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look, teacher_forcing_factor = 1,
-#                       device = "cuda", plot_arch = True): #, l2_alpha = 0.0005
+def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
+                      start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
+                      device = "cuda", plot_arch = True,
+                      l2_alpha = 0, HC_alpha = 1, coherence_alpha = 1,
+                      plot_displacements = False):  
     
-#     physics_guide_alpha = physics_guide_alpha.to(device)
-#     print(f"Physics Guide Alpha: {physics_guide_alpha[epoch]}")
-    
-#     with tqdm(train_loader, unit="batch") as tepoch:
-#         #with autograd.detect_anomaly():
+    with tqdm(train_loader, unit="batch") as tepoch:
+        #with autograd.detect_anomaly():
                     
-#                     for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
-#                         tepoch.set_description(f"Epoch {epoch}")
+                    for batch_idx, (X, W, Z, Y) in enumerate(tepoch):
+                        tepoch.set_description(f"Epoch {epoch}")
                         
-#                         teacher_forcing = torch.rand(1).item()
-#                         if teacher_forcing > teacher_forcing_factor:
-#                             teacher_forcing = False
-#                             X = X[:,0,:,:].to(device)
-#                             X_mask = X_mask[:,0,:].to(device)
+                        X = [X[0].to(device),
+                             X[1].to(device),
+                             X[2].to(device)]
+                        
+                        W = [W[0].to(device),
+                             W[1].to(device)]
+                        
+                        Z = Z.to(device)
+                        
+                        Y = [Y[0].to(device),
+                             Y[1].to(device)]
+                        
+                        optimizer.zero_grad()
+                        
+                        Y_hat, Displacement_GW, Displacement_S, hydrConductivity = model(X, W, Z, mc_dropout = True,
+                                                                                         get_displacement_terms = True)
                             
-#                         else:
-#                             teacher_forcing = True
-#                             print("Teacher Forcing Mode!", end = " - ")
-#                             X = X.to(device)
-#                             X_mask = X_mask.to(device)
+                        loss = loss_fn(Y_hat,
+                                    Y[0],
+                                    Y[1])
+                        
+                        print("Training_data_loss: ", loss.item(), end = " --- ")
+                        
+                        if l2_alpha > 0:
+                            loss += l2_alpha * loss_l2_regularization(model)
+                        
                             
-#                         Z = Z.to(device)
-#                         W = [W[0].to(device), W[1].to(device)]
-#                         Y = Y.to(device)
-#                         Y_mask = Y_mask.to(device)
-#                         #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-                        
-#                         optimizer.zero_grad()
-                        
-#                         Y_hat, K_lat_lon = model(X, Z, W, X_mask, teacher_forcing = teacher_forcing,
-#                                                  mc_dropout = True, K_out = True)
-                        
-#                         data_loss = loss_fn(Y_hat,
-#                                             Y,
-#                                             Y_mask)
-                        
-#                         wandb.log({"Training_data_loss":data_loss.item()})
-                        
-#                         physics_guide = torch.rand(1).item()
-                        
-#                         if physics_guide < physics_guide_alpha[epoch]:
+                        if HC_alpha > 0:
+                            HC_loss = HC_alpha * HydroConductivity_reg(hydrConductivity,
+                                                                     denorm_sigma=dataset.norm_factors["target_stds"])
+                            loss += HC_loss
                             
-#                             physics_loss = loss_physics_fn(Y_hat,
-#                                                             K_lat = K_lat_lon[:,0,:,:].unsqueeze(1),
-#                                                             K_lon = K_lat_lon[:,1,:,:].unsqueeze(1))
-#                             print(f"Training_data_loss: {data_loss.item()} --- Training_physics_loss: {physics_loss.item()}")
-#                             loss = losses_coeff[0]*data_loss + losses_coeff[1]*physics_loss
+                            print("HC_loss: ", HC_loss.item(), end = " --- ")
                             
-#                             wandb.log({"Training_physics_loss":physics_loss.item()})
+                        if coherence_alpha > 0:
+                            coherence_loss = coherence_alpha * coherence_loss(hydrConductivity,
+                                                                    Displacement_GW,
+                                                                    Displacement_S)
+                            loss += coherence_loss
                             
-#                         else:
-                            
-#                             print(f"Training_data_loss: {data_loss.item()}")
-#                             loss = data_loss
+                            print("COH_loss: ", coherence_loss.item(), end = " --- ")
                             
                         
-#                         loss.backward()
-#                         optimizer.step()
-                        
-                          
                         
                         
-#                     # Plots
-#                     model.eval()
-#                     with torch.no_grad():
-#                         plot_maps_and_time_series(dataset, model, device,
-#                               start_dates_plot, twindow_plot,
-#                               sensors_to_plot, 
-#                               timesteps_to_look,
-#                               eval_mode = True)
+                        loss.backward()
+                        optimizer.step()
                         
-#                         if epoch == 0 and plot_arch is True:
-#                             print("Saving plot of the model's architecture...")
-#                             wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
-#                                                                       sample_input = (dataset[0][0].unsqueeze(0),
-#                                                                                     dataset[0][1].unsqueeze(0),
-#                                                                                     [dataset[0][2][0].unsqueeze(0),
-#                                                                                     dataset[0][2][1].unsqueeze(0)],
-#                                                                                     dataset[0][-2].unsqueeze(0),
-#                                                                                     True),
-#                                                                                     device = device)})
+                        wandb.log({"Total_loss":loss.item()})   
+                        
+                    # Plots
+                    #model.eval()
+                    with torch.no_grad():
+                        if (epoch+1) % 25 == 0:
+                            wandb_time_series(dataset, model, device,
+                                start_dates_plot, n_pred_plot,
+                                sensors_to_plot,
+                                eval_mode = False)
                             
-#                         K_lat_lon = build_xarray(K_lat_lon[0].detach().cpu(), dataset, variable = "K_lat_lon")
-#                         wandb.log({"K_maps_train":wandb.Image(plot_K_lat_lon_maps(K_lat_lon))})
+                            if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                            start_dates_plot, n_pred_plot,
+                                            t_step_to_plot,
+                                            lat_points = lat_lon_points[0],
+                                            lon_points= lat_lon_points[1],
+                                            eval_mode = False)
+                            else:
+                                wandb_video_displacements(dataset, model, device,
+                                            start_dates_plot, n_pred_plot,
+                                            t_step_to_plot,
+                                            lat_points = lat_lon_points[0],
+                                            lon_points= lat_lon_points[1],
+                                            eval_mode = False)
+                        
+                        if epoch == 0 and plot_arch is True:
+                            print("Saving plot of the model's architecture...")
+                            wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
+                                                                      sample_input = (X, W, Z),
+                                                                                    device = device)})
                             
+                        if (epoch+1) % 50 == 0:
+                            
+                            print("Computing iterated predictions...")
+                            
+                            wandb_time_series(dataset, model, device,
+                              [start_dates_plot[-1]], n_pred_plot,
+                              sensors_to_plot,
+                              eval_mode = True)
+                            
+                            if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                        [start_dates_plot[-1]], n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = True)
+                            
+                            else:
+                                wandb_video_displacements(dataset, model, device,
+                                        [start_dates_plot[-1]], n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = True)

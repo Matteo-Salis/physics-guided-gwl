@@ -38,6 +38,38 @@ def loss_masked_mse(Y_hat, Y, Y_mask):
 ### Physics Losses ###
 ######################
 
+##VEDI DeBenzac e optical flow
+def displacement_reg():
+    pass
+
+def HydroConductivity_reg(HC, denorm_sigma = None):
+    
+    if denorm_sigma is not None:
+      HC = HC * denorm_sigma
+    
+    penalty = torch.relu(-HC).sum()
+    
+    return penalty
+
+def coherence_loss(Y_hat,
+                Displacement_GW,
+                Displacement_S):
+    
+    Y_hat_t1 = Y_hat[:,1:,:].clone()
+    Y_hat_t0 = Y_hat[:,:-1,:].clone()
+    
+    Displacement_GW = Displacement_GW[:,1:,:].clone()
+    Displacement_S = Displacement_S[:,1:,:].clone()
+    
+    Y_hat_diff = Y_hat_t1-Y_hat_t0
+    
+    residuals = Y_hat_diff - (Displacement_GW + Displacement_S)
+    
+    return torch.mean(residuals**2)
+
+def diffusion_loss():
+    pass
+
 def Fdiff_conv(x, mode = "first_lon"):
     if mode == "first_lon":
         kernel = torch.Tensor([[0.,0.,0.],

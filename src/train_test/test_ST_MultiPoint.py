@@ -18,7 +18,7 @@ from loss.losses_ST_MultiPoint import *
 def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                     start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
                     #timesteps_to_look,
-                    device = "cuda"):
+                    device = "cuda", plot_displacements = False):
     
     with torch.no_grad():
                 with tqdm(test_loader, unit="batch") as tepoch:
@@ -53,12 +53,22 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                 sensors_to_plot,
                                 eval_mode=False)
                               
-                              wandb_video(dataset, model, device,
-                                      start_dates_plot, n_pred_plot,
-                                      t_step_to_plot,
-                                      lat_points = lat_lon_points[0],
-                                      lon_points= lat_lon_points[1],
-                                      eval_mode = False)
+                            
+                              if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                        start_dates_plot, n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = False)
+                              
+                              else:
+                                wandb_video_displacements(dataset, model, device,
+                                        start_dates_plot, n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = False)
                             
                             if (epoch+1) % 50 == 0:
                             
@@ -69,7 +79,15 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                 sensors_to_plot,
                                 eval_mode = True)
                               
-                              wandb_video(dataset, model, device,
+                              if plot_displacements is False:
+                                wandb_video(dataset, model, device,
+                                        [start_dates_plot[-1]], n_pred_plot,
+                                        t_step_to_plot,
+                                        lat_points = lat_lon_points[0],
+                                        lon_points= lat_lon_points[1],
+                                        eval_mode = True)
+                              else:
+                                wandb_video_displacements(dataset, model, device,
                                       [start_dates_plot[-1]], n_pred_plot,
                                       t_step_to_plot,
                                       lat_points = lat_lon_points[0],
