@@ -42,28 +42,37 @@ def loss_masked_mse(Y_hat, Y, Y_mask):
 def displacement_reg():
     pass
 
-def HydroConductivity_reg(HC, denorm_sigma = None):
+# def HydroConductivity_reg(HC, denorm_sigma = None):
     
-    if denorm_sigma is not None:
-      HC = HC * denorm_sigma
+#     if denorm_sigma is not None:
+#       HC = HC * denorm_sigma
     
-    penalty = torch.relu(-HC).sum()
+#     penalty = torch.relu(-HC).sum()
     
-    return penalty
+#     return penalty
 
 def coherence_loss(Y_hat,
-                Displacement_GW,
-                Displacement_S):
+                Lag_GW = None,
+                **kwargs):
     
-    Y_hat_t1 = Y_hat[:,1:,:].clone()
-    Y_hat_t0 = Y_hat[:,:-1,:].clone()
+    # Y_hat, Displacement_GW, and Displacement_S no batch dimension
     
-    Displacement_GW = Displacement_GW[:,1:,:].clone()
-    Displacement_S = Displacement_S[:,1:,:].clone()
+    Y_hat_t0 = Y_hat[:-1,:].clone()
     
-    Y_hat_diff = Y_hat_t1-Y_hat_t0
+    if Lag_GW is not None:
+        Lag_GW_t1 = Lag_GW[1:,:].clone()
+        residuals = Y_hat_t0-Lag_GW_t1
     
-    residuals = Y_hat_diff - (Displacement_GW + Displacement_S)
+    else:
+        # if lag not provived, compute on the displacement terms
+        Y_hat_t1 = Y_hat[1:,:].clone()
+        
+        kwargs["Displacement_GW"] = kwargs["Displacement_GW"][1:,:].clone()
+        kwargs["Displacement_S"] = kwargs["Displacement_S"][1:,:].clone()
+        
+        Y_hat_diff = Y_hat_t1-Y_hat_t0
+        
+        residuals = Y_hat_diff - (kwargs["Displacement_GW"] + kwargs["Displacement_S"])
     
     return torch.mean(residuals**2)
 

@@ -4,7 +4,7 @@ from train_test.test_ST_MultiPoint import *
 def test_model(config):
 
     if config["dataset_type"] == "ST_MultiPoint":
-        if config["physics"] is False:
+        #if config["physics"] is False:
             
             print("Test Approach: ST_MultiPoint Pure DL")
             
