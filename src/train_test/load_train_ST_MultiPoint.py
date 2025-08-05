@@ -34,6 +34,7 @@ def training_model(config):
             
             coherence_alpha = config["coherence_alpha"]
             tstep_control_points = config["tstep_control_points"]
+            diffusion_alpha = config["diffusion_alpha"]
             
             return partial(physics_guided_trainer, start_dates_plot = start_dates_plot_training,
                            n_pred_plot = n_pred_plot,
@@ -43,6 +44,7 @@ def training_model(config):
                            tstep_control_points = tstep_control_points,
                            plot_arch = plot_arch,
                            l2_alpha = l2_alpha,
+                           diffusion_alpha = diffusion_alpha,
                            coherence_alpha = coherence_alpha,
                            plot_displacements = plot_displacements)
             

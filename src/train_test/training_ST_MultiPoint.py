@@ -122,7 +122,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
                     tstep_control_points,
                     device = "cuda", plot_arch = True,
-                    l2_alpha = 0, coherence_alpha = 1,
+                    l2_alpha = 0, coherence_alpha = 1, diffusion_alpha = 1,
                     plot_displacements = False):  
     
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -159,7 +159,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                         ### Control Points Losses
                         ## Prediction
-                        Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, _, Lag_GW = Control_Points_Predictions(dataset, model, device,
+                        Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
                                tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
                                eval_mode = False)
                         
@@ -175,6 +175,22 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             loss += coh_loss
                             
                             print(f"CP_COH_loss: {coh_loss.item()}", end = " --- ")
+                            
+                        if diffusion_alpha > 0:
+                            diff_loss = diffusion_alpha * diffusion_loss(
+                                                    Lag_GW = Lag_GW_CP.reshape(tstep_control_points,
+                                                                            lat_lon_points[0],
+                                                                            lat_lon_points[1]),
+                                                    Displacement_GW = Displacement_GW_CP.reshape(tstep_control_points,
+                                                                            lat_lon_points[0],
+                                                                            lat_lon_points[1]),
+                                                    K = HydrConductivity_CP.reshape(tstep_control_points,
+                                                                            lat_lon_points[0],
+                                                                            lat_lon_points[1]))
+                            
+                            loss += diff_loss
+                            
+                            print(f"CP_Diff_loss: {diff_loss.item()}", end = " --- ")
                             
                         
                         print("Total_loss: ", loss.item())

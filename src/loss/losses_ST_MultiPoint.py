@@ -76,8 +76,31 @@ def coherence_loss(Y_hat,
     
     return torch.mean(residuals**2)
 
-def diffusion_loss():
-    pass
+def diffusion_loss(Lag_GW, Displacement_GW, K):
+    
+    spatial_grads = []
+    
+    for t in range(Lag_GW.shape[0]):
+    
+        Lag_GW_t = Lag_GW[t,:,:][None,None,:,:]
+        
+        dh_dy = Fdiff_conv(Lag_GW_t, mode = "first_lat")
+        dh_dx = Fdiff_conv(Lag_GW_t, mode = "first_lon")
+        
+        dh_dy = dh_dy * K[t,:,:][None,None,:,:]
+        dh_dx = dh_dx * K[t,:,:][None,None,:,:]
+        
+        dh_dydy = Fdiff_conv(dh_dy, mode = "first_lat")
+        dh_dxdx = Fdiff_conv(dh_dx, mode = "first_lon")
+    
+        spatial_grad = dh_dydy + dh_dxdx
+        
+        spatial_grads.append(spatial_grad)
+        
+    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Lag_GW.device).squeeze()
+    residuals = Displacement_GW - spatial_grads
+        
+    return torch.mean(residuals**2)
 
 def Fdiff_conv(x, mode = "first_lon"):
     if mode == "first_lon":
