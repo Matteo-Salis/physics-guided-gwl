@@ -57,19 +57,21 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
     
     else:
         
-        Y_hat, Displacement_GW, Displacement_S, hydrConductivity = model(X = [X[0].unsqueeze(0).to(device),
+        Y_hat, Displacement_GW, Displacement_S, hydrConductivity, Lag_GW = model(X = [X[0].unsqueeze(0).to(device),
                         X[1].unsqueeze(0).to(device),
                         X[2].unsqueeze(0).to(device)],
                     W = [W[0].unsqueeze(0).to(device),
                         W[1].unsqueeze(0).to(device)],
                     Z = Z.unsqueeze(0).to(device),
-                    get_displacement_terms = get_displacement_terms)
+                    get_displacement_terms = get_displacement_terms,
+                    get_lag_term = get_displacement_terms)
         
         output = [Y.detach().cpu(),
             Y_hat.detach().cpu(),
             Displacement_GW.detach().cpu(),
             Displacement_S.detach().cpu(),
-            hydrConductivity.detach().cpu()]
+            hydrConductivity.detach().cpu(),
+            Lag_GW.detach().cpu()]
     
     if get_Z is True:
         output.append(Z)
@@ -89,6 +91,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
         Displacement_GW = []
         Displacement_S = []
         hydrConductivity = []
+        Lag_GW = []
     
     if iter_pred is False:
     
@@ -111,6 +114,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 Displacement_GW.append(pred_list[2])
                 Displacement_S.append(pred_list[3])
                 hydrConductivity.append(pred_list[4])
+                Lag_GW.append(pred_list[5])
             
     else:
         X = None
@@ -142,6 +146,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 Displacement_GW.append(pred_list[2])
                 Displacement_S.append(pred_list[3])
                 hydrConductivity.append(pred_list[4])
+                Lag_GW.append(pred_list[5])
             
             if i >= len(dataset.target_lags):
                 X = [torch.stack(list(X_deque[0])),
@@ -160,6 +165,8 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
         output_list.append(Displacement_S)
         hydrConductivity = torch.stack(hydrConductivity)
         output_list.append(hydrConductivity)
+        Lag_GW = torch.stack(Lag_GW)
+        output_list.append(Lag_GW)
         
     return output_list
     
@@ -354,7 +361,7 @@ def wandb_video_displacements(dataset, model, device,
         for date in start_dates_input:
     
             
-            _, predictions, displacement_gw, displacement_s, hydrConductivity = compute_predictions_ST_MultiPoint(dataset, model, device,
+            _, predictions, displacement_gw, displacement_s, hydrConductivity, _ = compute_predictions_ST_MultiPoint(dataset, model, device,
                                                                   np.datetime64(date),
                                                                   n_pred,
                                                                   Z_grid = Z_grid,

@@ -119,10 +119,11 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                             
                             
 def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
-                      start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
-                      device = "cuda", plot_arch = True,
-                      l2_alpha = 0, HC_alpha = 1, coherence_alpha = 1,
-                      plot_displacements = False):  
+                    start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
+                    tstep_control_points,
+                    device = "cuda", plot_arch = True,
+                    l2_alpha = 0, coherence_alpha = 1,
+                    plot_displacements = False):  
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -144,8 +145,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         
                         optimizer.zero_grad()
                         
-                        Y_hat, Displacement_GW, Displacement_S, hydrConductivity = model(X, W, Z, mc_dropout = True,
-                                                                                         get_displacement_terms = True)
+                        Y_hat = model(X, W, Z, mc_dropout = True)
                             
                         loss = loss_fn(Y_hat,
                                     Y[0],
@@ -157,28 +157,32 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             loss += l2_alpha * loss_l2_regularization(model)
                         
                             
-                        if HC_alpha > 0:
-                            HC_loss = HC_alpha * HydroConductivity_reg(hydrConductivity,
-                                                                     denorm_sigma=dataset.norm_factors["target_stds"])
-                            loss += HC_loss
-                            
-                            print("HC_loss: ", HC_loss.item(), end = " --- ")
+                        ### Control Points Losses
+                        ## Prediction
+                        Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, _, Lag_GW = Control_Points_Predictions(dataset, model, device,
+                               tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
+                               eval_mode = False)
+                        
+                        # Displacement_GW_CP
+                        # Displacement_S_CP
+                        
                             
                         if coherence_alpha > 0:
-                            coherence_loss = coherence_alpha * coherence_loss(hydrConductivity,
-                                                                    Displacement_GW,
-                                                                    Displacement_S)
-                            loss += coherence_loss
+                            coh_loss = coherence_alpha * coherence_loss(Y_hat_CP,
+                                                                        Displacement_GW = Displacement_GW_CP,
+                                                                        Displacement_S = Displacement_S_CP)
                             
-                            print("COH_loss: ", coherence_loss.item(), end = " --- ")
+                            loss += coh_loss
+                            
+                            print(f"CP_COH_loss: {coh_loss.item()}", end = " --- ")
                             
                         
-                        
+                        print("Total_loss: ", loss.item())
                         
                         loss.backward()
                         optimizer.step()
                         
-                        wandb.log({"Total_loss":loss.item()})   
+                        wandb.log({"Training_Total_loss":loss.item()})   
                         
                     # Plots
                     #model.eval()
@@ -234,3 +238,52 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
                                         eval_mode = True)
+                                
+                                
+                                
+
+def Control_Points_Predictions(dataset, model, device,
+                               tstep_control_points,
+                               lat_points, lon_points,
+                               eval_mode = False):
+    
+    ###Z_grid mettiamo in load_trainer con partial, anche lat_ponints e lon:points
+    ### non necessario neanche reshape a questo stadio, se facciamo vincolo su diffusion poi sì
+    
+    
+    # Sample a random dates
+    random_idx = torch.randint(low=0, high=len(dataset.dates)-tstep_control_points, size=(1,)).item()
+    random_date = dataset.dates[random_idx]
+    
+    Z_grid = grid_generation(dataset, lat_points,lon_points)
+    
+    _, predictions, displacement_gw, displacement_s, hydrConductivity, Lag_GW = compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                  np.datetime64(random_date),
+                                                                  tstep_control_points,
+                                                                  Z_grid = Z_grid,
+                                                                  iter_pred = eval_mode,
+                                                                  get_displacement_terms = True)
+            
+    # predictions_grid = predictions.reshape(tstep_control_points,lat_points,lon_points)
+    # displacement_gw_grid = displacement_gw.reshape(tstep_control_points,lat_points,lon_points)
+    # displacement_s_grid = displacement_s.reshape(tstep_control_points,lat_points,lon_points)
+    # hydrConductivity_grid = hydrConductivity.reshape(tstep_control_points,lat_points,lon_points)
+    #Z_grid_matrix = Z_grid.reshape(lat_points,lon_points,3)
+    
+    return predictions, displacement_gw, displacement_s, hydrConductivity, Lag_GW
+    
+    # # Denormalization
+    # if dataset.config["normalization"] is True:
+    #     Z_grid_matrix_lat = (Z_grid_matrix[:,:,0]*dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
+    #     Z_grid_matrix_lon = (Z_grid_matrix[:,:,1]*dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
+    #     dtm = (Z_grid_matrix[:,:,2]*dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
+        
+    #     if dataset.config["target_norm_type"] is not None:
+    #         predictions_grid = (predictions_grid * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+    #         displacement_gw_grid = displacement_gw_grid * dataset.norm_factors["target_stds"]
+    #         displacement_s_grid = displacement_s_grid * dataset.norm_factors["target_stds"]
+    #         hydrConductivity_grid = hydrConductivity_grid * dataset.norm_factors["target_stds"]
+    # else:
+    #     Z_grid_matrix_lat = Z_grid_matrix[:,:,0]
+    #     Z_grid_matrix_lon = Z_grid_matrix[:,:,1]
+    #     dtm = Z_grid_matrix[:,:,2]

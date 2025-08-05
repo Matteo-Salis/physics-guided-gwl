@@ -66,7 +66,9 @@ class Embedding(nn.Module):
             self.activation = nn.LeakyReLU()
         elif activation == "GELU":
             self.activation = nn.GELU()
-        
+        elif activation == "ReLU":
+            self.activation = nn.ReLU()
+            
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
@@ -767,9 +769,12 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         self.HydrConductivity = Embedding(in_channels = self.s_coords_dim,
                                     hidden_channels = self.embedding_dim,
-                                    out_channels= 1,
+                                    out_channels= self.embedding_dim,
                                     activation = self.activation,
                                     LayerNorm = False)
+        
+        self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1),
+                                                     nn.ReLU())
         
         ### Spatial Modules #####
         self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
@@ -793,7 +798,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ## Source/Sink 
         self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
-                                                self.embedding_dim),
+                                                int(self.embedding_dim*4)),
                                       self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
@@ -805,7 +810,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                 dropout_p = self.dropout))
             
             setattr(self, f"Displacement_Module_S_{i}",
-                        MHA_Block(self.embedding_dim,
+                        MHA_Block(int(self.embedding_dim*4),
                                 self.displacement_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
@@ -827,12 +832,12 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                           nn.Linear(self.embedding_dim,1))
         
         self.Linear_2_S = nn.Sequential(self.activation_fn,
-                                        nn.Linear(self.embedding_dim, 1))  
+                                        nn.Linear(int(self.embedding_dim*4), 1))  
         
         # self.Output = nn.Sequential(self.activation_fn,
         #                                 nn.Linear(1, 1))      
         
-    def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False):
+    def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
         
         ### Embedding #####
         
@@ -844,6 +849,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Z_st_coords = self.ST_coords_Embedding(Z)
         
         HydrConductivity = self.HydrConductivity(Z[:,:,:self.s_coords_dim])
+        HydrConductivity = self.HydrConductivity_Linear(HydrConductivity)
         
         Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
         Weather_values = self.Value_Embedding_Weather(Weather_values_input)
@@ -873,7 +879,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Displacement_GW = GW_out[:,:,:,-1].clone() #.flatten(-2,-1)
         #Displacement_GW = self.Linear_GW(Displacement_GW)
         
-        Displacement_S = torch.cat([GW_out,
+        Displacement_S = torch.cat([GW_out.clone(),
                                     Weather_out], dim = -1).flatten(-2,-1)
         Displacement_S = self.Linear_S(Displacement_S)
         
@@ -888,7 +894,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         # Squeeze channel dim
         
-        GW_out = self.Linear_Lag(GW_out[:,:,:,-1])
+        GW_lag_out = self.Linear_Lag(GW_out[:,:,:,-1].clone())
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
@@ -897,20 +903,28 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         Displacement_S = self.Linear_2_S(Displacement_S)
         
-        GW_out += Displacement_GW + Displacement_S # Euler method
+        Y_hat = GW_lag_out + Displacement_GW + Displacement_S # Euler method
         
-        #GW_out = self.Output(GW_out)
+        #Y_hat = self.Output(Y_hat)
         
         if get_displacement_terms is False:
             
-            return GW_out.squeeze()
+            return Y_hat.squeeze()
         
         else: 
             
-            return [GW_out.squeeze(),
-                    Displacement_GW.squeeze(),
-                    Displacement_S.squeeze(),
-                    HydrConductivity]
+            output_list = [Y_hat.squeeze(),
+                        Displacement_GW.squeeze(),
+                        Displacement_S.squeeze(),
+                        HydrConductivity]
+            if get_lag_term is False:
+            
+                return output_list
+                
+            else:
+            
+                output_list.append(GW_lag_out.squeeze())
+                return output_list
     
     
 class ST_MultiPoint_DisNet_alt(nn.Module):
