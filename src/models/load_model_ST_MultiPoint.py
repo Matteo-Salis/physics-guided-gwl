@@ -94,7 +94,7 @@ def load_model(config):
     
     if config["model_init"] == "He":
         print("He Initialization Applied.")
-        model = model.apply(weight_init)
+        model = model.apply(partial(weight_init, activation = config["activation"]))
     return model, model_name
     
     

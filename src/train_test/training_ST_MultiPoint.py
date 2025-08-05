@@ -174,6 +174,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             loss += coh_loss
                             
                             print(f"CP_COH_loss: {coh_loss.item()}", end = " --- ")
+                            wandb.log({"CP_COH_loss":coh_loss.item()})
                             
                         if diffusion_alpha > 0:
                             diff_loss = diffusion_alpha * diffusion_loss(
@@ -190,6 +191,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             loss += diff_loss
                             
                             print(f"CP_Diff_loss: {diff_loss.item()}", end = " --- ")
+                            wandb.log({"CP_Diff_loss":diff_loss.item()})
                             
                         
                         print("Total_loss: ", loss.item())
