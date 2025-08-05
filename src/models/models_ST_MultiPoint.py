@@ -156,6 +156,7 @@ class Spatial_MHA_Block(nn.Module):
         self.norm_linear = nn.Sequential(
                                     nn.LayerNorm(normalized_shape = embedding_dim,
                                                  elementwise_affine=self.elementwise_affine),
+                                    self.activation,
                                     nn.Linear(embedding_dim, embedding_dim),
                                     self.activation,
                                     nn.Linear(embedding_dim, output_channels),
@@ -811,7 +812,8 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ## Source/Sink 
         self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
                                                 2*self.embedding_dim),
-                                      self.activation_fn)
+                                    nn.LayerNorm(2*self.embedding_dim),
+                                    self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
             setattr(self, f"Displacement_Module_GW_{i}",
@@ -830,21 +832,21 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Output Layers #####
         
-        self.Linear_Lag = nn.Sequential(self.activation_fn,
-                                        nn.Linear(self.embedding_dim, 1))
-        self.Linear_2_GW = nn.Sequential(self.activation_fn,
-                                         nn.Linear(self.embedding_dim, 2))
+        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, 1))
+        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, 2))
         
         self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
+                                          nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
+                                          nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
+                                          nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim,1))
         
-        self.Linear_2_S = nn.Sequential(self.activation_fn,
-                                        nn.Linear(self.embedding_dim*2, 1))  
+        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim*2, 1))  
         
         # self.Output = nn.Sequential(self.activation_fn,
         #                                 nn.Linear(1, 1))      
