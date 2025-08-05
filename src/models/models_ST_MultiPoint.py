@@ -27,9 +27,15 @@ from st_moe_pytorch import SparseMoEBlock
 ### Utilities ###
 #################
 
+# def weight_init(m):
+#     if isinstance(m, nn.Linear):
+#         nn.init.kaiming_uniform_(m.weight)
+#         if m.bias is not None:
+#             nn.init.zeros_(m.bias)
+            
 def weight_init(m):
     if isinstance(m, nn.Linear):
-        nn.init.kaiming_uniform_(m.weight)
+        nn.init.kaiming_normal_(m.weight)
         if m.bias is not None:
             nn.init.zeros_(m.bias)
             
@@ -773,8 +779,8 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                     activation = self.activation,
                                     LayerNorm = False)
         
-        self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1),
-                                                     nn.ReLU())
+        self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=False),
+                                                     nn.Softplus())
         
         ### Spatial Modules #####
         self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
@@ -798,7 +804,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ## Source/Sink 
         self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
-                                                int(self.embedding_dim*4)),
+                                                self.embedding_dim),
                                       self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
@@ -810,7 +816,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                 dropout_p = self.dropout))
             
             setattr(self, f"Displacement_Module_S_{i}",
-                        MHA_Block(int(self.embedding_dim*4),
+                        MHA_Block(self.embedding_dim,
                                 self.displacement_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
@@ -832,7 +838,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                           nn.Linear(self.embedding_dim,1))
         
         self.Linear_2_S = nn.Sequential(self.activation_fn,
-                                        nn.Linear(int(self.embedding_dim*4), 1))  
+                                        nn.Linear(self.embedding_dim, 1))  
         
         # self.Output = nn.Sequential(self.activation_fn,
         #                                 nn.Linear(1, 1))      
