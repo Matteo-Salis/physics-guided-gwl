@@ -41,7 +41,7 @@ def weight_init(m, activation):
         
     
     if isinstance(m, nn.Linear):
-        nn.init.kaiming_normal_(m.weight, nonlinearity = nonlinearity)
+        nn.init.kaiming_uniform_(m.weight, nonlinearity = nonlinearity)
         if m.bias is not None:
             nn.init.zeros_(m.bias)
             
