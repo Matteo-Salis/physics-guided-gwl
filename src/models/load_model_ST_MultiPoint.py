@@ -92,8 +92,9 @@ def load_model(config):
         print("Done!")
     
     
-    
-    #model = model.apply(weight_init)
+    if config["model_init"] == "He":
+        print("He Initialization Applied.")
+        model = model.apply(weight_init)
     return model, model_name
     
     

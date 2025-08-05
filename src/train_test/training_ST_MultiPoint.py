@@ -169,8 +169,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                         if coherence_alpha > 0:
                             coh_loss = coherence_alpha * coherence_loss(Y_hat_CP,
-                                                                        Displacement_GW = Displacement_GW_CP,
-                                                                        Displacement_S = Displacement_S_CP)
+                                                                        Lag_GW_CP)
                             
                             loss += coh_loss
                             
