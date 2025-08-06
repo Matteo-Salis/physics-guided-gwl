@@ -804,14 +804,14 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ### Displacement Modules #####
         
         ## GW
-        # self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
-        #                                         self.embedding_dim),
-        #                               self.activation_fn)
+        self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[0]),
+                                                self.embedding_dim),
+                                      self.activation_fn)
         
         ## Source/Sink 
-        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
-                                                2*self.embedding_dim),
-                                    nn.LayerNorm(2*self.embedding_dim),
+        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
+                                                self.embedding_dim),
+                                    nn.LayerNorm(self.embedding_dim),
                                     self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
@@ -823,7 +823,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                 dropout_p = self.dropout))
             
             setattr(self, f"Displacement_Module_S_{i}",
-                        MHA_Block(self.embedding_dim*2,
+                        MHA_Block(self.embedding_dim,
                                 self.displacement_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
@@ -837,21 +837,18 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                                 bias=False))
         
         self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
-                                          nn.LayerNorm(self.embedding_dim),
+                                          #nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
-                                          nn.LayerNorm(self.embedding_dim),
+                                          #nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
-                                          nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim,1,
                                                     bias=False))
         
-        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim*2, 1, bias=False))  
-        
-        # self.Output = nn.Sequential(self.activation_fn,
-        #                                 nn.Linear(1, 1))      
+        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=False))  
+         
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
         
@@ -892,11 +889,10 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Displacement modules
         
-        Displacement_GW = GW_out[:,:,:,-1].clone() #.flatten(-2,-1)
-        #Displacement_GW = self.Linear_GW(Displacement_GW)
+        Displacement_GW = GW_out.flatten(-2,-1)
+        Displacement_GW = self.Linear_GW(Displacement_GW)
         
-        Displacement_S = torch.cat([GW_out.clone(),
-                                    Weather_out], dim = -1).flatten(-2,-1)
+        Displacement_S = Weather_out.flatten(-2,-1)
         Displacement_S = self.Linear_S(Displacement_S)
         
         for i in range(self.displacement_mod_blocks):

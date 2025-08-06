@@ -169,6 +169,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                         if coherence_alpha > 0:
                             coh_loss = coherence_alpha * coherence_loss(Y_hat_CP,
+                                                                        dataset.config["loss"],
                                                                         Lag_GW_CP)
                             
                             loss += coh_loss
@@ -186,7 +187,8 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                                                             lat_lon_points[1]),
                                                     K = HydrConductivity_CP.reshape(tstep_control_points,
                                                                             lat_lon_points[0],
-                                                                            lat_lon_points[1]))
+                                                                            lat_lon_points[1]),
+                                                    res_fn = dataset.config["loss"])
                             
                             loss += diff_loss
                             
