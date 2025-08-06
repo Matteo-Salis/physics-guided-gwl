@@ -65,6 +65,7 @@ def displacement_reg():
 #     return penalty
 
 def coherence_loss(Y_hat,
+                res_fn,
                 Lag_GW = None,
                 **kwargs):
     
@@ -74,7 +75,8 @@ def coherence_loss(Y_hat,
     
     if Lag_GW is not None:
         Lag_GW_t1 = Lag_GW[1:,:].clone()
-        residuals = Y_hat_t0-Lag_GW_t1
+        Truth = Y_hat_t0
+        residuals = Truth-Lag_GW_t1
     
     else:
         # if lag not provived, compute on the displacement terms
@@ -84,12 +86,20 @@ def coherence_loss(Y_hat,
         kwargs["Displacement_S"] = kwargs["Displacement_S"][1:,:].clone()
         
         Y_hat_diff = Y_hat_t1-Y_hat_t0
+        Truth = Y_hat_diff
         
-        residuals = Y_hat_diff - (kwargs["Displacement_GW"] + kwargs["Displacement_S"])
+        residuals = Truth - (kwargs["Displacement_GW"] + kwargs["Displacement_S"])
     
-    return torch.mean(residuals**2)
+    if res_fn == "mse":
+        return torch.mean(residuals**2)
+    
+    elif res_fn == "mae":
+        return torch.mean(torch.abs(residuals))
+    
+    elif res_fn == "mape":
+        return torch.mean(torch.abs(residuals/Truth))
 
-def diffusion_loss(Lag_GW, Displacement_GW, K):
+def diffusion_loss(Lag_GW, Displacement_GW, K, res_fn):
     
     spatial_grads = []
     
@@ -111,9 +121,17 @@ def diffusion_loss(Lag_GW, Displacement_GW, K):
         spatial_grads.append(spatial_grad)
         
     spatial_grads = torch.cat(spatial_grads, dim = 1).to(Lag_GW.device).squeeze()
+    print(spatial_grad)
     residuals = Displacement_GW - spatial_grads
         
-    return torch.mean(residuals**2)
+    if res_fn == "mse":
+        return torch.mean(residuals**2)
+    
+    elif res_fn == "mae":
+        return torch.mean(torch.abs(residuals))
+    
+    elif res_fn == "mape":
+        return torch.mean(torch.abs(residuals/spatial_grads))
 
 def Fdiff_conv(x, mode = "first_lon"):
     if mode == "first_lon":
