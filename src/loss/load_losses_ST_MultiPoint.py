@@ -8,3 +8,6 @@ def load_loss(config):
     
     if config["loss"] == "mae":
         return partial(loss_masked_mae)
+    
+    if config["loss"] == "mape":
+        return partial(loss_masked_mape)

@@ -443,7 +443,6 @@ class ST_MultiPoint_Net(nn.Module):
         self.joint_mod_blocks = joint_mod_blocks
         self.joint_mod_heads = joint_mod_heads
         self.GW_W_temp_dim = GW_W_temp_dim
-        # self.densification_dropout_p = densification_dropout
         self.dropout = dropout
         self.activation = activation
         
@@ -539,7 +538,7 @@ class ST_MultiPoint_Net(nn.Module):
         GW_out = torch.stack(GW_out, dim = -1)
         Weather_out = torch.stack(Weather_out, dim = -1)
         
-        # Displacement modules
+        # Joint modules
         Output = torch.cat([GW_out.flatten(-2,-1),
                                   Weather_out.flatten(-2,-1)], dim = -1)
         
@@ -832,8 +831,10 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Output Layers #####
         
-        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, 1))
-        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, 2))
+        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, 1,
+                                                bias=False))
+        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, 2,
+                                                bias=False))
         
         self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
                                           nn.LayerNorm(self.embedding_dim),
@@ -844,9 +845,10 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
                                           nn.LayerNorm(self.embedding_dim),
                                           self.activation_fn,
-                                          nn.Linear(self.embedding_dim,1))
+                                          nn.Linear(self.embedding_dim,1,
+                                                    bias=False))
         
-        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim*2, 1))  
+        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim*2, 1, bias=False))  
         
         # self.Output = nn.Sequential(self.activation_fn,
         #                                 nn.Linear(1, 1))      
@@ -930,7 +932,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
             output_list = [Y_hat.squeeze(),
                         Displacement_GW.squeeze(),
                         Displacement_S.squeeze(),
-                        HydrConductivity]
+                        HydrConductivity.squeeze()]
             if get_lag_term is False:
             
                 return output_list

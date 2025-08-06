@@ -550,12 +550,14 @@ def plot_pred_displacement_maps(predictions_xr,
     norm = TwoSlopeNorm(vcenter=0)
     
     im2 = displacement_gw_xr.plot(ax = ax[2],
-                cmap = "seismic_r", norm = norm)
+                cmap = "seismic_r",# norm = norm
+                )
     ax[2].set_title("Displacement - H [m]")
     ax[2].tick_params(labelsize=6)  # Set tick label size
     
     im3 = displacement_s_xr.plot(ax = ax[3],
-                cmap = "seismic_r", norm = norm)
+                cmap = "seismic_r",# norm = norm
+                )
     ax[3].set_title("Displacement - S [m]")
     ax[3].tick_params(labelsize=6)  # Set tick label size
     
