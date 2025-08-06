@@ -13,7 +13,7 @@ def loss_masked_mae(Y_hat, Y, Y_mask):
     if torch.sum(Y_mask) != 0:        
         return torch.sum(torch.abs(Y_hat[not_Y_mask]-Y[not_Y_mask]))  / torch.sum(not_Y_mask)
     else:
-        return 0
+        return torch.tensor(0.).to(Y_mask.device)
 
 def loss_l2_regularization(model):
     
@@ -31,7 +31,20 @@ def loss_masked_mse(Y_hat, Y, Y_mask):
     if torch.sum(Y_mask) != 0:
         return torch.sum((Y_hat[not_Y_mask]-Y[not_Y_mask])**2.0)  / torch.sum(not_Y_mask)
     else:
-        return 0.
+        return torch.tensor(0.).to(Y_mask.device)
+    
+def loss_masked_mape(Y_hat, Y, Y_mask):
+    
+    if len(Y_hat.shape)==1:
+        Y_hat = Y_hat.unsqueeze(0)
+        
+    not_Y_mask = ~Y_mask
+    
+    if torch.sum(Y_mask) != 0:
+        mape = torch.mean(torch.abs((Y_hat[not_Y_mask]-Y[not_Y_mask])/Y[not_Y_mask]))
+    else:
+        mape = torch.tensor(0.).to(Y_mask.device)
+    return mape
     
     
 ######################
