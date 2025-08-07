@@ -45,22 +45,35 @@ def weight_init(m, activation):
         if m.bias is not None:
             nn.init.zeros_(m.bias)
             
-def densification_dropout(sample, p = 0.25):
-        
+class Densification_Dropout(nn.Module):
+    def __init__(self,
+                 drop_value = 0,
+                 p = 0.25):
+        super().__init__()
         """
         Dropout training as in densification of Andrychowicz et al. (2023)
+        sample_values: (N,S)
+        sample_mask: (N,S)
+        
+        choose p carefully (avoid probability of all set no nan)
         """
         
-        new_X = sample[0].clone()
-        new_X_mask = sample[1].clone()
+        self.drop_value = drop_value
+        self.p = p
+    
+    def forward(self, sample_values, sample_mask):
         
-        for batch in range(new_X.shape[0]):
-            avail_X = new_X_mask[batch,:].nonzero().squeeze()
-            dropout = torch.randint(0, len(avail_X), [int(len(avail_X)*p)])
-            new_X_mask[batch,avail_X[dropout]] = False
-            new_X[batch,avail_X[dropout],-1] = 0
+        new_values = sample_values.clone()
+        new_mask = sample_mask.clone()
         
-        return new_X, new_X_mask
+        for batch in range(new_values.shape[0]):
+            not_nan_idxs = torch.logical_not(new_mask[batch,:]).nonzero().squeeze()
+            
+            dropout = torch.randint(0, len(not_nan_idxs), [int(len(not_nan_idxs)*self.p)])
+            new_mask[batch,not_nan_idxs[dropout]] = True
+            new_values[batch,not_nan_idxs[dropout],:] = self.drop_value
+        
+        return new_values, new_mask
             
 class Embedding(nn.Module):
     """
@@ -430,6 +443,8 @@ class ST_MultiPoint_Net(nn.Module):
                 joint_mod_blocks = 1,
                 joint_mod_heads = 2,
                 GW_W_temp_dim = [2,5],
+                densification_dropout_p = 0.25,
+                densification_dropout_dv = 0,
                 dropout = 0.2, 
                 activation = "GELU"):
         
@@ -443,6 +458,8 @@ class ST_MultiPoint_Net(nn.Module):
         self.joint_mod_blocks = joint_mod_blocks
         self.joint_mod_heads = joint_mod_heads
         self.GW_W_temp_dim = GW_W_temp_dim
+        self.densification_dropout_p = densification_dropout_p
+        self.densification_dropout_dv = densification_dropout_dv
         self.dropout = dropout
         self.activation = activation
         
@@ -456,19 +473,25 @@ class ST_MultiPoint_Net(nn.Module):
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
         
         self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
         
         self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
+        
+        ### Densification Dropout 
+        
+        self.Densification_Dropout = Densification_Dropout(drop_value=self.densification_dropout_dv,
+                                                           p = self.densification_dropout_p)
+        
         
         ### Spatial Modules #####
         self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
@@ -495,14 +518,15 @@ class ST_MultiPoint_Net(nn.Module):
                                 self.joint_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
-                                dropout_p = self.dropout))
+                                dropout_p = 0))
             
         
         ### Output Layers #####
         
-        self.Output = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim),
+        self.Output = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                              bias = False),
                                     self.activation_fn,
-                                    nn.Linear(self.embedding_dim, 1))        
+                                    nn.Linear(self.embedding_dim//2, 1, bias = False))        
         
     def forward(self, X, W, Z, mc_dropout = False):
         
@@ -524,9 +548,17 @@ class ST_MultiPoint_Net(nn.Module):
         
         for GW_lag in range(GW_values.shape[1]):
             
-            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            if self.training or mc_dropout:
+                GW_values_DD, GW_mask_DD = self.Densification_Dropout(GW_values[:,GW_lag,:,:],
+                                                                    X[2][:,GW_lag,:])
+            
+            else: 
+                GW_values_DD = GW_values[:,GW_lag,:,:]
+                GW_mask_DD = X[2][:,GW_lag,:]
+            
+            attn_mask = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
             GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
-                                         V = GW_values[:,GW_lag,:,:],
+                                         V = GW_values_DD,
                                          Q = Z_st_coords,
                                          attn_mask = attn_mask))
             
@@ -550,7 +582,12 @@ class ST_MultiPoint_Net(nn.Module):
                                                         mc_dropout = self.training or mc_dropout)
         
         # Skip connection with last observation
-        
+        if self.dropout > 0:
+            Output = nn.functional.dropout1d(Output.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+                
+            Output = Output.permute((0,2,1))
+            
         Output = self.Output(Output)
         
         return Output.squeeze()
@@ -735,6 +772,8 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                 displacement_mod_blocks = 1,
                 displacement_mod_heads = 2,
                 GW_W_temp_dim = [2,5],
+                densification_dropout_p = 0.25,
+                densification_dropout_dv = 0,
                 dropout = 0.2, 
                 activation = "GELU"):
         
@@ -750,6 +789,8 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         self.displacement_mod_heads = displacement_mod_heads
         self.GW_W_temp_dim = GW_W_temp_dim
         self.dropout = dropout
+        self.densification_dropout_p = densification_dropout_p
+        self.densification_dropout_dv = densification_dropout_dv
         self.activation = activation
         
         if self.activation == "LeakyReLU":
@@ -776,6 +817,11 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                             activation = self.activation,
                                             LayerNorm = False)
         
+        ### Densification Dropout 
+        
+        self.Densification_Dropout = Densification_Dropout(drop_value=self.densification_dropout_dv,
+                                                           p = self.densification_dropout_p)
+        
         
         ### HydrConductivity Module ####
         
@@ -801,6 +847,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                                 activation = self.activation,
                                                 elementwise_affine = True)
         
+        
         ### Displacement Modules #####
         
         ## GW
@@ -820,20 +867,27 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                 self.displacement_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
-                                dropout_p = self.dropout))
+                                dropout_p = 0))
             
             setattr(self, f"Displacement_Module_S_{i}",
                         MHA_Block(self.embedding_dim,
                                 self.displacement_mod_heads,
                                 self.activation,
                                 elementwise_affine = True,
-                                dropout_p = self.dropout))
+                                dropout_p = 0))
         
         ### Output Layers #####
         
-        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, 1,
+        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=False),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 1,
                                                 bias=False))
-        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, 2,
+        
+        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=False),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 2,
                                                 bias=False))
         
         self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
@@ -844,10 +898,17 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                           self.activation_fn,
                                           nn.Linear(self.embedding_dim, self.embedding_dim),
                                           self.activation_fn,
-                                          nn.Linear(self.embedding_dim,1,
-                                                    bias=False))
+                                          nn.Linear(self.embedding_dim,self.embedding_dim//2,
+                                                    bias=False),
+                                          self.activation_fn,
+                                          nn.Linear(self.embedding_dim//2, 1,
+                                                bias=False))
         
-        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=False))  
+        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=False),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 1,
+                                                bias=False))  
          
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
@@ -873,9 +934,16 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         for GW_lag in range(GW_values.shape[1]):
             
-            attn_mask = X[2][:,GW_lag,:][:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            if self.training or mc_dropout:
+                GW_values_DD, GW_mask_DD = self.Densification_Dropout(GW_values[:,GW_lag,:,:],
+                                                                    X[2][:,GW_lag,:])
+            else: 
+                GW_values_DD = GW_values[:,GW_lag,:,:]
+                GW_mask_DD = X[2][:,GW_lag,:]
+            
+            attn_mask = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
             GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
-                                         V = GW_values[:,GW_lag,:,:],
+                                         V = GW_values_DD,
                                          Q = Z_st_coords,
                                          attn_mask = attn_mask))
             
@@ -904,9 +972,27 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                                                          mc_dropout = self.training or mc_dropout)
         
         
-        # Squeeze channel dim
+        ## Squeeze channel dim
+        # Dropout
+        if self.dropout > 0:
+            GW_lag_hidden = GW_out.clone()
+            for tstep in range(GW_lag_hidden.shape[-1]):
+                GW_lag_dropout = nn.functional.dropout1d(GW_lag_hidden[:,:,:,tstep].permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+                GW_lag_hidden[:,:,:,tstep] = GW_lag_dropout.permute((0,2,1))
+                
+            Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+            
+            Displacement_S = nn.functional.dropout1d(Displacement_S.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+            
+            Displacement_GW = Displacement_GW.permute((0,2,1))
+            Displacement_S = Displacement_S.permute((0,2,1))
         
-        GW_lag_out = self.Linear_Lag(GW_out[:,:,:,-1].clone())
+        
+        
+        GW_lag_out = self.Linear_Lag(GW_lag_hidden.permute((0,3,1,2))) # N, D, S,  C, 
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
@@ -915,7 +1001,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         Displacement_S = self.Linear_2_S(Displacement_S)
         
-        Y_hat = GW_lag_out + Displacement_GW + Displacement_S # Euler method
+        Y_hat = GW_lag_out[:,-1,:,:] + Displacement_GW + Displacement_S # Euler method
         
         #Y_hat = self.Output(Y_hat)
         

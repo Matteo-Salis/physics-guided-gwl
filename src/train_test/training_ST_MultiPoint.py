@@ -44,23 +44,23 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                     Y[0],
                                     Y[1])
                         
+                        print("Training_data_loss: ", loss.item(), end = " --- ")
+                        
                         if l2_alpha > 0:
-                            loss += l2_alpha * loss_l2_regularization(model)
+                            l2reg_loss = loss_l2_regularization(model)
+                            loss += l2_alpha * l2reg_loss
+                            print("L2_loss: ", l2reg_loss.item(), end = " --- ")
                         
                         if moe is True:
                             loss += aux_loss
-                            print("Training_data_loss: ", loss.item(),
-                              end = " - "
-                              )
-                            print("aux_moe_loss: ", aux_loss)
+                            print("aux_moe_loss: ", aux_loss, end = " --- ")
                             
-                        else:
-                             print("Training_data_loss: ", loss.item())
+                        print("Total_loss: ", loss.item())
                         
                         loss.backward()
                         optimizer.step()
                         
-                        wandb.log({"Training_data_loss":loss.item()})   
+                        wandb.log({"Training_Total_loss":loss.item()})   
                         
                     # Plots
                     #model.eval()
