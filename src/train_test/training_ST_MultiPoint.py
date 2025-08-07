@@ -145,7 +145,8 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         
                         optimizer.zero_grad()
                         
-                        Y_hat = model(X, W, Z, mc_dropout = True)
+                        Y_hat, Displacement_GW, Displacement_S, _, Lag_GW_hat = model(X, W, Z, mc_dropout = True,
+                                      get_displacement_terms = True, get_lag_term = True)
                             
                         loss = loss_fn(Y_hat,
                                     Y[0],
@@ -156,30 +157,27 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         if l2_alpha > 0:
                             loss += l2_alpha * loss_l2_regularization(model)
                         
-                            
-                        ### Control Points Losses
-                        ## Prediction
-                        Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
-                               tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
-                               eval_mode = False)
-                        
-                        # Displacement_GW_CP
-                        # Displacement_S_CP
-                        
-                            
                         if coherence_alpha > 0:
-                            coh_loss = coherence_alpha * coherence_loss(Y_hat_CP,
+                            coh_loss = coherence_alpha * coherence_loss(X[0],
+                                                                        X[2],
                                                                         dataset.config["loss"],
-                                                                        Lag_GW_CP)
+                                                                        Lag_GW_hat)
                             
                             loss += coh_loss
                             
-                            print(f"CP_COH_loss: {coh_loss.item()}", end = " --- ")
-                            wandb.log({"CP_COH_loss":coh_loss.item()})
+                            print(f"COH_loss: {coh_loss.item()}", end = " --- ")
+                            wandb.log({"COH_loss":coh_loss.item()})
                             
+                        ### Control Points Losses
+                             
                         if diffusion_alpha > 0:
+                            ## Prediction
+                            _, Displacement_GW_CP, _, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
+                                tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
+                                eval_mode = False)
+                            
                             diff_loss = diffusion_alpha * diffusion_loss(
-                                                    Lag_GW = Lag_GW_CP.reshape(tstep_control_points,
+                                                    Lag_GW = Lag_GW_CP[:,-1,:].reshape(tstep_control_points,
                                                                             lat_lon_points[0],
                                                                             lat_lon_points[1]),
                                                     Displacement_GW = Displacement_GW_CP.reshape(tstep_control_points,
@@ -188,7 +186,10 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                                     K = HydrConductivity_CP.reshape(tstep_control_points,
                                                                             lat_lon_points[0],
                                                                             lat_lon_points[1]),
-                                                    res_fn = dataset.config["loss"])
+                                                    res_fn = dataset.config["loss"],
+                                                    normf_mu = dataset.norm_factors["target_means"],
+                                                    normf_sigma = dataset.norm_factors["target_stds"],
+                                                    )
                             
                             loss += diff_loss
                             

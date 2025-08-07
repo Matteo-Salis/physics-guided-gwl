@@ -887,21 +887,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                                 bias=False),
                                         self.activation_fn,
-                                        nn.Linear(self.embedding_dim//2, 2,
-                                                bias=False))
-        
-        self.GW_diffusion = nn.Sequential(nn.Linear(2,self.embedding_dim),
-                                          #nn.LayerNorm(self.embedding_dim),
-                                          self.activation_fn,
-                                          nn.Linear(self.embedding_dim, self.embedding_dim),
-                                          #nn.LayerNorm(self.embedding_dim),
-                                          self.activation_fn,
-                                          nn.Linear(self.embedding_dim, self.embedding_dim),
-                                          self.activation_fn,
-                                          nn.Linear(self.embedding_dim,self.embedding_dim//2,
-                                                    bias=False),
-                                          self.activation_fn,
-                                          nn.Linear(self.embedding_dim//2, 1,
+                                        nn.Linear(self.embedding_dim//2, 1,
                                                 bias=False))
         
         self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
@@ -963,6 +949,16 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Displacement_S = Weather_out.flatten(-2,-1)
         Displacement_S = self.Linear_S(Displacement_S)
         
+        if self.dropout > 0:
+            Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+            
+            Displacement_S = nn.functional.dropout1d(Displacement_S.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+            
+            Displacement_GW = Displacement_GW.permute((0,2,1))
+            Displacement_S = Displacement_S.permute((0,2,1))
+        
         for i in range(self.displacement_mod_blocks):
             
                 Displacement_GW = getattr(self, f"Displacement_Module_GW_{i}")(Displacement_GW,
@@ -973,37 +969,16 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         
         ## Squeeze channel dim
-        # Dropout
-        if self.dropout > 0:
-            GW_lag_hidden = GW_out.clone()
-            for tstep in range(GW_lag_hidden.shape[-1]):
-                GW_lag_dropout = nn.functional.dropout1d(GW_lag_hidden[:,:,:,tstep].permute((0,2,1)),
-                                                p = self.dropout, training = self.training or mc_dropout)
-                GW_lag_hidden[:,:,:,tstep] = GW_lag_dropout.permute((0,2,1))
-                
-            Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
-                                                p = self.dropout, training = self.training or mc_dropout)
-            
-            Displacement_S = nn.functional.dropout1d(Displacement_S.permute((0,2,1)),
-                                                p = self.dropout, training = self.training or mc_dropout)
-            
-            Displacement_GW = Displacement_GW.permute((0,2,1))
-            Displacement_S = Displacement_S.permute((0,2,1))
         
-        
-        
-        GW_lag_out = self.Linear_Lag(GW_lag_hidden.permute((0,3,1,2))) # N, D, S,  C, 
+        GW_lag_out = self.Linear_Lag(GW_out.clone().permute((0,3,1,2))) # N, D, S,  C, 
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
         Displacement_GW = HydrConductivity * Displacement_GW # Weight by HydrConductivity: ISOTROPIC Conductivity Field
-        Displacement_GW = self.GW_diffusion(Displacement_GW)
         
         Displacement_S = self.Linear_2_S(Displacement_S)
         
         Y_hat = GW_lag_out[:,-1,:,:] + Displacement_GW + Displacement_S # Euler method
-        
-        #Y_hat = self.Output(Y_hat)
         
         if get_displacement_terms is False:
             

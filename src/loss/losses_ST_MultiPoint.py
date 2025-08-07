@@ -64,31 +64,14 @@ def displacement_reg():
     
 #     return penalty
 
-def coherence_loss(Y_hat,
+def coherence_loss(Lag_GW_true,
+                Lag_GW_true_mask,
                 res_fn,
-                Lag_GW = None,
-                **kwargs):
+                Lag_GW_hat = None):
     
     # Y_hat, Displacement_GW, and Displacement_S no batch dimension
-    
-    Y_hat_t0 = Y_hat[:-1,:].clone()
-    
-    if Lag_GW is not None:
-        Lag_GW_t1 = Lag_GW[1:,:].clone()
-        Truth = Y_hat_t0
-        residuals = Truth-Lag_GW_t1
-    
-    else:
-        # if lag not provived, compute on the displacement terms
-        Y_hat_t1 = Y_hat[1:,:].clone()
-        
-        kwargs["Displacement_GW"] = kwargs["Displacement_GW"][1:,:].clone()
-        kwargs["Displacement_S"] = kwargs["Displacement_S"][1:,:].clone()
-        
-        Y_hat_diff = Y_hat_t1-Y_hat_t0
-        Truth = Y_hat_diff
-        
-        residuals = Truth - (kwargs["Displacement_GW"] + kwargs["Displacement_S"])
+    not_Lag_GW_true_mask = ~Lag_GW_true_mask
+    residuals = Lag_GW_true[not_Lag_GW_true_mask] - Lag_GW_hat[not_Lag_GW_true_mask]
     
     if res_fn == "mse":
         return torch.mean(residuals**2)
@@ -97,32 +80,37 @@ def coherence_loss(Y_hat,
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/Truth))
+        return torch.mean(torch.abs(residuals/(Lag_GW_true[not_Lag_GW_true_mask] + 1e-7)))
 
-def diffusion_loss(Lag_GW, Displacement_GW, K, res_fn):
+def diffusion_loss(Lag_GW, Displacement_GW, K,
+                   normf_mu, normf_sigma,
+                   res_fn):
+    
+    Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
+    K_denorm = K*normf_sigma
+    Displacement_GW_denorm = Displacement_GW*normf_sigma
     
     spatial_grads = []
     
-    for t in range(Lag_GW.shape[0]):
+    for t in range(Lag_GW_denorm.shape[0]):
     
-        Lag_GW_t = Lag_GW[t,:,:][None,None,:,:]
+        Lag_GW_t = Lag_GW_denorm[t,:,:][None,None,:,:]
         
-        dh_dy = Fdiff_conv(Lag_GW_t, mode = "first_lat")
-        dh_dx = Fdiff_conv(Lag_GW_t, mode = "first_lon")
+        lon_2derivative = Fdiff_conv(Lag_GW_t,
+                                mode = "centered_lon",
+                                der_order = 2)
+
+        lat_2derivative = Fdiff_conv(Lag_GW_t,
+                                mode = "centered_lat",
+                                der_order = 2)
         
-        dh_dy = dh_dy * K[t,:,:][None,None,:,:]
-        dh_dx = dh_dx * K[t,:,:][None,None,:,:]
-        
-        dh_dydy = Fdiff_conv(dh_dy, mode = "first_lat")
-        dh_dxdx = Fdiff_conv(dh_dx, mode = "first_lon")
-    
-        spatial_grad = dh_dydy + dh_dxdx
+        spatial_grad = (lon_2derivative + lat_2derivative)*K_denorm[t,:,:][None,None,:,:]
         
         spatial_grads.append(spatial_grad)
-        
+
     spatial_grads = torch.cat(spatial_grads, dim = 1).to(Lag_GW.device).squeeze()
-    print(spatial_grad)
-    residuals = Displacement_GW - spatial_grads
+    residuals = Displacement_GW_denorm - spatial_grads
+    residuals = residuals/normf_sigma
         
     if res_fn == "mse":
         return torch.mean(residuals**2)
@@ -131,29 +119,46 @@ def diffusion_loss(Lag_GW, Displacement_GW, K, res_fn):
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/spatial_grads))
+        return torch.mean(torch.abs(residuals/(spatial_grads/normf_sigma)))
 
-def Fdiff_conv(x, dx, mode = "first_lon"):
-    if mode == "first_lon":
-        kernel = torch.Tensor([[0.,0.,0.],
-                               [0.,-1.,1.],
-                               [0.,0.,0.]])
-    elif mode == "first_lat":
-        kernel = torch.Tensor([[0.,1.,0.],
-                               [0.,-1.,0.],
-                               [0.,0.,0.]])
+def Fdiff_conv(x, mode = "first_lon", der_order = 1):
+    """
+    Finite Difference Approximation using Convolution 
+    """
+    if der_order == 1:
+        if mode == "first_lon":
+            kernel = torch.Tensor([[0.,0.,0.],
+                                [0.,-1.,1.],
+                                [0.,0.,0.]])
+        elif mode == "first_lat":
+            kernel = torch.Tensor([[0.,1.,0.],
+                                [0.,-1.,0.],
+                                [0.,0.,0.]])
+            
+        elif mode == "first_all":
+            kernel = torch.Tensor([[1.,1.,1.],
+                                [1.,-8.,1.],
+                                [1.,1.,1.]])
+            
+        elif mode == "second_lon":
+            
+            kernel = torch.Tensor([[0.,0.,0.],
+                                [-0.5,0,0.5],
+                                [0.,0.,0.]])
+    elif der_order == 2:
         
-    elif mode == "first_all":
-        kernel = torch.Tensor([[1.,1.,1.],
-                               [1.,-8.,1.],
-                               [1.,1.,1.]])
+        if mode == "centered_lon":
+            kernel = torch.Tensor([[0.,0.,0.],
+                                [1.,-2.,1.],
+                                [0.,0.,0.]])
+            
+        elif mode == "centered_lat":
+            kernel = torch.Tensor([[0.,1.,0.],
+                                [0.,-2.,0.],
+                                [0.,1.,0.]])
         
-    elif mode == "second_lon":
         
-        kernel = torch.Tensor([[0.,0.,0.],
-                               [-0.5,0,0.5],
-                               [0.,0.,0.]])
-        
+            
     kernel = kernel.view(1,1,3,3).to(x.device) #(out_channels, in_channels, kH, KW)
     
     # Padding 
