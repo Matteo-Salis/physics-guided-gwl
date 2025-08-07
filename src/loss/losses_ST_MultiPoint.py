@@ -133,7 +133,7 @@ def diffusion_loss(Lag_GW, Displacement_GW, K, res_fn):
     elif res_fn == "mape":
         return torch.mean(torch.abs(residuals/spatial_grads))
 
-def Fdiff_conv(x, mode = "first_lon"):
+def Fdiff_conv(x, dx, mode = "first_lon"):
     if mode == "first_lon":
         kernel = torch.Tensor([[0.,0.,0.],
                                [0.,-1.,1.],
@@ -148,13 +148,11 @@ def Fdiff_conv(x, mode = "first_lon"):
                                [1.,-8.,1.],
                                [1.,1.,1.]])
         
-    elif mode == "second":
+    elif mode == "second_lon":
         
-        # TODO
-        pass
-        # kernel = torch.Tensor([[0.,0.,0.],
-        #                        [-1,0,1],
-        #                        [0.,0.,0.]])
+        kernel = torch.Tensor([[0.,0.,0.],
+                               [-0.5,0,0.5],
+                               [0.,0.,0.]])
         
     kernel = kernel.view(1,1,3,3).to(x.device) #(out_channels, in_channels, kH, KW)
     

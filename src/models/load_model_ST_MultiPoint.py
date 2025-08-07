@@ -18,7 +18,9 @@ def load_model(config):
                 joint_mod_heads = config["joint_mod_heads"],
                 GW_W_temp_dim = [len(config["target_lags"]),
                                  config["weather_lags"]+1],
-                dropout = config["dropout"], 
+                dropout = config["dropout"],
+                densification_dropout_p = config["densification_dropout_p"],
+                densification_dropout_dv = config["fill_value"],
                 activation = config["activation"])
         
     
@@ -57,6 +59,8 @@ def load_model(config):
                 GW_W_temp_dim = [len(config["target_lags"]),
                                  config["weather_lags"]+1],
                 dropout = config["dropout"], 
+                densification_dropout_p = config["densification_dropout_p"],
+                densification_dropout_dv = config["fill_value"],
                 activation = config["activation"])
         
     elif config["model"] == "ST_MultiPoint_DisNet_alt":
