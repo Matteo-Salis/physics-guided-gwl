@@ -23,6 +23,26 @@ def load_model(config):
                 densification_dropout_dv = config["fill_value"],
                 activation = config["activation"])
         
+    elif config["model"] == "ST_MultiPoint_Net_OnlyLag":
+        
+        model_name = "ST_MultiPoint_Net_OnlyLag"
+        print(f"Model: {model_name}")
+        
+        model = ST_MultiPoint_Net_OnlyLag(
+                value_dim_GW = config["GW_value_input_dim"],
+                value_dim_Weather = config["Weather_value_input_dim"], 
+                embedding_dim = config["embedding_dim"],
+                st_coords_dim = config["st_coords_input_dim"],
+                spatial_mha_heads = config["spatial_mha_heads"],
+                joint_mod_blocks = config["joint_mod_blocks"],
+                joint_mod_heads = config["joint_mod_heads"],
+                GW_W_temp_dim = [len(config["target_lags"]),
+                                 config["weather_lags"]+1],
+                dropout = config["dropout"],
+                densification_dropout_p = config["densification_dropout_p"],
+                densification_dropout_dv = config["fill_value"],
+                activation = config["activation"])
+        
     
     elif config["model"] == "ST_MultiPoint_DisNet":
         

@@ -591,6 +591,144 @@ class ST_MultiPoint_Net(nn.Module):
         Output = self.Output(Output)
         
         return Output.squeeze()
+    
+    
+class ST_MultiPoint_Net_OnlyLag(nn.Module):
+    
+    def __init__(self,
+                value_dim_GW = 6,
+                value_dim_Weather = 9, 
+                embedding_dim = 16,
+                st_coords_dim = 5,
+                spatial_mha_heads = 2,
+                joint_mod_blocks = 1,
+                joint_mod_heads = 2,
+                GW_W_temp_dim = [2,5],
+                densification_dropout_p = 0.25,
+                densification_dropout_dv = 0,
+                dropout = 0.2, 
+                activation = "GELU"):
+        
+        super().__init__()
+        
+        self.value_dim_GW = value_dim_GW
+        self.value_dim_Weather = value_dim_Weather
+        self.embedding_dim = embedding_dim
+        self.st_coords_dim = st_coords_dim
+        self.spatial_mha_heads = spatial_mha_heads
+        self.joint_mod_blocks = joint_mod_blocks
+        self.joint_mod_heads = joint_mod_heads
+        self.GW_W_temp_dim = GW_W_temp_dim
+        self.densification_dropout_p = densification_dropout_p
+        self.densification_dropout_dv = densification_dropout_dv
+        self.dropout = dropout
+        self.activation = activation
+        
+        if self.activation == "LeakyReLU":
+            self.activation_fn = nn.LeakyReLU()
+        elif self.activation == "GELU":
+            self.activation_fn = nn.GELU()
+        
+        ### Embedding #####
+        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = True)
+
+        
+        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+                                            hidden_channels = self.embedding_dim,
+                                            out_channels= self.embedding_dim,
+                                            activation = self.activation,
+                                            LayerNorm = True)
+        
+        ### Densification Dropout 
+        
+        self.Densification_Dropout = Densification_Dropout(drop_value=self.densification_dropout_dv,
+                                                           p = self.densification_dropout_p)
+        
+        
+        ### Spatial Modules #####
+        self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
+                                                heads = self.spatial_mha_heads,
+                                                output_channels = self.embedding_dim,
+                                                activation = self.activation,
+                                                elementwise_affine = True)
+        
+        ### Joint Modules #####
+        
+        self.Linear = nn.Sequential(nn.Linear(int(self.embedding_dim*(self.GW_W_temp_dim[0])),
+                                                self.embedding_dim),
+                                      self.activation_fn)
+        
+        for i in range(self.joint_mod_blocks):
+            setattr(self, f"Joint_Module_{i}",
+                        MHA_Block(self.embedding_dim,
+                                self.joint_mod_heads,
+                                self.activation,
+                                elementwise_affine = True,
+                                dropout_p = 0))
+            
+        ### Output Layers #####
+        
+        self.Output = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                              bias = False),
+                                    self.activation_fn,
+                                    nn.Linear(self.embedding_dim//2, 1, bias = False))        
+        
+    def forward(self, X, W, Z, mc_dropout = False):
+        
+        ### Embedding #####
+        
+        GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
+                               X[1]], dim = -1)) #N, D, S, C
+        
+        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        
+        Z_st_coords = self.ST_coords_Embedding(Z)
+                
+        GW_out = []
+        Weather_out = []
+        
+        for GW_lag in range(GW_values.shape[1]):
+            
+            if self.training or mc_dropout:
+                GW_values_DD, GW_mask_DD = self.Densification_Dropout(GW_values[:,GW_lag,:,:],
+                                                                    X[2][:,GW_lag,:])
+            
+            else: 
+                GW_values_DD = GW_values[:,GW_lag,:,:]
+                GW_mask_DD = X[2][:,GW_lag,:]
+            
+            attn_mask = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+                                         V = GW_values_DD,
+                                         Q = Z_st_coords,
+                                         attn_mask = attn_mask))
+            
+        GW_out = torch.stack(GW_out, dim = -1)
+        
+        # Joint modules
+        Output =GW_out.flatten(-2,-1)
+        
+        Output = self.Linear(Output)
+        
+        for i in range(self.joint_mod_blocks):
+            
+                Output = getattr(self, f"Joint_Module_{i}")(Output,
+                                                        mc_dropout = self.training or mc_dropout)
+        
+        # Skip connection with last observation
+        if self.dropout > 0:
+            Output = nn.functional.dropout1d(Output.permute((0,2,1)),
+                                                p = self.dropout, training = self.training or mc_dropout)
+                
+            Output = Output.permute((0,2,1))
+            
+        Output = self.Output(Output)
+        
+        return Output.squeeze()
 
 class ST_MultiPoint_DisNet(nn.Module):
     
@@ -803,19 +941,19 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
         
         self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
         
         self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            LayerNorm = False)
+                                            LayerNorm = True)
         
         ### Densification Dropout 
         
@@ -829,7 +967,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                     hidden_channels = self.embedding_dim,
                                     out_channels= self.embedding_dim,
                                     activation = self.activation,
-                                    LayerNorm = False)
+                                    LayerNorm = True)
         
         self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=False),
                                                      nn.Softplus())
@@ -879,22 +1017,22 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ### Output Layers #####
         
         self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=False),
+                                                bias=True),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
-                                                bias=False))
+                                                bias=True))
         
         self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=False),
+                                                bias=True),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
-                                                bias=False))
+                                                bias=True))
         
         self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=False),
+                                                bias=True),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
-                                                bias=False))  
+                                                bias=True))  
          
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):

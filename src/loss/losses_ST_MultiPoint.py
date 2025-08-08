@@ -52,17 +52,53 @@ def loss_masked_mape(Y_hat, Y, Y_mask):
 ######################
 
 ##VEDI DeBenzac e optical flow
-def displacement_reg():
-    pass
+def displacement_reg(displacement_term,
+                     res_fn):
+    
+    if res_fn == "mse":
+        return torch.mean(displacement_term**2)
+    
+    elif res_fn == "mae" or res_fn == "mape":
+        return torch.mean(torch.abs(displacement_term))
+    
 
-# def HydroConductivity_reg(HC, denorm_sigma = None):
+def smoothness_reg(prediction,
+                    mode,
+                    step = 1):
     
-#     if denorm_sigma is not None:
-#       HC = HC * denorm_sigma
+    if mode == "lon_lat":
+        spatial_grads_lat = []
+        spatial_grads_lon = []
+        for t in range(prediction.shape[0]):
+            prediction_t = prediction[t,:,:][None,None,:,:]
+
+            lat_1derivative = Fdiff_conv(prediction_t,
+                                    mode = "centered_lat",
+                                    der_order = 1)
+            lat_1derivative = lat_1derivative / step
+            
+            lon_1derivative = Fdiff_conv(prediction_t,
+                                    mode = "centered_lon",
+                                    der_order = 1)
+            lon_1derivative = lon_1derivative / step
+            
+            spatial_grads_lat.append(lat_1derivative)
+            spatial_grads_lon.append(lon_1derivative)
+            
+        spatial_grads_lat = torch.stack(spatial_grads_lat, dim = 0).to(prediction.device).squeeze()
+        spatial_grads_lon = torch.stack(spatial_grads_lon, dim = 0).to(prediction.device).squeeze()
+        
+        loss_lat = torch.mean(spatial_grads_lat**2)
+        loss_lon = torch.mean(spatial_grads_lon**2)
+        
+        return [loss_lat, loss_lon]
+            
+    elif mode == "temp":
+        
+        temp_1derivative = torch.diff(prediction, n=1, dim=0) 
     
-#     penalty = torch.relu(-HC).sum()
-    
-#     return penalty
+        return torch.mean(temp_1derivative**2)
+
 
 def coherence_loss(Lag_GW_true,
                 Lag_GW_true_mask,
@@ -84,7 +120,9 @@ def coherence_loss(Lag_GW_true,
 
 def diffusion_loss(Lag_GW, Displacement_GW, K,
                    normf_mu, normf_sigma,
-                   res_fn):
+                   res_fn,
+                   dx = 1820,
+                   dy = 2586):
     
     Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
     K_denorm = K*normf_sigma
@@ -99,10 +137,12 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
         lon_2derivative = Fdiff_conv(Lag_GW_t,
                                 mode = "centered_lon",
                                 der_order = 2)
+        lon_2derivative = lon_2derivative / (dx**2)
 
         lat_2derivative = Fdiff_conv(Lag_GW_t,
                                 mode = "centered_lat",
                                 der_order = 2)
+        lat_2derivative = lat_2derivative / (dy**2)
         
         spatial_grad = (lon_2derivative + lat_2derivative)*K_denorm[t,:,:][None,None,:,:]
         
@@ -119,7 +159,7 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/(spatial_grads/normf_sigma)))
+        return torch.mean(torch.abs(residuals/((spatial_grads+1e-5)/normf_sigma)))
 
 def Fdiff_conv(x, mode = "first_lon", der_order = 1):
     """
@@ -140,11 +180,19 @@ def Fdiff_conv(x, mode = "first_lon", der_order = 1):
                                 [1.,-8.,1.],
                                 [1.,1.,1.]])
             
-        elif mode == "second_lon":
+        elif mode == "centered_lon":
             
             kernel = torch.Tensor([[0.,0.,0.],
-                                [-0.5,0,0.5],
+                                [-0.5,0.,0.5],
                                 [0.,0.,0.]])
+            
+        elif mode == "centered_lat":
+            
+            kernel = torch.Tensor([[0.,0.5,0.],
+                                [0.,0.,0.],
+                                [0.,-0.5,0.]])
+            
+            
     elif der_order == 2:
         
         if mode == "centered_lon":
