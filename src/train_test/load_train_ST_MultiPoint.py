@@ -35,6 +35,10 @@ def training_model(config):
             coherence_alpha = config["coherence_alpha"]
             tstep_control_points = config["tstep_control_points"]
             diffusion_alpha = config["diffusion_alpha"]
+            reg_diffusion_alpha = config["reg_diffusion_alpha"]
+            reg_displacement_S = config["reg_displacement_S"]
+            reg_latlon_smoothness = config["reg_latlon_smoothness"]
+            reg_temp_smoothness = config["reg_temp_smoothness"]
             
             return partial(physics_guided_trainer, start_dates_plot = start_dates_plot_training,
                            n_pred_plot = n_pred_plot,
@@ -46,6 +50,10 @@ def training_model(config):
                            l2_alpha = l2_alpha,
                            diffusion_alpha = diffusion_alpha,
                            coherence_alpha = coherence_alpha,
+                           reg_diffusion_alpha = reg_diffusion_alpha,
+                           reg_displacement_S = reg_displacement_S,
+                           reg_latlon_smoothness = reg_latlon_smoothness,
+                           reg_temp_smoothness = reg_temp_smoothness,
                            plot_displacements = plot_displacements)
             
     else:
