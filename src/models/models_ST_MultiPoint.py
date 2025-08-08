@@ -969,7 +969,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                     activation = self.activation,
                                     LayerNorm = True)
         
-        self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=False),
+        self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=True),
                                                      nn.Softplus())
         
         ### Spatial Modules #####
@@ -996,7 +996,6 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ## Source/Sink 
         self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
                                                 self.embedding_dim),
-                                    nn.LayerNorm(self.embedding_dim),
                                     self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
@@ -1018,18 +1017,21 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                                 bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))
         
         self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                                 bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))
         
         self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                                 bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
                                         self.activation_fn,
                                         nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))  
