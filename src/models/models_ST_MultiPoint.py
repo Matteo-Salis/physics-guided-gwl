@@ -1126,7 +1126,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Displacement_S = self.Linear_2_S(Displacement_S)
         
         #SUM
-        Y_hat = GW_lag_out[:,-1,:,:] + Displacement_GW + Displacement_S # Euler method
+        Y_hat = GW_lag_out[:,0,:,:] + Displacement_GW + Displacement_S # Euler method
         
         #Concat
         # Y_hat = torch.cat([GW_lag_out[:,-1,:,:],
