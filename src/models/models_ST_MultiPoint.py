@@ -1015,26 +1015,33 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Output Layers #####
         
-        self.Linear_Lag = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=True),
-                                        nn.LayerNorm(self.embedding_dim//2),
-                                        self.activation_fn,
-                                        nn.Linear(self.embedding_dim//2, 1,
+        self.Linear_Lag = nn.Sequential(
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        #         bias=True),
+                                        # nn.LayerNorm(self.embedding_dim),
+                                        # self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1,
                                                 bias=True))
         
-        self.Linear_2_GW = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=True),
-                                        nn.LayerNorm(self.embedding_dim//2),
-                                        self.activation_fn,
-                                        nn.Linear(self.embedding_dim//2, 1,
+        self.Linear_2_GW = nn.Sequential(
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        #         bias=True),
+                                        # nn.LayerNorm(self.embedding_dim),
+                                        # self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1,
                                                 bias=True))
         
-        self.Linear_2_S = nn.Sequential(nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                                bias=True),
-                                        nn.LayerNorm(self.embedding_dim//2),
-                                        self.activation_fn,
-                                        nn.Linear(self.embedding_dim//2, 1,
-                                                bias=True))  
+        self.Linear_2_S = nn.Sequential(
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        #         bias=True),
+                                        # nn.LayerNorm(self.embedding_dim),
+                                        # self.activation_fn,
+                                        nn.Linear(self.embedding_dim, 1,
+                                                bias=True))
+        
+        # self.Output = nn.Sequential(nn.Linear(3,1),
+        #                             self.activation_fn,
+        #                             nn.Linear(1,1))
          
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
@@ -1110,7 +1117,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ## Squeeze channel dim
         
-        GW_lag_out = self.Linear_Lag(GW_out.clone().permute((0,3,1,2))) # N, D, S,  C, 
+        GW_lag_out = self.Linear_Lag(GW_out.permute((0,3,1,2))) # N, D, S,  C, 
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
@@ -1118,7 +1125,16 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         Displacement_S = self.Linear_2_S(Displacement_S)
         
+        #SUM
         Y_hat = GW_lag_out[:,-1,:,:] + Displacement_GW + Displacement_S # Euler method
+        
+        #Concat
+        # Y_hat = torch.cat([GW_lag_out[:,-1,:,:],
+        #                    Displacement_GW,
+        #                    Displacement_S],
+        #                   dim = -1) 
+        
+        # Y_hat = self.Output(Y_hat)
         
         if get_displacement_terms is False:
             
