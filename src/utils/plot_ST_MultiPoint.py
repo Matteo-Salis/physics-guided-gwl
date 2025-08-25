@@ -40,7 +40,7 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
                        torch.ones((Z.shape[0],1))*doy_cos],
                       dim = -1).to(torch.float32)
         
-    
+    Z = Z.to(device)
     Y, _ = dataset.get_target_values(subset_df)
     
     if get_displacement_terms is False:
@@ -52,8 +52,8 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
                     Z = Z.unsqueeze(0).to(device)
                     )
         
-        output = [Y.detach().cpu(),
-            Y_hat.detach().cpu()]
+        output = [Y,
+            Y_hat]
     
     else:
         
@@ -66,12 +66,12 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
                     get_displacement_terms = get_displacement_terms,
                     get_lag_term = get_displacement_terms)
         
-        output = [Y.detach().cpu(),
-            Y_hat.detach().cpu(),
-            Displacement_GW.detach().cpu(),
-            Displacement_S.detach().cpu(),
-            hydrConductivity.detach().cpu(),
-            Lag_GW.detach().cpu()]
+        output = [Y,
+            Y_hat,
+            Displacement_GW,
+            Displacement_S,
+            hydrConductivity,
+            Lag_GW]
     
     if get_Z is True:
         output.append(Z)
@@ -137,7 +137,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             
             X_deque[0].append(Y_hat)
             X_deque[1].append(Z_pred)
-            X_deque[2].append(torch.zeros_like(Y_hat).to(torch.bool))
+            X_deque[2].append(torch.zeros_like(Y_hat).to(torch.bool).to(device))
             
             predictions.append(Y_hat)
             true.append(Y)
@@ -149,23 +149,23 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 Lag_GW.append(pred_list[5])
             
             if i >= len(dataset.target_lags):
-                X = [torch.stack(list(X_deque[0])),
-                     torch.stack(list(X_deque[1])),
-                     torch.stack(list(X_deque[2]))]
+                X = [torch.stack(list(X_deque[0])).to(device),
+                     torch.stack(list(X_deque[1])).to(device),
+                     torch.stack(list(X_deque[2])).to(device)]
             
-    true = torch.stack(true, dim = 0)
-    predictions = torch.stack(predictions, dim = 0)
+    true = torch.stack(true, dim = 0).to(device)
+    predictions = torch.stack(predictions, dim = 0).to(device)
     
     output_list = [true, predictions]
     
     if get_displacement_terms is True:
-        Displacement_GW = torch.stack(Displacement_GW)
+        Displacement_GW = torch.stack(Displacement_GW).to(device)
         output_list.append(Displacement_GW)
-        Displacement_S = torch.stack(Displacement_S)
+        Displacement_S = torch.stack(Displacement_S).to(device)
         output_list.append(Displacement_S)
-        hydrConductivity = torch.stack(hydrConductivity)
+        hydrConductivity = torch.stack(hydrConductivity).to(device)
         output_list.append(hydrConductivity)
-        Lag_GW = torch.stack(Lag_GW)
+        Lag_GW = torch.stack(Lag_GW).to(device)
         output_list.append(Lag_GW)
         
     return output_list
@@ -253,8 +253,8 @@ def wandb_time_series(dataset, model, device,
                                                                   n_pred,
                                                                   iter_pred = eval_mode)
             
-            prediction_ds = build_ds_from_pred(predictions, dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
-            true_ds = build_ds_from_pred(true, dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
+            prediction_ds = build_ds_from_pred(predictions.detach().cpu(), dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
+            true_ds = build_ds_from_pred(true.detach().cpu(), dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
            
             # Denormalization
             if dataset.config["normalization"] is True and dataset.config["target_norm_type"] is not None:
@@ -294,7 +294,7 @@ def wandb_video(dataset, model, device,
                                                                   Z_grid = Z_grid,
                                                                   iter_pred = eval_mode)
             
-            predictions_grid = predictions.reshape(n_pred,lat_points,lon_points)
+            predictions_grid = predictions.reshape(n_pred,lat_points,lon_points).detach().cpu()
             
             # Denormalization
             if dataset.config["normalization"] is True:
@@ -368,10 +368,10 @@ def wandb_video_displacements(dataset, model, device,
                                                                   iter_pred = eval_mode,
                                                                   get_displacement_terms = True)
             
-            predictions_grid = predictions.reshape(n_pred,lat_points,lon_points)
-            displacement_gw_grid = displacement_gw.reshape(n_pred,lat_points,lon_points)
-            displacement_s_grid = displacement_s.reshape(n_pred,lat_points,lon_points)
-            hydrConductivity_grid = hydrConductivity.reshape(n_pred,lat_points,lon_points)
+            predictions_grid = predictions.reshape(n_pred,lat_points,lon_points).detach().cpu()
+            displacement_gw_grid = displacement_gw.reshape(n_pred,lat_points,lon_points).detach().cpu()
+            displacement_s_grid = displacement_s.reshape(n_pred,lat_points,lon_points).detach().cpu()
+            hydrConductivity_grid = hydrConductivity.reshape(n_pred,lat_points,lon_points).detach().cpu()
             
             # Denormalization
             if dataset.config["normalization"] is True:
