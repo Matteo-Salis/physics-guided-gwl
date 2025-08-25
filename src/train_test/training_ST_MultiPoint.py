@@ -255,7 +255,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 
                             if reg_temp_smoothness > 0:
                                 
-                                reg_smoothness_temp_pred = reg_latlon_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
+                                reg_smoothness_temp_pred = reg_temp_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
                                 print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),5)}", end = " -- ")
                                 loss += reg_smoothness_temp_pred
                                 

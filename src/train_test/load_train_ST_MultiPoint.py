@@ -33,12 +33,19 @@ def training_model(config):
         else:
             
             coherence_alpha = config["coherence_alpha"]
+            print("coherence_alpha: ", coherence_alpha)
             tstep_control_points = config["tstep_control_points"]
+            print("tstep_control_points: ", tstep_control_points)
             diffusion_alpha = config["diffusion_alpha"]
+            print("diffusion_alpha: ", diffusion_alpha)
             reg_diffusion_alpha = config["reg_diffusion_alpha"]
+            print("reg_diffusion_alpha: ", reg_diffusion_alpha)
             reg_displacement_S = config["reg_displacement_S"]
+            print("reg_displacement_S: ", reg_displacement_S)
             reg_latlon_smoothness = config["reg_latlon_smoothness"]
+            print("reg_latlon_smoothness: ", reg_latlon_smoothness)
             reg_temp_smoothness = config["reg_temp_smoothness"]
+            print("reg_temp_smoothness: ", reg_temp_smoothness)
             
             return partial(physics_guided_trainer, start_dates_plot = start_dates_plot_training,
                            n_pred_plot = n_pred_plot,

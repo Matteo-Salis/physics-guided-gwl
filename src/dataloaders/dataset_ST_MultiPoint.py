@@ -64,7 +64,7 @@ class Dataset_ST_MultiPoint(Dataset):
         self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
         
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
-        self.weather_xr = self.weather_xr[["prec", "tmax", "tmin", "tmean"]]
+        self.weather_xr = self.weather_xr[self.config["weather_variables"]]
         
         self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
                                                engine='fiona')
@@ -312,8 +312,10 @@ class Dataset_ST_MultiPoint(Dataset):
         norm_weather_var = [var for var in norm_weather_var if var not in ["tmax","tmin"]]
         self.weather_xr[norm_weather_var] = (self.weather_xr[norm_weather_var] - self.norm_factors["weather_mean"][norm_weather_var])/self.norm_factors["weather_std"][norm_weather_var]
         
-        self.weather_xr["tmin"] = (self.weather_xr["tmin"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
-        self.weather_xr["tmax"] = (self.weather_xr["tmax"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
+        if "tmin" in self.config["weather_variables"]:
+            self.weather_xr["tmin"] = (self.weather_xr["tmin"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
+        if "tmax" in self.config["weather_variables"]:
+            self.weather_xr["tmax"] = (self.weather_xr["tmax"] - self.norm_factors["weather_mean"]["tmean"])/self.norm_factors["weather_std"]["tmean"]
         
         self.weather_coords[:,:,0] = (self.weather_coords[:,:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
         self.weather_coords[:,:,1] = (self.weather_coords[:,:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
