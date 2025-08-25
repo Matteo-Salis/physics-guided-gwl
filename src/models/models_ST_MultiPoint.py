@@ -510,7 +510,8 @@ class ST_MultiPoint_Net(nn.Module):
         
         self.Linear = nn.Sequential(nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
                                                 self.embedding_dim),
-                                      self.activation_fn)
+                                    nn.LayerNorm(self.embedding_dim),
+                                    self.activation_fn)
         
         for i in range(self.joint_mod_blocks):
             setattr(self, f"Joint_Module_{i}",
@@ -991,11 +992,13 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ## GW
         self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[0]),
                                                 self.embedding_dim),
-                                      self.activation_fn)
+                                    nn.LayerNorm(self.embedding_dim),
+                                    self.activation_fn)
         
         ## Source/Sink 
         self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
                                                 self.embedding_dim),
+                                    nn.LayerNorm(self.embedding_dim),
                                     self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
