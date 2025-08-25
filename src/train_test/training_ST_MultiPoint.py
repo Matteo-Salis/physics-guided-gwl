@@ -162,7 +162,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         if coherence_alpha > 0:
                             coh_loss = coherence_alpha * coherence_loss(X[0],
                                                                         X[2],
-                                                                        "mse",
+                                                                        dataset.config["loss"],
                                                                         Lag_GW_hat)
                             
                             loss += coh_loss
@@ -246,9 +246,6 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                                                                 lat_lon_points[0],
                                                                                 lat_lon_points[1]), mode = "lon_lat"))
                                 
-                                # reg_smoothness_latlon_pred = reg_latlon_smoothness * sum(smoothness_reg(Y_hat_CP.reshape(tstep_control_points,
-                                #                                                 lat_lon_points[0],
-                                #                                                 lat_lon_points[1]), mode = "lon_lat"))
                                 
                                 print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),5)}; {round(reg_smoothness_latlon_dis_s.item(),5)}", end = " -- ")
                                 loss += reg_smoothness_latlon_dis_gw + reg_smoothness_latlon_dis_s
