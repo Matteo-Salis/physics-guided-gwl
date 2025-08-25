@@ -103,7 +103,7 @@ def smoothness_reg(prediction,
 def coherence_loss(Lag_GW_true,
                 Lag_GW_true_mask,
                 res_fn,
-                Lag_GW_hat = None):
+                Lag_GW_hat):
     
     # Y_hat, Displacement_GW, and Displacement_S no batch dimension
     not_Lag_GW_true_mask = ~Lag_GW_true_mask
