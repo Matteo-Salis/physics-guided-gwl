@@ -171,7 +171,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             wandb.log({"COH_loss":coh_loss.item()})
                             
                         if reg_diffusion_alpha>0:
-                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW/(HydrConductivity+1e-5),
+                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW/(HydrConductivity+1e-7),
                                                                         res_fn = "mse")
                             
                                 loss += reg_diffusion_loss
@@ -201,7 +201,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                             if diffusion_alpha > 0:
                                 diff_loss = diffusion_alpha * diffusion_loss(
-                                                        Lag_GW = Lag_GW_CP[:,-1,:].reshape(tstep_control_points,
+                                                        Lag_GW = Lag_GW_CP[:,0,:].reshape(tstep_control_points,
                                                                                 lat_lon_points[0],
                                                                                 lat_lon_points[1]),
                                                         Displacement_GW = Displacement_GW_CP.reshape(tstep_control_points,
@@ -221,7 +221,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 wandb.log({"CP_Diff_loss":diff_loss.item()})
                             
                             if reg_diffusion_alpha>0:
-                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-5),
+                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-7),
                                                                         res_fn = "mse")
                             
                                 loss += reg_diffusion_loss
@@ -247,13 +247,13 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                                                                 lat_lon_points[1]), mode = "lon_lat"))
                                 
                                 
-                                print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),5)}; {round(reg_smoothness_latlon_dis_s.item(),5)}", end = " -- ")
+                                print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),7)}; {round(reg_smoothness_latlon_dis_s.item(),7)}", end = " -- ")
                                 loss += reg_smoothness_latlon_dis_gw + reg_smoothness_latlon_dis_s
                                 
                             if reg_temp_smoothness > 0:
                                 
                                 reg_smoothness_temp_pred = reg_temp_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
-                                print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),5)}", end = " -- ")
+                                print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),7)}", end = " -- ")
                                 loss += reg_smoothness_temp_pred
                                 
                                 
