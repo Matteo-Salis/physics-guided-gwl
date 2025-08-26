@@ -421,19 +421,19 @@ class Dataset_ST_MultiPoint(Dataset):
         return coords
 
             
-    #def sparse_target_coords_object(self):
-        self.sparse_target_coords = self.wtd_df.loc[pd.IndexSlice[self.input_dates[0], :],
-                                                    ["lat","lon","height"]]
+    # #def sparse_target_coords_object(self):
+    #     self.sparse_target_coords = self.wtd_df.loc[pd.IndexSlice[self.input_dates[0], :],
+    #                                                 ["lat","lon","height"]]
         
-        z_lat = self.sparse_target_coords["lat"].values
-        z_lon = self.sparse_target_coords["lon"].values
-        z_height = self.sparse_target_coords["height"].values
+    #     z_lat = self.sparse_target_coords["lat"].values
+    #     z_lon = self.sparse_target_coords["lon"].values
+    #     z_height = self.sparse_target_coords["height"].values
         
-        self.sparse_target_coords = [z_lat,
-                                    z_lon,
-                                    z_height]
+    #     self.sparse_target_coords = [z_lat,
+    #                                 z_lon,
+    #                                 z_height]
         
-        self.sparse_target_coords = np.stack(self.sparse_target_coords, axis = -1).squeeze()
+    #     self.sparse_target_coords = np.stack(self.sparse_target_coords, axis = -1).squeeze()
         
     def compute_piezo_head(self):
         self.wtd_df["h"] = self.wtd_df["height"] - self.wtd_df["wtd"]
