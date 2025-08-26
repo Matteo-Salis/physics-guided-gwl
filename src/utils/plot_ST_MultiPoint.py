@@ -135,9 +135,9 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             Y_hat = pred_list[1]
             Z_pred = pred_list[-1]
             
-            X_deque[0].append(Y_hat)
-            X_deque[1].append(Z_pred)
-            X_deque[2].append(torch.zeros_like(Y_hat).to(torch.bool).to(device))
+            X_deque[0].appendleft(Y_hat)
+            X_deque[1].appendleft(Z_pred)
+            X_deque[2].appendleft(torch.zeros_like(Y_hat).to(torch.bool).to(device))
             
             predictions.append(Y_hat)
             true.append(Y)
