@@ -118,16 +118,10 @@ def coherence_loss(Lag_GW_true,
     elif res_fn == "mape":
         return torch.mean(torch.abs(residuals/(Lag_GW_true[not_Lag_GW_true_mask] + 1e-7)))
 
-def diffusion_loss(Lag_GW, Displacement_GW, K,
-                   normf_mu, normf_sigma,
-                   res_fn,
-                   dx = 1820,
-                   dy = 2586):
-    
-    Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
-    K_denorm = K*normf_sigma
-    Displacement_GW_denorm = Displacement_GW*normf_sigma
-    
+def groundwater_flow_equation(Lag_GW_denorm,
+                              K_denorm,
+                              dx,
+                              dy):
     spatial_grads = []
     
     for t in range(Lag_GW_denorm.shape[0]):
@@ -148,7 +142,25 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
         
         spatial_grads.append(spatial_grad)
 
-    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Lag_GW.device).squeeze()
+    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Lag_GW_denorm.device).squeeze()
+    
+    return spatial_grads
+
+def diffusion_loss(Lag_GW, Displacement_GW, K,
+                   normf_mu, normf_sigma,
+                   res_fn,
+                   dx = 1820,
+                   dy = 2586):
+    
+    Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
+    K_denorm = K*normf_sigma
+    Displacement_GW_denorm = Displacement_GW*normf_sigma
+
+    spatial_grads = groundwater_flow_equation(Lag_GW_denorm,
+                              K_denorm,
+                              dx,
+                              dy)
+    
     residuals = Displacement_GW_denorm - spatial_grads
     residuals = residuals/normf_sigma
         
