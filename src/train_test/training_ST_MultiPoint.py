@@ -122,7 +122,8 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
                     tstep_control_points,
                     device = "cuda", plot_arch = True,
-                    l2_alpha = 0, coherence_alpha = 1, diffusion_alpha = 1,
+                    l2_alpha = 0, coherence_alpha = 1,
+                    diffusion_alpha = 1, cpoints_start_epoch = 0,
                     reg_diffusion_alpha = 0, reg_displacement_S = 0,
                     reg_latlon_smoothness=0, reg_temp_smoothness = 0,
                     plot_displacements = False):  
@@ -160,8 +161,8 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             loss += l2_alpha * loss_l2_regularization(model)
                         
                         if coherence_alpha > 0:
-                            coh_loss = coherence_alpha * coherence_loss(X[0],
-                                                                        X[2],
+                            coh_loss = coherence_alpha * coherence_loss(X[0][:,0,:],
+                                                                        X[2][:,0,:],
                                                                         dataset.config["loss"],
                                                                         Lag_GW_hat)
                             
@@ -192,69 +193,70 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                             
                         ### Control Points Losses
-                             
-                        if reg_temp_smoothness+reg_latlon_smoothness+diffusion_alpha>0:
-                            ## Prediction
-                            Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
-                                tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
-                                eval_mode = False)
+                        if epoch >= cpoints_start_epoch:
                             
-                            if diffusion_alpha > 0:
-                                diff_loss = diffusion_alpha * diffusion_loss(
-                                                        Lag_GW = Lag_GW_CP[:,0,:].reshape(tstep_control_points,
-                                                                                lat_lon_points[0],
-                                                                                lat_lon_points[1]),
-                                                        Displacement_GW = Displacement_GW_CP.reshape(tstep_control_points,
-                                                                                lat_lon_points[0],
-                                                                                lat_lon_points[1]),
-                                                        K = HydrConductivity_CP.reshape(tstep_control_points,
-                                                                                lat_lon_points[0],
-                                                                                lat_lon_points[1]),
-                                                        res_fn = "mse",
-                                                        normf_mu = dataset.norm_factors["target_means"],
-                                                        normf_sigma = dataset.norm_factors["target_stds"],
-                                                        )
+                            if reg_temp_smoothness+reg_latlon_smoothness+diffusion_alpha>0:
+                                ## Prediction
+                                Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
+                                    tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
+                                    eval_mode = False)
                                 
-                                loss += diff_loss
+                                if diffusion_alpha > 0:
+                                    diff_loss = diffusion_alpha * diffusion_loss(
+                                                            Lag_GW = Lag_GW_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1]),
+                                                            Displacement_GW = Displacement_GW_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1]),
+                                                            K = HydrConductivity_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1]),
+                                                            res_fn = "mse",
+                                                            normf_mu = dataset.norm_factors["target_means"],
+                                                            normf_sigma = dataset.norm_factors["target_stds"],
+                                                            )
+                                    
+                                    loss += diff_loss
+                                    
+                                    print(f"CP_Diff_loss: {round(diff_loss.item(),7)}", end = " -- ")
+                                    wandb.log({"CP_Diff_loss":diff_loss.item()})
                                 
-                                print(f"CP_Diff_loss: {round(diff_loss.item(),7)}", end = " -- ")
-                                wandb.log({"CP_Diff_loss":diff_loss.item()})
-                            
-                            if reg_diffusion_alpha>0:
-                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-7),
-                                                                        res_fn = "mse")
-                            
-                                loss += reg_diffusion_loss
+                                if reg_diffusion_alpha>0:
+                                    reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-7),
+                                                                            res_fn = "mse")
                                 
-                                print(f"CP_RegD_loss: {round(reg_diffusion_loss.item(),7)}", end = " -- ")
-                                wandb.log({"CP_RegD_loss":reg_diffusion_loss.item()})
+                                    loss += reg_diffusion_loss
+                                    
+                                    print(f"CP_RegD_loss: {round(reg_diffusion_loss.item(),7)}", end = " -- ")
+                                    wandb.log({"CP_RegD_loss":reg_diffusion_loss.item()})
+                                    
+                                if reg_displacement_S>0:
+                                    reg_displacement_S_loss = reg_displacement_S * displacement_reg(Displacement_S_CP,
+                                                                            res_fn = "mse")
                                 
-                            if reg_displacement_S>0:
-                                reg_displacement_S_loss = reg_displacement_S * displacement_reg(Displacement_S_CP,
-                                                                        res_fn = "mse")
-                            
-                                loss += reg_displacement_S_loss
-                                
-                                print(f"CP_RegS_loss: {round(reg_displacement_S_loss.item(),7)}", end = " -- ")
-                                wandb.log({"CP_RegS_loss":reg_displacement_S_loss.item()})
-                                
-                            if reg_latlon_smoothness >0:
-                                reg_smoothness_latlon_dis_gw = reg_latlon_smoothness * sum(smoothness_reg(Displacement_GW_CP.reshape(tstep_control_points,
-                                                                                lat_lon_points[0],
-                                                                                lat_lon_points[1]), mode = "lon_lat"))
-                                reg_smoothness_latlon_dis_s = reg_latlon_smoothness * sum(smoothness_reg(Displacement_S_CP.reshape(tstep_control_points,
-                                                                                lat_lon_points[0],
-                                                                                lat_lon_points[1]), mode = "lon_lat"))
-                                
-                                
-                                print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),7)}; {round(reg_smoothness_latlon_dis_s.item(),7)}", end = " -- ")
-                                loss += reg_smoothness_latlon_dis_gw + reg_smoothness_latlon_dis_s
-                                
-                            if reg_temp_smoothness > 0:
-                                
-                                reg_smoothness_temp_pred = reg_temp_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
-                                print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),7)}", end = " -- ")
-                                loss += reg_smoothness_temp_pred
+                                    loss += reg_displacement_S_loss
+                                    
+                                    print(f"CP_RegS_loss: {round(reg_displacement_S_loss.item(),7)}", end = " -- ")
+                                    wandb.log({"CP_RegS_loss":reg_displacement_S_loss.item()})
+                                    
+                                if reg_latlon_smoothness >0:
+                                    reg_smoothness_latlon_dis_gw = reg_latlon_smoothness * sum(smoothness_reg(Displacement_GW_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1]), mode = "lon_lat"))
+                                    reg_smoothness_latlon_dis_s = reg_latlon_smoothness * sum(smoothness_reg(Displacement_S_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1]), mode = "lon_lat"))
+                                    
+                                    
+                                    print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),7)}; {round(reg_smoothness_latlon_dis_s.item(),7)}", end = " -- ")
+                                    loss += reg_smoothness_latlon_dis_gw + reg_smoothness_latlon_dis_s
+                                    
+                                if reg_temp_smoothness > 0:
+                                    
+                                    reg_smoothness_temp_pred = reg_temp_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
+                                    print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),7)}", end = " -- ")
+                                    loss += reg_smoothness_temp_pred
                                 
                                 
                         print("Total_loss: ", round(loss.item(),7))
