@@ -149,8 +149,8 @@ def groundwater_flow_equation(Lag_GW_denorm,
 def diffusion_loss(Lag_GW, Displacement_GW, K,
                    normf_mu, normf_sigma,
                    res_fn,
-                   dx = 1399, #1603 - 70 #1820 - 62
-                   dy = 1342):#1536 - 70 #2586 - 42
+                   dx = 1603, #1603 - 70 #1820 - 62 # 1399 - 80
+                   dy = 1536):#1536 - 70 #2586 - 42 # 1342 - 80
     
     Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
     K_denorm = K*normf_sigma
