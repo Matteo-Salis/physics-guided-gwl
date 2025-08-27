@@ -32,6 +32,8 @@ def training_model(config):
             
         else:
             
+            cpoints_start_epoch = config["cpoints_start_epoch"]
+            print("cpoints_start_epoch: ", cpoints_start_epoch)
             coherence_alpha = config["coherence_alpha"]
             print("coherence_alpha: ", coherence_alpha)
             tstep_control_points = config["tstep_control_points"]
@@ -55,6 +57,7 @@ def training_model(config):
                            tstep_control_points = tstep_control_points,
                            plot_arch = plot_arch,
                            l2_alpha = l2_alpha,
+                           cpoints_start_epoch = cpoints_start_epoch,
                            diffusion_alpha = diffusion_alpha,
                            coherence_alpha = coherence_alpha,
                            reg_diffusion_alpha = reg_diffusion_alpha,

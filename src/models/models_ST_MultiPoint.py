@@ -240,8 +240,7 @@ class MHA_Block(nn.Module):
                             )
         
         output +=  skip_1
-        skip_2 = output 
-        
+        skip_2 = output        
         output = self.norm_layer_2(output)
         output = self.mlp(output)
         
@@ -990,16 +989,28 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ### Displacement Modules #####
         
         ## GW
-        self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[0]),
-                                                self.embedding_dim),
-                                    nn.LayerNorm(self.embedding_dim),
+        
+        self.Linear_CD_GW = nn.Sequential(nn.Linear(self.GW_W_temp_dim[0],
+                                                1),
+                                    #nn.LayerNorm(1),
                                     self.activation_fn)
         
+        # self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[0]),
+        #                                         self.embedding_dim),
+        #                             nn.LayerNorm(self.embedding_dim),
+        #                             self.activation_fn)
+        
         ## Source/Sink 
-        self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
-                                                self.embedding_dim),
-                                    nn.LayerNorm(self.embedding_dim),
+        
+        self.Linear_CD_S = nn.Sequential(nn.Linear(self.GW_W_temp_dim[1],
+                                                1),
+                                    #nn.LayerNorm(1),
                                     self.activation_fn)
+        
+        # self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
+        #                                         self.embedding_dim),
+        #                             nn.LayerNorm(self.embedding_dim),
+        #                             self.activation_fn)
         
         for i in range(self.displacement_mod_blocks):
             setattr(self, f"Displacement_Module_GW_{i}",
@@ -1019,25 +1030,25 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         ### Output Layers #####
         
         self.Linear_Lag = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                         #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim),
+                                        # nn.LayerNorm(self.embedding_dim//2),
                                         # self.activation_fn,
                                         nn.Linear(self.embedding_dim, 1,
                                                 bias=True))
         
         self.Linear_2_GW = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                         #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim),
+                                        # nn.LayerNorm(self.embedding_dim//2),
                                         # self.activation_fn,
                                         nn.Linear(self.embedding_dim, 1,
                                                 bias=True))
         
         self.Linear_2_S = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim,
+                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
                                         #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim),
+                                        # nn.LayerNorm(self.embedding_dim//2),
                                         # self.activation_fn,
                                         nn.Linear(self.embedding_dim, 1,
                                                 bias=True))
@@ -1093,11 +1104,12 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ### Displacement modules
         
-        Displacement_GW = GW_out.flatten(-2,-1)
-        Displacement_GW = self.Linear_GW(Displacement_GW)
+        #Displacement_GW = GW_out.flatten(-2,-1)
+        Displacement_GW = self.Linear_CD_GW(GW_out).flatten(-2,-1)
+        Displacement_GW_skip = Displacement_GW
         
-        Displacement_S = Weather_out.flatten(-2,-1)
-        Displacement_S = self.Linear_S(Displacement_S)
+        Displacement_S = Weather_out#.flatten(-2,-1)
+        Displacement_S = self.Linear_CD_S(Displacement_S).flatten(-2,-1)
         
         if self.dropout > 0:
             Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
@@ -1120,7 +1132,9 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ## Squeeze channel dim
         
-        GW_lag_out = self.Linear_Lag(GW_out.permute((0,3,1,2))) # N, D, S,  C, 
+        #GW_lag_out = self.Linear_Lag(GW_out.permute((0,3,1,2))) # N, D, S,  C, 
+        
+        GW_lag_out = self.Linear_Lag(Displacement_GW_skip)
         
         # GW Continuity equation estimation
         Displacement_GW = self.Linear_2_GW(Displacement_GW) # Darcy velocity
@@ -1129,7 +1143,7 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Displacement_S = self.Linear_2_S(Displacement_S)
         
         #SUM
-        Y_hat = GW_lag_out[:,0,:,:] + Displacement_GW + Displacement_S # Euler method
+        Y_hat = GW_lag_out + Displacement_GW + Displacement_S # Euler method
         
         #Concat
         # Y_hat = torch.cat([GW_lag_out[:,-1,:,:],
