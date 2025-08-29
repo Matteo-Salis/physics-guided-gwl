@@ -42,6 +42,8 @@ def training_model(config):
             print("diffusion_alpha: ", diffusion_alpha)
             reg_diffusion_alpha = config["reg_diffusion_alpha"]
             print("reg_diffusion_alpha: ", reg_diffusion_alpha)
+            reg_K_alpha = config["reg_K_alpha"]
+            print("reg_K_alpha: ", reg_K_alpha)
             reg_displacement_S = config["reg_displacement_S"]
             print("reg_displacement_S: ", reg_displacement_S)
             reg_latlon_smoothness = config["reg_latlon_smoothness"]
@@ -61,6 +63,7 @@ def training_model(config):
                            diffusion_alpha = diffusion_alpha,
                            coherence_alpha = coherence_alpha,
                            reg_diffusion_alpha = reg_diffusion_alpha,
+                           reg_K_alpha = reg_K_alpha,
                            reg_displacement_S = reg_displacement_S,
                            reg_latlon_smoothness = reg_latlon_smoothness,
                            reg_temp_smoothness = reg_temp_smoothness,

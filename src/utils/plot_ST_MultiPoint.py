@@ -198,6 +198,7 @@ def plot_time_series(y_hat, y, title,
 
     ax.legend()
     
+    plt.tight_layout()
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
         
@@ -340,6 +341,7 @@ def wandb_video(dataset, model, device,
                 wandb.log({f"map_prediction{title_ext}_{date_seq[t_step]} -":wandb.Image(
                     plot_map(predictions_xr[t_step], predictions_xr_wtd[t_step],
                             title = f"Map prediction{title_ext}",
+                            shapefile=dataset.piemonte_shp,
                             vmin = [vmin_H,vmin_WTD],
                             vmax = [vmax_H,vmax_WTD],
                             save_dir = None,
@@ -448,6 +450,7 @@ def wandb_video_displacements(dataset, model, device,
                                                 displacement_s_xr[t_step],
                                                 hydrConductivity_xr[t_step],
                                                 title = f"Map prediction{title_ext}",
+                                                shapefile=dataset.piemonte_shp,
                                                 vmin = [vmin_H,vmin_WTD],
                                                 vmax = [vmax_H,vmax_WTD],
                                                 save_dir = None,
@@ -459,6 +462,7 @@ def wandb_video_displacements(dataset, model, device,
 def plot_map(predictions_xr,
              predictions_xr_wtd,
                  title,
+                 shapefile,
                  vmin = None,
                  vmax = None,
                  save_dir = None, 
@@ -485,21 +489,32 @@ def plot_map(predictions_xr,
 
     predictions_xr.plot(ax = ax[0],
                 vmin = vmin_H,
-                vmax = vmax_H)
+                vmax = vmax_H,
+                cbar_kwargs={"shrink": 0.9})
+    
+    shapefile.boundary.plot(ax = ax[0],
+                               color = "black",
+                               label = "Piedmont's bounds")
     
     ax[0].set_title("Prediction H [m]")
     
     predictions_xr_wtd.plot(ax = ax[1],
                 vmin = vmin_WTD,
-                vmax = vmax_WTD)
+                vmax = vmax_WTD,
+                cbar_kwargs={"shrink": 0.9})
+    
+    shapefile.boundary.plot(ax = ax[1],
+                               color = "black",
+                               label = "Piedmont's bounds")
     
     ax[1].set_title("Prediction WTD [m]")
 
+    plt.tight_layout()
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
     
     if print_plot is True:
-        plt.tight_layout()
+        plt.show()
         
     else:
         return fig 
@@ -510,6 +525,7 @@ def plot_pred_displacement_maps(predictions_xr,
             displacement_s_xr,
             hydrConductivity_xr,
             title,
+            shapefile,
             vmin = None,
             vmax = None,
             save_dir = None, 
@@ -536,14 +552,24 @@ def plot_pred_displacement_maps(predictions_xr,
 
     im0 = predictions_xr.plot(ax = ax[0],
                 vmin = vmin_H,
-                vmax = vmax_H)
+                vmax = vmax_H,
+                cbar_kwargs={"shrink": 0.9})
+    
+    shapefile.boundary.plot(ax = ax[0],
+                               color = "black",
+                               label = "Piedmont's bounds")
     ax[0].set_title("Prediction H [m]")
     ax[0].tick_params(labelsize=6)  # Set tick label size
     
     
     im1 = predictions_xr_wtd.plot(ax = ax[1],
                 vmin = vmin_WTD,
-                vmax = vmax_WTD)
+                vmax = vmax_WTD,
+                cbar_kwargs={"shrink": 0.9})
+    
+    shapefile.boundary.plot(ax = ax[1],
+                               color = "black",
+                               label = "Piedmont's bounds")
     ax[1].set_title("Prediction WTD [m]")
     ax[1].tick_params(labelsize=6)  # Set tick label size
     
@@ -551,17 +577,27 @@ def plot_pred_displacement_maps(predictions_xr,
     
     im2 = displacement_gw_xr.plot(ax = ax[2],
                 cmap = "seismic_r",# norm = norm
-                )
+                cbar_kwargs={"shrink": 0.9})
+    shapefile.boundary.plot(ax = ax[2],
+                               color = "black",
+                               label = "Piedmont's bounds")
     ax[2].set_title("Displacement - H [m]")
     ax[2].tick_params(labelsize=6)  # Set tick label size
     
     im3 = displacement_s_xr.plot(ax = ax[3],
                 cmap = "seismic_r",# norm = norm
-                )
+                cbar_kwargs={"shrink": 0.9})
+    shapefile.boundary.plot(ax = ax[3],
+                               color = "black",
+                               label = "Piedmont's bounds")
     ax[3].set_title("Displacement - S [m]")
     ax[3].tick_params(labelsize=6)  # Set tick label size
     
-    im4 = hydrConductivity_xr.plot(ax = ax[4])
+    im4 = hydrConductivity_xr.plot(ax = ax[4],
+                                   cbar_kwargs={"shrink": 0.9})
+    shapefile.boundary.plot(ax = ax[4],
+                               color = "black",
+                               label = "Piedmont's bounds")
     ax[4].set_title("hydrConductivity [m/w]")
     # cbar = plt.colorbar(im4, ax = ax[4], fraction=0.05, pad=0.04)
     ax[4].tick_params(labelsize=6)  # Set tick label size
@@ -572,10 +608,164 @@ def plot_pred_displacement_maps(predictions_xr,
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight') #dpi = 400, transparent = True
     
     if print_plot is True:
+        plt.show()
+        
+    else:
+        return fig 
+
+
+###############################
+### MAP Plot for Comparisons ###
+###############################
+
+
+def plot_map_all_models(predictions_xr_list,
+            title,
+            shapefile,
+            model_names,
+            var_name_title = "H [m]",
+            save_dir = None, 
+            print_plot = False):
+    
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (10,4))
+    fig.suptitle(title)
+
+    for model_i in range(len(predictions_xr_list)):
+        predictions_xr_list[model_i].plot(ax = ax[model_i])
+    
+        shapefile.boundary.plot(ax = ax[model_i],
+                                color = "black",
+                                label = "Piedmont's bounds")
+    
+        ax[model_i].set_title(f"{model_names[model_i]} {var_name_title}")
+
+    plt.tight_layout()
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
+                    dpi = 400, transparent = True)
+    
+    if print_plot is True:
+        plt.show()
+        
+    else:
+        return fig
+    
+    
+def plot_displacement_all_models(displacement_pred_list,
+            title,
+            shapefile,
+            model_names,
+            save_dir = None, 
+            print_plot = False):
+    
+    ## Plot the maps
+    
+    fig, ax = plt.subplots(len(displacement_pred_list),
+                           3, figsize = (10,5))
+    fig.suptitle(title)
+
+    for model_i in range(len(displacement_pred_list)):
+        
+        ### Displacement H
+        im0 = displacement_pred_list[model_i][0].plot(ax = ax[model_i,0],
+                cmap = "seismic_r",# norm = norm
+                cbar_kwargs={"shrink": 0.6})
+        shapefile.boundary.plot(ax = ax[model_i,0],
+                                color = "black",
+                                label = "Piedmont's bounds")
+        ax[model_i,0].set_title(r"{} $\Delta_{{GW}}$ [m]".format(model_names[model_i]))
+        #cbar = plt.colorbar(im0, ax = ax[model_i,0], fraction=0.05, pad=0.04)
+        ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
+        
+        ### Displacement S
+        im1 = displacement_pred_list[model_i][1].plot(ax = ax[model_i,1],
+            cmap = "seismic_r",# norm = norm
+            cbar_kwargs={"shrink": 0.6})
+        shapefile.boundary.plot(ax = ax[model_i,1],
+                                color = "black",
+                                label = "Piedmont's bounds")
+        ax[model_i,1].set_title(r"{} $\Delta_S$ [m]".format(model_names[model_i]))
+        #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
+        ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
+        
+        ### Conductivity
+        im2 = displacement_pred_list[model_i][2].plot(ax = ax[model_i,2],
+                                                      cbar_kwargs={"shrink": 0.6})
+        shapefile.boundary.plot(ax = ax[model_i,2],
+                                    color = "black",
+                                    label = "Piedmont's bounds")
+        ax[model_i,2].set_title(r"{} K [m/w]".format(model_names[model_i]))
+        #cbar = plt.colorbar(im2, ax = ax[model_i,2], fraction=0.05, pad=0.04)
+        ax[model_i,2].tick_params(labelsize=6)  # Set tick label size
+
+
+    plt.tight_layout(pad=1.0, h_pad=0.25, w_pad=0.5)
+    if save_dir:
+        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
+                    dpi = 400, transparent = True)
+    
+    if print_plot is True:
         plt.plot()
         
     else:
         return fig 
+    
+#######################
+##### GIF #############
+#######################
+
+def generate_gif_from_xr(start_date, n_pred,
+                       xr,
+                       title,
+                       freq,
+                       save_dir = None,
+                       print_plot = False):
+    
+    def update_h_wtd_maps(i):
+        
+        sample_date_i = np.datetime64(start_date) + np.timedelta64(i, freq)
+        
+        fig.suptitle(f"t0: {start_date} - lead time: {i} {sample_date_i} ",
+                     x=0.45, ha="center", y=0.1)
+        
+        ax.set_title(title)
+        
+        image.set_array(xr[i,:,:])
+        
+        return image
+
+    fig, ax = plt.subplots(1,1, figsize = (7,5) )
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.2, top = 0.9, left=0.1)          # leave space for suptitle
+    
+    fig.suptitle(f"t0: {start_date} - lead time: {0}",
+                 x=0.45, ha="center", y=0.1)
+    image = xr[0,:,:].plot(ax = ax, animated=True,
+                                                vmin = xr.min().values,
+                                                vmax = xr.max().values)
+    ax.set_title(title)
+
+
+    
+        
+        ## Plot the maps
+        
+        
+    ani = animation.FuncAnimation(fig, update_h_wtd_maps, repeat=True, frames=n_pred, interval=1)
+
+    writer = animation.PillowWriter(fps=1,
+                                    metadata=dict(artist='Me'),
+                                    bitrate=1800,
+                                    )
+    
+    if save_dir:
+        ani.save(f'{save_dir}.gif', writer=writer,
+                 dpi=400)
+        
+    if print_plot is True:
+        plt.show()
     
     
 ###### OLD ##########
@@ -673,56 +863,56 @@ def find_sensor_pred_in_xr(true_xr, pred_xr, lat, lon):
                 
 ###### GIF #######
 
-def generate_gif_h_wtd(start_date, twindow,
-                       sample_h, sample_wtd,
-                       freq,
-                       save_dir = None,
-                       print_plot = False):
+# def generate_gif_h_wtd(start_date, twindow,
+#                        sample_h, sample_wtd,
+#                        freq,
+#                        save_dir = None,
+#                        print_plot = False):
 
-    fig, ax = plt.subplots(1,2, figsize = (10,4))
+#     fig, ax = plt.subplots(1,2, figsize = (10,4))
 
-    ax[0].set_title("Piezometric head [m]")
-    ax[1].set_title("WTD [m]")
-
-
-    fig.suptitle(f"t0: {start_date} - Prediction Timestep {0}")
-    piezo_image = sample_h[0,:,:].plot(ax = ax[0], animated=True,
-                                                vmin = sample_h.min().values,
-                                                vmax = sample_h.max().values,
-                                                cmap = "Blues")
-    wtd_image = sample_wtd[0,:,:].plot(ax = ax[1], animated=True, 
-                                                vmin = sample_wtd.min().values,
-                                                vmax = sample_wtd.max().values,
-                                                cmap = "Greys")
+#     ax[0].set_title("Piezometric head [m]")
+#     ax[1].set_title("WTD [m]")
 
 
-    def update_h_wtd_maps(i):
-        
-        sample_date_i = np.datetime64(start_date) + np.timedelta64(i+1, freq)
-        fig.suptitle(f"t0: {start_date} - Prediction Timestep {i}: {sample_date_i} ")
-        
-        ax[0].set_title("Piezometric head")
-        ax[1].set_title("WTD")
-        
-        piezo_image.set_array(sample_h[i,:,:])
-        wtd_image.set_array(sample_wtd[i,:,:])
-        
-        return (piezo_image, wtd_image)
-        
-        ## Plot the maps
-        
-        
-    ani = animation.FuncAnimation(fig, update_h_wtd_maps, repeat=True, frames=twindow, interval=1)
+#     fig.suptitle(f"t0: {start_date} - Prediction Timestep {0}")
+#     piezo_image = sample_h[0,:,:].plot(ax = ax[0], animated=True,
+#                                                 vmin = sample_h.min().values,
+#                                                 vmax = sample_h.max().values,
+#                                                 cmap = "Blues")
+#     wtd_image = sample_wtd[0,:,:].plot(ax = ax[1], animated=True, 
+#                                                 vmin = sample_wtd.min().values,
+#                                                 vmax = sample_wtd.max().values,
+#                                                 cmap = "Greys")
 
-    writer = animation.PillowWriter(fps=5,
-                                    metadata=dict(artist='Me'),
-                                    bitrate=1800)
+
+#     def update_h_wtd_maps(i):
+        
+#         sample_date_i = np.datetime64(start_date) + np.timedelta64(i+1, freq)
+#         fig.suptitle(f"t0: {start_date} - Prediction Timestep {i}: {sample_date_i} ")
+        
+#         ax[0].set_title("Piezometric head")
+#         ax[1].set_title("WTD")
+        
+#         piezo_image.set_array(sample_h[i,:,:])
+#         wtd_image.set_array(sample_wtd[i,:,:])
+        
+#         return (piezo_image, wtd_image)
+        
+#         ## Plot the maps
+        
+        
+#     ani = animation.FuncAnimation(fig, update_h_wtd_maps, repeat=True, frames=twindow, interval=1)
+
+#     writer = animation.PillowWriter(fps=5,
+#                                     metadata=dict(artist='Me'),
+#                                     bitrate=1800)
     
-    if save_dir:
-        ani.save(f'{save_dir}.gif', writer=writer)
+#     if save_dir:
+#         ani.save(f'{save_dir}.gif', writer=writer)
         
-    if print_plot is True:
-        plt.show()
+#     if print_plot is True:
+#         plt.show()
                 
         
 

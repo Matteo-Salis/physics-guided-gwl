@@ -123,7 +123,14 @@ def main(config):
         plt.savefig(f"{title}.png", bbox_inches='tight', dpi=400, pad_inches=0.1) #dpi = 400, transparent = True
             
             
-    print("END: All plots saved!")
+    print("END: All time series plots saved!")
+    
+    print("Drawing maps...")
+    
+    for date in config["map_dates"]:
+        
+        
+        
     
     # Gif
             
@@ -141,7 +148,7 @@ def compute_ts_prediction_with_displacemnt(config, dataset,
                                            iter_pred):
     ### Sensors Time Series Prediction
         
-        ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Permeability, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+        ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
                                                                                     np.datetime64(config["start_date_pred"]),
                                                                                     config["n_pred_ts"],
                                                                                     iter_pred = iter_pred,
@@ -161,7 +168,7 @@ def compute_ts_prediction_with_displacemnt(config, dataset,
                                                         start_date=np.datetime64(config["start_date_pred"]), n_pred=config["n_pred_ts"],
                                                         sensor_names=dataset.sensor_id_list)
         
-        ts_Permeability_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Permeability, dataset,
+        ts_Conductivity_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Conductivity, dataset,
                                                         start_date=np.datetime64(config["start_date_pred"]), n_pred=config["n_pred_ts"],
                                                         sensor_names=dataset.sensor_id_list)
         
@@ -180,12 +187,12 @@ def compute_ts_prediction_with_displacemnt(config, dataset,
         ts_predictions_ds = (ts_predictions_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
         ts_Displacement_GW_ds = ts_Displacement_GW_ds * dataset.norm_factors["target_stds"]
         ts_Displacement_S_ds = ts_Displacement_S_ds * dataset.norm_factors["target_stds"]
-        ts_Permeability_ds = ts_Permeability_ds * dataset.norm_factors["target_stds"]
+        ts_Conductivity_ds = ts_Conductivity_ds * dataset.norm_factors["target_stds"]
         ts_Lag_GW_dict = {lag: (ts_Lag_GW_dict[lag] * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"] for lag in list(ts_Lag_GW_dict.keys())}
         
         return [ts_true_ds, ts_predictions_ds,
                 ts_Displacement_GW_ds, ts_Displacement_S_ds,
-                ts_Permeability_ds, ts_Lag_GW_dict]
+                ts_Conductivity_ds, ts_Lag_GW_dict]
         
 def compute_ts_prediction(config, dataset,
                         model, device,
@@ -220,7 +227,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
                                            Z_grid):
     
     ### ST Grid prediction
-        _, grid_predictions, grid_Displacement_GW, grid_Displacement_S, grid_Permeability, grid_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+        _, grid_predictions, grid_Displacement_GW, grid_Displacement_S, grid_Conductivity, grid_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
                                                                                                                                                                     np.datetime64(config["start_date_pred"]),
                                                                                                                                                                     config["n_pred_ts"],
                                                                                                                                                                     iter_pred = iter_pred,
@@ -230,7 +237,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
         grid_predictions = grid_predictions.reshape(config["n_pred_ts"],config["lat_points"],config["lon_points"])
         grid_Displacement_GW = grid_Displacement_GW.reshape(config["n_pred_ts"],config["lat_points"],config["lon_points"])
         grid_Displacement_S = grid_Displacement_S.reshape(config["n_pred_ts"],config["lat_points"],config["lon_points"])
-        grid_Permeability = grid_Permeability.reshape(config["n_pred_ts"],config["lat_points"],config["lon_points"])
+        grid_Conductivity = grid_Conductivity.reshape(config["n_pred_ts"],config["lat_points"],config["lon_points"])
         grid_Lag_GW = grid_Lag_GW.reshape(config["n_pred_ts"],config["target_lags"],config["lat_points"],config["lon_points"])
                                                                                                                                                                     
         start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred"]))
@@ -267,7 +274,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
                             dims = ["time","lat", "lon"]
                             )
 
-        permeability_xr = xarray.DataArray(data = grid_Permeability,
+        conductivity_xr = xarray.DataArray(data = grid_Conductivity,
                             coords = dict(
                                         lat=("lat", Z_grid_matrix_lat[:,0]),
                                         lon=("lon", Z_grid_matrix_lon[0,:]),
@@ -286,7 +293,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
         
         return [predictions_xr, predictions_wtd_xr,
                 displacement_gw_xr,displacement_s_xr,
-                permeability_xr, Lag_GW_xr]
+                conductivity_xr, Lag_GW_xr]
         
         
 def compute_grid_prediction(config, dataset,
@@ -330,20 +337,19 @@ def compute_prediction_with_displacement(config, dataset, device,
                                   Z_grid):
 
         print("Computing Time Series Predictions...")
-        ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Permeability_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
+        ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
                                            model, device,
                                            iter_pred)
         print("Done!")
         print("Computing Gridded Predictions...")
-        predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, permeability_xr, Lag_GW_xr = compute_grid_prediction_with_displacemnt(config, dataset,
+        predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr = compute_grid_prediction_with_displacemnt(config, dataset,
                                            model, device,
                                            iter_pred,
                                            Z_grid)
         print("Done!")
         
-        return [[ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Permeability_ds, ts_Lag_GW_dict],
-                [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, permeability_xr, Lag_GW_xr]]
-        
+        return [[ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict],
+                [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr]]     
         
 def compute_prediction(config, dataset, device,
                         model,

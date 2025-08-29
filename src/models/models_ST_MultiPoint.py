@@ -1002,10 +1002,11 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         
         ## Source/Sink 
         
-        self.Linear_CD_S = nn.Sequential(nn.Linear(self.GW_W_temp_dim[1],
-                                                1),
-                                    #nn.LayerNorm(1),
-                                    self.activation_fn)
+        if self.GW_W_temp_dim[1]>0:
+            self.Linear_CD_S = nn.Sequential(nn.Linear(self.GW_W_temp_dim[1],
+                                                    1),
+                                        #nn.LayerNorm(1),
+                                        self.activation_fn)
         
         # self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
         #                                         self.embedding_dim),
@@ -1020,37 +1021,37 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                                 elementwise_affine = True,
                                 dropout_p = 0))
             
-            setattr(self, f"Displacement_Module_S_{i}",
-                        MHA_Block(self.embedding_dim,
-                                self.displacement_mod_heads,
-                                self.activation,
-                                elementwise_affine = True,
-                                dropout_p = 0))
+            # setattr(self, f"Displacement_Module_S_{i}",
+            #             MHA_Block(self.embedding_dim,
+            #                     self.displacement_mod_heads,
+            #                     self.activation,
+            #                     elementwise_affine = True,
+            #                     dropout_p = 0))
         
         ### Output Layers #####
         
         self.Linear_Lag = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                        #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim//2),
-                                        # self.activation_fn,
-                                        nn.Linear(self.embedding_dim, 1,
+                                        nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))
         
         self.Linear_2_GW = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                        #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim//2),
-                                        # self.activation_fn,
-                                        nn.Linear(self.embedding_dim, 1,
+                                        nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))
         
         self.Linear_2_S = nn.Sequential(
-                                        # nn.Linear(self.embedding_dim, self.embedding_dim//2,
-                                        #         bias=True),
-                                        # nn.LayerNorm(self.embedding_dim//2),
-                                        # self.activation_fn,
-                                        nn.Linear(self.embedding_dim, 1,
+                                        nn.Linear(self.embedding_dim, self.embedding_dim//2,
+                                                bias=True),
+                                        nn.LayerNorm(self.embedding_dim//2),
+                                        self.activation_fn,
+                                        nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True))
         
         # self.Output = nn.Sequential(nn.Linear(3,1),
@@ -1109,7 +1110,10 @@ class ST_MultiPoint_DisNet_K(nn.Module):
         Displacement_GW_skip = Displacement_GW
         
         Displacement_S = Weather_out#.flatten(-2,-1)
-        Displacement_S = self.Linear_CD_S(Displacement_S).flatten(-2,-1)
+        if self.GW_W_temp_dim[1]>0:
+            Displacement_S = self.Linear_CD_S(Displacement_S)
+            
+        Displacement_S = Displacement_S.flatten(-2,-1)
         
         if self.dropout > 0:
             Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
@@ -1126,8 +1130,8 @@ class ST_MultiPoint_DisNet_K(nn.Module):
                 Displacement_GW = getattr(self, f"Displacement_Module_GW_{i}")(Displacement_GW,
                                                                          mc_dropout = self.training or mc_dropout)
                 
-                Displacement_S = getattr(self, f"Displacement_Module_S_{i}")(Displacement_S,
-                                                                         mc_dropout = self.training or mc_dropout)
+                # Displacement_S = getattr(self, f"Displacement_Module_S_{i}")(Displacement_S,
+                #                                                          mc_dropout = self.training or mc_dropout)
         
         
         ## Squeeze channel dim
