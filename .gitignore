@@ -168,3 +168,5 @@ src/deprecated/
 src/notebooks/*.nc
 src/*.csv
 src/*.nc
+
+src/notebooks/*.gif

@@ -43,6 +43,10 @@ class Dataset_ST_MultiPoint(Dataset):
         self.loading_dtm()
         print("Done!")
         
+        print("    Loading Piedmont Shapefile...", end = " ")
+        self.load_shapefile()
+        print("Done!")
+        
         # Water Table Depth data loading 
         print("    Loading underground water data...", end = " ")
         self.loading_point_wtd()
@@ -57,6 +61,13 @@ class Dataset_ST_MultiPoint(Dataset):
         print("Done!")
         
     ### Data loading
+    
+    def load_shapefile(self):
+        piemonte_shp = gpd.read_file(self.config["piedmont_shp"], engine='fiona')
+        piemonte_shp = piemonte_shp.to_crs('epsg:4326')
+
+        # remove the small enclaved Cuneo area inside Torino province
+        self.piemonte_shp = piemonte_shp[:-1]
         
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
