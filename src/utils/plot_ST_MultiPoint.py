@@ -633,7 +633,8 @@ def plot_map_all_models(predictions_xr_list,
     fig.suptitle(title)
 
     for model_i in range(len(predictions_xr_list)):
-        predictions_xr_list[model_i].plot(ax = ax[model_i])
+        predictions_xr_list[model_i].plot(ax = ax[model_i],
+                                          cbar_kwargs={"shrink": 0.75})
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
@@ -671,7 +672,7 @@ def plot_displacement_all_models(displacement_pred_list,
         ### Displacement H
         im0 = displacement_pred_list[model_i][0].plot(ax = ax[model_i,0],
                 cmap = "seismic_r",# norm = norm
-                cbar_kwargs={"shrink": 0.6})
+                cbar_kwargs={"shrink": 0.75})
         shapefile.boundary.plot(ax = ax[model_i,0],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -682,7 +683,7 @@ def plot_displacement_all_models(displacement_pred_list,
         ### Displacement S
         im1 = displacement_pred_list[model_i][1].plot(ax = ax[model_i,1],
             cmap = "seismic_r",# norm = norm
-            cbar_kwargs={"shrink": 0.6})
+            cbar_kwargs={"shrink": 0.75})
         shapefile.boundary.plot(ax = ax[model_i,1],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -692,7 +693,7 @@ def plot_displacement_all_models(displacement_pred_list,
         
         ### Conductivity
         im2 = displacement_pred_list[model_i][2].plot(ax = ax[model_i,2],
-                                                      cbar_kwargs={"shrink": 0.6})
+                                                      cbar_kwargs={"shrink": 0.75})
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
                                     label = "Piedmont's bounds")

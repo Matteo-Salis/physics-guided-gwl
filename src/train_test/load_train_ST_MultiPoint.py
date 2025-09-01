@@ -7,7 +7,7 @@ def training_model(config):
     if config["dataset_type"] == "ST_MultiPoint":
         
             
-        print("Training Approach: ST_MultiPoint Pure DL")
+        
         
         start_dates_plot_training = config["start_dates_plot_training"]
         n_pred_plot = config["n_pred_plot"]
@@ -19,6 +19,7 @@ def training_model(config):
         plot_displacements = True if "_K" in config["model"] else False
         
         if config["physics"] is False:
+            print("Training Approach: ST_MultiPoint Pure DL")
         
             return partial(pure_dl_trainer, 
                            start_dates_plot = start_dates_plot_training,
@@ -31,6 +32,7 @@ def training_model(config):
                            plot_displacements = plot_displacements)
             
         else:
+            print("Training Approach: ST_MultiPoint Physics Informed")
             
             cpoints_start_epoch = config["cpoints_start_epoch"]
             print("cpoints_start_epoch: ", cpoints_start_epoch)
