@@ -75,7 +75,9 @@ class Dataset_ST_MultiPoint(Dataset):
         self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
         
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
-        self.weather_xr = self.weather_xr[self.config["weather_variables"]]
+        
+        if self.config["weather_variables"] is not None:
+            self.weather_xr = self.weather_xr[self.config["weather_variables"]]
         
         self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
                                                engine='fiona')
