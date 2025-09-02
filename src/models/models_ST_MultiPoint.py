@@ -804,6 +804,7 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
                 emb_W = "3DCNN",
                 value_dim_Weather = 9, 
                 embedding_dim = 16,
+                s_coords_dim = 3,
                 st_coords_dim = 5,
                 spatial_mha_heads = 2,
                 joint_mod_blocks = 1,
@@ -820,6 +821,7 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
         self.value_dim_GW = value_dim_GW
         self.value_dim_Weather = value_dim_Weather
         self.embedding_dim = embedding_dim
+        self.s_coords_dim = s_coords_dim
         self.st_coords_dim = st_coords_dim
         self.spatial_mha_heads = spatial_mha_heads
         self.joint_mod_blocks = joint_mod_blocks
@@ -842,30 +844,35 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            normalization = None)
-        
+                                            normalization = None,
+                                            elementwise_affine = False)
         if self.emb_W == "3DCNN":
             self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
                                                 hidden_channels = self.embedding_dim,
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
-                                                normalization = None)
+                                                normalization = self.normalization,
+                                                elementwise_affine = False,
+                                                avg_pooling = False)
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
-                                                hidden_channels = self.embedding_dim,
-                                                out_channels= self.embedding_dim,
-                                                activation = self.activation,
-                                                normalization = None)
+                                    hidden_channels = self.embedding_dim,
+                                    out_channels= self.embedding_dim,
+                                    activation = self.activation,
+                                    normalization = None,
+                                    elementwise_affine = False)
+            
         
-        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+        self.S_coords_Embedding = Embedding(in_channels = self.s_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            normalization = None)
+                                            normalization = None,
+                                            elementwise_affine = False)
         
         ### Densification Dropout 
         
-        self.Densification_Dropout = Densification_Dropout(drop_value=self.densification_dropout_dv,
+        self.Densification_Dropout = Densification_Dropout(drop_value=0,
                                                            p = self.densification_dropout_p)
         
         
@@ -875,25 +882,27 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
-                                                elementwise_affine = True)
+                                                elementwise_affine = False)
+        
         
         self.GW_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
                                                 heads = self.spatial_mha_heads,
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
-                                                elementwise_affine = True)
+                                                elementwise_affine = False)
         
         self.Weather_lags_Module = Spatial_MHA_Block(embedding_dim = self.embedding_dim,
                                                 heads = self.spatial_mha_heads,
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
-                                                elementwise_affine = True)
+                                                elementwise_affine = False)
+        
         
         ### Joint Modules #####
         
-        linear_list = [nn.Linear(int(self.embedding_dim*(sum(self.GW_W_temp_dim))),
+        linear_list = [nn.Linear(int((2+self.embedding_dim)*(sum(self.GW_W_temp_dim))),
                                                 self.embedding_dim)]
         if self.normalization is not None:
             if self.normalization == "layernorm":
@@ -927,12 +936,16 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
         ### Embedding #####
         
         GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
-                               X[1]], dim = -1)) #N, D, S, C
+                               X[1],
+                               X[2].unsqueeze(-1)], dim = -1)) #N, D, S, C
         
-        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        GW_values_mask = X[2] * False
         
-        Z_st_coords = self.ST_coords_Embedding(Z)
+        GW_s_coords = self.S_coords_Embedding(X[1][:,:,:,:self.s_coords_dim]) #N, D, S, C
         
+        Z_s_coords = self.S_coords_Embedding(Z[:,:,:self.s_coords_dim].unsqueeze(2))[:,:,0,:]
+        
+    
         if self.emb_W == "3DCNN":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input).permute((0,2,3,4,1)).flatten(2,3)
@@ -940,7 +953,7 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
             
-        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        Weather_s_coords = self.S_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)[:,:,:,:self.s_coords_dim]) #N, D, S, C
         
         GW_out = []
         Weather_out = []
@@ -949,33 +962,44 @@ class ST_MultiPoint_Net_SAGW(nn.Module):
             
             if self.training or mc_dropout:
                 GW_values_DD, GW_mask_DD = self.Densification_Dropout(GW_values[:,GW_lag,:,:],
-                                                                    X[2][:,GW_lag,:])
-            
+                                                                    GW_values_mask[:,GW_lag,:])
             else: 
                 GW_values_DD = GW_values[:,GW_lag,:,:]
-                GW_mask_DD = X[2][:,GW_lag,:]
+                GW_mask_DD = GW_values_mask[:,GW_lag,:]
             
             attn_mask_SAGW = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, GW_values_DD.shape[1], 1)) # (N*heads, L, S) L: target seq len
-            attn_mask_GW_lags_Module = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            attn_mask_GW_lags_Module = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_s_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
             
             GW_values_DD = self.SAGW_Module(K = GW_values_DD,
                                             V = GW_values_DD, 
                                             Q = GW_values_DD,
                                             attn_mask = attn_mask_SAGW)
             
-            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+            GW_values_DD += GW_values[:,GW_lag,:,:]
+            
+            GW_out.append(self.GW_lags_Module(K = GW_s_coords[:,GW_lag,:,:],
                                          V = GW_values_DD,
-                                         Q = Z_st_coords,
+                                         Q = Z_s_coords,
                                          attn_mask = attn_mask_GW_lags_Module
                                          ))
             
         for Weather_lag in range(Weather_values.shape[1]):
-            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+            Weather_out.append(self.Weather_lags_Module(K = Weather_s_coords[:,Weather_lag,:,:],
                                                         V = Weather_values[:,Weather_lag,:,:],
-                                                        Q = Z_st_coords))
+                                                        Q = Z_s_coords))
         
+        X_temp_enc = X[1][:,:,0,self.s_coords_dim:][:,:,None,:].permute(0,2,3,1)
         GW_out = torch.stack(GW_out, dim = -1)
+        GW_out = torch.cat([GW_out,
+                            X_temp_enc.repeat(1,GW_out.shape[1],1,1)],
+                           dim = -2) 
+        
+        #self.cache_GW_out = GW_out
+        W_temp_enc = W[1][:,self.s_coords_dim:,:,0,0][:,:,:,None].permute(0,3,1,2)
         Weather_out = torch.stack(Weather_out, dim = -1)
+        Weather_out = torch.cat([Weather_out,
+                            W_temp_enc.repeat(1,Weather_out.shape[1],1,1)],
+                            dim = -2) 
         
         # Joint modules
         Output = torch.cat([GW_out.flatten(-2,-1),
@@ -1680,9 +1704,9 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                                 hidden_channels = self.embedding_dim,
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
-                                                normalization = None,
+                                                normalization = self.normalization,
                                                 elementwise_affine = False,
-                                                pooling = True)
+                                                avg_pooling = False)
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                     hidden_channels = self.embedding_dim,
@@ -1771,51 +1795,55 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         
         ### Output Layers #####
         
-        Linear_Lag_list = [nn.Linear(self.embedding_dim+2,
-                                    self.embedding_dim//2)]
+        Linear_Lag_list = []
+        
         if self.normalization is not None:
             if self.normalization == "layernorm":
-                Linear_Lag_list.append(nn.LayerNorm(self.embedding_dim//2,
+                Linear_Lag_list.append(nn.LayerNorm(self.embedding_dim+2,
                                     elementwise_affine=False))
             elif self.normalization == "instancenorm":
-                Linear_Lag_list.append(InstanceNorm1d_MA(self.embedding_dim//2,1,-1,
+                Linear_Lag_list.append(InstanceNorm1d_MA(self.embedding_dim+2,1,-1,
                                    elementwise_affine=False))
         
-        Linear_Lag_list.extend([self.activation_fn,
+        Linear_Lag_list.extend([nn.Linear(self.embedding_dim+2,
+                                    self.embedding_dim//2),
+                                self.activation_fn,
                                 nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True)])
         
         self.Linear_Lag = nn.Sequential(*Linear_Lag_list)
         
         ### Linear_2_GW
-        Linear_2_GW_list = [nn.Linear(self.embedding_dim,
-                                    self.embedding_dim//2)]
+        Linear_2_GW_list = []
         if self.normalization is not None:
             if self.normalization == "layernorm":
-                Linear_2_GW_list.append(nn.LayerNorm(self.embedding_dim//2,
+                Linear_2_GW_list.append(nn.LayerNorm(self.embedding_dim,
                                 elementwise_affine=False))
             elif self.normalization == "instancenorm":
-                Linear_2_GW_list.append(InstanceNorm1d_MA(self.embedding_dim//2,1,-1,
+                Linear_2_GW_list.append(InstanceNorm1d_MA(self.embedding_dim,1,-1,
                                 elementwise_affine=False))
         
-        Linear_2_GW_list.extend([self.activation_fn,
+        Linear_2_GW_list.extend([nn.Linear(self.embedding_dim,
+                                    self.embedding_dim//2),
+                                self.activation_fn,
                                 nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True)])
         
         self.Linear_2_GW = nn.Sequential(*Linear_2_GW_list)
         
         ### Linear_2_S
-        Linear_2_S_list = [nn.Linear(self.embedding_dim+2,
-                                    self.embedding_dim//2)]
+        Linear_2_S_list = []
         if self.normalization is not None:
             if self.normalization == "layernorm":
-                Linear_2_S_list.append(nn.LayerNorm(self.embedding_dim//2,
+                Linear_2_S_list.append(nn.LayerNorm(self.embedding_dim+2,
                                     elementwise_affine=False))
             elif self.normalization == "instancenorm":
-                Linear_2_S_list.append(InstanceNorm1d_MA(self.embedding_dim//2,1,-1,
+                Linear_2_S_list.append(InstanceNorm1d_MA(self.embedding_dim+2,1,-1,
                                    elementwise_affine=False))
         
-        Linear_2_S_list.extend([self.activation_fn,
+        Linear_2_S_list.extend([nn.Linear(self.embedding_dim+2,
+                                self.embedding_dim//2),
+                                self.activation_fn,
                                 nn.Linear(self.embedding_dim//2, 1,
                                                 bias=True)])
         
