@@ -407,8 +407,13 @@ class Dataset_ST_MultiPoint(Dataset):
         
         self.dates = self.lagged_df.index.get_level_values(0).unique()
         
-        if self.config["fill_value"]:
+        if isinstance(self.config["fill_value"], float):
             self.fill_value = self.config["fill_value"]
+            
+        elif self.config["fill_value"] == "ffill_bfill":
+            self.lagged_df_filled = self.lagged_df.groupby(level="sensor_id").ffill().groupby(level="sensor_id").bfill()
+            self.fill_value = 0
+            
         else:
             self.fill_value = 0
     
@@ -488,12 +493,16 @@ class Dataset_ST_MultiPoint(Dataset):
         return Z
     
     
-    def get_lagged_features(self, subset_df):
+    def get_lagged_features(self, subset_df, subset_df_filled):
         
         lagged_features = subset_df[self.lag_names].iloc[0] # same data for all rows for that date
+        lagged_features_filled = subset_df_filled[self.lag_names].iloc[0]
         
         target_lags_values = lagged_features[~lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
+        target_lags_values_filled = lagged_features_filled[~lagged_features_filled.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
+        
         target_lags_values = target_lags_values.reshape((len(self.target_lags),len(self.sensor_id_list)))
+        target_lags_values_filled = target_lags_values_filled.reshape((len(self.target_lags),len(self.sensor_id_list)))
         
         target_lags_nan_mask = np.isnan(target_lags_values)
         
@@ -511,7 +520,7 @@ class Dataset_ST_MultiPoint(Dataset):
             
         target_lags_st_info = np.stack(target_lags_st_info, axis = 0) # (D,S,C)
         
-        X = [torch.from_numpy(target_lags_values).to(torch.float32).nan_to_num(self.fill_value),
+        X = [torch.from_numpy(target_lags_values_filled).to(torch.float32),
              torch.from_numpy(target_lags_st_info).to(torch.float32),
              torch.from_numpy(target_lags_nan_mask).to(torch.bool)]
         
@@ -555,6 +564,7 @@ class Dataset_ST_MultiPoint(Dataset):
         target_date = np.datetime64(self.dates[idx]) #.astype(f"datetime64[{self.config['frequency']}]")
             
         subset_df = self.lagged_df.loc[pd.IndexSlice[target_date,:],:]
+        subset_df_filled = self.lagged_df_filled.loc[pd.IndexSlice[target_date,:],:]
             
         # Get target Y, Z
         Y = self.get_target_values(subset_df)
@@ -562,7 +572,7 @@ class Dataset_ST_MultiPoint(Dataset):
         
         # Get features X
         ## lagged 
-        X = self.get_lagged_features(subset_df)
+        X = self.get_lagged_features(subset_df, subset_df_filled)
         
         # Weather W
         W = self.get_weather_features(target_date)
