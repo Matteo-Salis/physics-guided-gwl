@@ -24,11 +24,12 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
                                    get_displacement_terms = False):
     
     subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
+    subset_df_filled = dataset.lagged_df_filled.loc[pd.IndexSlice[date,:],:]
     
     W = dataset.get_weather_features(date)
         
     if X is None:
-        X = dataset.get_lagged_features(subset_df)
+        X = dataset.get_lagged_features(subset_df, subset_df_filled)
         
     if Z_grid is None:
         Z = dataset.get_target_st_info(subset_df)
