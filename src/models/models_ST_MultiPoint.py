@@ -85,7 +85,8 @@ class Embedding(nn.Module):
                  out_channels,
                  activation,
                  normalization,
-                 elementwise_affine = True):
+                 norm_dims = "2d",
+                 elementwise_affine = False):
         super().__init__()
         
         if activation == "LeakyReLU":
@@ -111,8 +112,12 @@ class Embedding(nn.Module):
                 layers.append(nn.LayerNorm(self.hidden_channels,
                                            elementwise_affine = self.elementwise_affine))
             elif self.normalization == "instancenorm":
-                layers.append(InstanceNorm1d_MA(self.hidden_channels,1,-1,
-                                   affine=self.elementwise_affine))
+                if norm_dims == "2d":
+                    layers.append(InstanceNorm2d_MA(self.hidden_channels,-1,1,
+                                    elementwise_affine=self.elementwise_affine))
+                elif norm_dims == "1d":
+                    layers.append(InstanceNorm1d_MA(self.hidden_channels,-1,1,
+                                    elementwise_affine=self.elementwise_affine))
                 
         layers.append(nn.Linear(self.hidden_channels, self.hidden_channels))
         layers.append(self.activation)
@@ -122,8 +127,12 @@ class Embedding(nn.Module):
                 layers.append(nn.LayerNorm(self.hidden_channels,
                                            elementwise_affine = self.elementwise_affine))
             elif self.normalization == "instancenorm":
-                layers.append(InstanceNorm1d_MA(self.hidden_channels,1,-1,
-                                   affine=self.elementwise_affine))
+                if norm_dims == "2d":
+                    layers.append(InstanceNorm2d_MA(self.hidden_channels,-1,1,
+                                    elementwise_affine=self.elementwise_affine))
+                elif norm_dims == "1d":
+                    layers.append(InstanceNorm1d_MA(self.hidden_channels,-1,1,
+                                    elementwise_affine=self.elementwise_affine))
                 
         layers.append(nn.Linear(self.hidden_channels, self.out_channels))
         layers.append(self.activation)
@@ -391,7 +400,8 @@ class MHA_Block(nn.Module):
     def forward(self, input, attn_mask = None, mc_dropout = False):
         
         skip_1 = input
-        output = self.norm_layer_1(input)
+        if self.normalization is not None:
+            output = self.norm_layer_1(input)
         
         output, _ = self.mha(
                             query = input, #(N,L,E)
@@ -402,8 +412,9 @@ class MHA_Block(nn.Module):
                             )
         
         output +=  skip_1
-        skip_2 = output        
-        output = self.norm_layer_2(output)
+        skip_2 = output
+        if self.normalization is not None:      
+            output = self.norm_layer_2(output)
         output = self.mlp(output)
         
         output += skip_2
@@ -1657,30 +1668,34 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            normalization = None)
+                                            normalization = None,
+                                            elementwise_affine = False)
         if self.emb_W == "3DCNN":
             self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
                                                 hidden_channels = self.embedding_dim,
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
-                                                normalization = None)
+                                                normalization = None,
+                                                elementwise_affine = False)
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                     hidden_channels = self.embedding_dim,
                                     out_channels= self.embedding_dim,
                                     activation = self.activation,
-                                    normalization = None)
+                                    normalization = None,
+                                    elementwise_affine = False)
             
         
-        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+        self.S_coords_Embedding = Embedding(in_channels = self.s_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
-                                            normalization = None)
+                                            normalization = None,
+                                            elementwise_affine = False)
         
         ### Densification Dropout 
         
-        self.Densification_Dropout = Densification_Dropout(drop_value=self.densification_dropout_dv,
+        self.Densification_Dropout = Densification_Dropout(drop_value=0,
                                                            p = self.densification_dropout_p)
         
         
@@ -1690,7 +1705,9 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                     hidden_channels = self.embedding_dim,
                                     out_channels= self.embedding_dim,
                                     activation = self.activation,
-                                    normalization = None)
+                                    normalization = self.normalization,
+                                    norm_dims="1d",
+                                    elementwise_affine = False)
         
         self.HydrConductivity_Linear = nn.Sequential(nn.Linear(self.embedding_dim, 1, bias=True),
                                                      nn.Softplus())
@@ -1746,6 +1763,10 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         #                             nn.LayerNorm(self.embedding_dim),
         #                             self.activation_fn)
         
+        self.Linear_1_GW =  nn.Sequential(nn.Linear(self.embedding_dim+2,
+                                self.embedding_dim),
+                                self.activation_fn)
+        
         for i in range(self.displacement_mod_blocks):
             setattr(self, f"Displacement_Module_GW_{i}",
                         MHA_Block(self.embedding_dim,
@@ -1764,7 +1785,7 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         
         ### Output Layers #####
         
-        Linear_Lag_list = [nn.Linear(self.embedding_dim,
+        Linear_Lag_list = [nn.Linear(self.embedding_dim+2,
                                     self.embedding_dim//2)]
         if self.normalization is not None:
             if self.normalization == "layernorm":
@@ -1798,7 +1819,7 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         self.Linear_2_GW = nn.Sequential(*Linear_2_GW_list)
         
         ### Linear_2_S
-        Linear_2_S_list = [nn.Linear(self.embedding_dim,
+        Linear_2_S_list = [nn.Linear(self.embedding_dim+2,
                                     self.embedding_dim//2)]
         if self.normalization is not None:
             if self.normalization == "layernorm":
@@ -1823,12 +1844,16 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         
         ### Embedding #####
         
+        #GW_temp_means = torch.mean(X[0], dim = 1)
         GW_values = self.Value_Embedding_GW(torch.cat([X[0].unsqueeze(-1),
-                               X[1]], dim = -1)) #N, D, S, C
+                               X[1],
+                               X[2].unsqueeze(-1)], dim = -1)) #N, D, S, C
         
-        GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        GW_values_mask = X[2] * False
         
-        Z_st_coords = self.ST_coords_Embedding(Z)
+        GW_s_coords = self.S_coords_Embedding(X[1][:,:,:,:self.s_coords_dim]) #N, D, S, C
+        
+        Z_s_coords = self.S_coords_Embedding(Z[:,:,:self.s_coords_dim].unsqueeze(2))[:,:,0,:]
         
         HydrConductivity = self.HydrConductivity(Z[:,:,:self.s_coords_dim])
         HydrConductivity = self.HydrConductivity_Linear(HydrConductivity)
@@ -1840,7 +1865,7 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
             
-        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        Weather_s_coords = self.S_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)[:,:,:,:self.s_coords_dim]) #N, D, S, C
         
         GW_out = []
         Weather_out = []
@@ -1849,34 +1874,43 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
             
             if self.training or mc_dropout:
                 GW_values_DD, GW_mask_DD = self.Densification_Dropout(GW_values[:,GW_lag,:,:],
-                                                                    X[2][:,GW_lag,:])
+                                                                    GW_values_mask[:,GW_lag,:])
             else: 
                 GW_values_DD = GW_values[:,GW_lag,:,:]
-                GW_mask_DD = X[2][:,GW_lag,:]
+                GW_mask_DD = GW_values_mask[:,GW_lag,:]
             
             attn_mask_SAGW = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, GW_values_DD.shape[1], 1)) # (N*heads, L, S) L: target seq len
-            attn_mask_GW_lags_Module = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_st_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
+            attn_mask_GW_lags_Module = GW_mask_DD[:,None,:].repeat((self.spatial_mha_heads, Z_s_coords.shape[1], 1)) # (N*heads, L, S) L: target seq len
             
             GW_values_DD = self.SAGW_Module(K = GW_values_DD,
                                             V = GW_values_DD, 
                                             Q = GW_values_DD,
                                             attn_mask = attn_mask_SAGW)
             
-            GW_out.append(self.GW_lags_Module(K = GW_st_coords[:,GW_lag,:,:],
+            GW_values_DD += GW_values[:,GW_lag,:,:]
+            
+            GW_out.append(self.GW_lags_Module(K = GW_s_coords[:,GW_lag,:,:],
                                          V = GW_values_DD,
-                                         Q = Z_st_coords,
+                                         Q = Z_s_coords,
                                          attn_mask = attn_mask_GW_lags_Module
                                          ))
             
         for Weather_lag in range(Weather_values.shape[1]):
-            Weather_out.append(self.Weather_lags_Module(K = Weather_st_coords[:,Weather_lag,:,:],
+            Weather_out.append(self.Weather_lags_Module(K = Weather_s_coords[:,Weather_lag,:,:],
                                                         V = Weather_values[:,Weather_lag,:,:],
-                                                        Q = Z_st_coords))
+                                                        Q = Z_s_coords))
         
-        
+        X_temp_enc = X[1][:,:,0,self.s_coords_dim:][:,:,None,:].permute(0,2,3,1)
         GW_out = torch.stack(GW_out, dim = -1)
+        GW_out = torch.cat([GW_out,
+                            X_temp_enc.repeat(1,GW_out.shape[1],1,1)],
+                           dim = -2) 
         #self.cache_GW_out = GW_out
+        W_temp_enc = W[1][:,self.s_coords_dim:,:,0,0][:,:,:,None].permute(0,3,1,2)
         Weather_out = torch.stack(Weather_out, dim = -1)
+        Weather_out = torch.cat([Weather_out,
+                            W_temp_enc.repeat(1,Weather_out.shape[1],1,1)],
+                            dim = -2) 
         
         ### Displacement modules
         
@@ -1884,11 +1918,8 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         Displacement_GW = self.Linear_CD_GW(GW_out).flatten(-2,-1)
         Displacement_GW_skip = Displacement_GW
         
-        Displacement_S = Weather_out#.flatten(-2,-1)
-        if self.GW_W_temp_dim[1]>0:
-            Displacement_S = self.Linear_CD_S(Displacement_S)
-            
-        Displacement_S = Displacement_S.flatten(-2,-1)
+        #Displacement_S = Weather_out#.flatten(-2,-1)
+        Displacement_S = self.Linear_CD_S(Weather_out).flatten(-2,-1)
         
         if self.dropout > 0:
             Displacement_GW = nn.functional.dropout1d(Displacement_GW.permute((0,2,1)),
@@ -1899,6 +1930,8 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
             
             Displacement_GW = Displacement_GW.permute((0,2,1))
             Displacement_S = Displacement_S.permute((0,2,1))
+        
+        Displacement_GW = self.Linear_1_GW(Displacement_GW)
         
         for i in range(self.displacement_mod_blocks):
             
