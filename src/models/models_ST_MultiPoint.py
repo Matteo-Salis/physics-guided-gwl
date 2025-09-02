@@ -233,7 +233,8 @@ class Conv3d_Embedding(nn.Module):
                  activation,
                  padding_mode = "replicate",
                  normalization = None,
-                 elementwise_affine = True):
+                 elementwise_affine = True,
+                 avg_pooling = False):
         super().__init__()
         
         if activation == "LeakyReLU":
@@ -248,6 +249,7 @@ class Conv3d_Embedding(nn.Module):
         self.out_channels = out_channels
         self.normalization = normalization
         self.elementwise_affine = elementwise_affine
+        self.avg_pooling = avg_pooling
         
         layers = []
         
@@ -274,7 +276,10 @@ class Conv3d_Embedding(nn.Module):
                                            elementwise_affine = self.elementwise_affine))
             elif self.normalization == "instancenorm":
                 layers.append(nn.InstanceNorm3d(self.hidden_channels, affine = self.elementwise_affine))
-                
+        
+        if self.avg_pooling is True:
+            layers.append(nn.AvgPool3d((1,3,3),count_include_pad=False))
+                            
         layers.append(nn.Conv3d(self.hidden_channels, self.hidden_channels, (1,5,5),
                                 padding='same', padding_mode = padding_mode,
                                 dtype=torch.float32))
@@ -1676,7 +1681,8 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = None,
-                                                elementwise_affine = False)
+                                                elementwise_affine = False,
+                                                pooling = True)
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                     hidden_channels = self.embedding_dim,
@@ -1739,29 +1745,15 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         ### Displacement Modules #####
         
         ## GW
-        
         self.Linear_CD_GW = nn.Sequential(nn.Linear(self.GW_W_temp_dim[0],
                                                 1),
-                                    #nn.LayerNorm(1),
                                     self.activation_fn)
         
-        # self.Linear_GW = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[0]),
-        #                                         self.embedding_dim),
-        #                             nn.LayerNorm(self.embedding_dim),
-        #                             self.activation_fn)
-        
         ## Source/Sink 
-        
         if self.GW_W_temp_dim[1]>0:
             self.Linear_CD_S = nn.Sequential(nn.Linear(self.GW_W_temp_dim[1],
                                                     1),
-                                        #nn.LayerNorm(1),
                                         self.activation_fn)
-        
-        # self.Linear_S = nn.Sequential(nn.Linear(int(self.embedding_dim*self.GW_W_temp_dim[1]),
-        #                                         self.embedding_dim),
-        #                             nn.LayerNorm(self.embedding_dim),
-        #                             self.activation_fn)
         
         self.Linear_1_GW =  nn.Sequential(nn.Linear(self.embedding_dim+2,
                                 self.embedding_dim),
@@ -1775,13 +1767,7 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                 normalization = self.normalization,
                                 elementwise_affine = False,
                                 dropout_p = 0))
-            
-            # setattr(self, f"Displacement_Module_S_{i}",
-            #             MHA_Block(self.embedding_dim,
-            #                     self.displacement_mod_heads,
-            #                     self.activation,
-            #                     elementwise_affine = True,
-            #                     dropout_p = 0))
+        
         
         ### Output Layers #####
         
@@ -1834,10 +1820,6 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
                                                 bias=True)])
         
         self.Linear_2_S = nn.Sequential(*Linear_2_S_list)
-        
-        # self.Output = nn.Sequential(nn.Linear(3,1),
-        #                             self.activation_fn,
-        #                             nn.Linear(1,1))
          
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
@@ -1905,6 +1887,7 @@ class ST_MultiPoint_DisNet_SAGW_K(nn.Module):
         GW_out = torch.cat([GW_out,
                             X_temp_enc.repeat(1,GW_out.shape[1],1,1)],
                            dim = -2) 
+        
         #self.cache_GW_out = GW_out
         W_temp_enc = W[1][:,self.s_coords_dim:,:,0,0][:,:,:,None].permute(0,3,1,2)
         Weather_out = torch.stack(Weather_out, dim = -1)
