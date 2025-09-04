@@ -3,7 +3,7 @@
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "S_SDgw_STemb_FiLM",
+    "run_name": "S_FiLM_SAgw",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -36,8 +36,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "dropout": 0,
-    "densification_dropout_p":0,
+    "densification_dropout_p":0.1,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -46,7 +45,7 @@
 
     "lat_lon_npoints":[70,70],
 
-    "model":"ST_MultiPoint_DisNet_SAGW_K",
+    "model":"ST_MultiPoint_STDisNet_SAGW_K",
     "emb_W":"3DCNN",
     "model_init":null,
     "pretrain_model":null,
@@ -67,7 +66,7 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 2.5e-4,
+    "weight_decay": 5e-4,
     "l2_alpha":0,
 
     "physics":false,

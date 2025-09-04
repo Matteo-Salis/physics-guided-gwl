@@ -3,7 +3,7 @@
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "S_SDgw_STemb_FiLM",
+    "run_name": "PI_S_2FiLM_SA",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -36,8 +36,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "dropout": 0,
-    "densification_dropout_p":0,
+    "densification_dropout_p":0.1,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -46,7 +45,7 @@
 
     "lat_lon_npoints":[70,70],
 
-    "model":"ST_MultiPoint_DisNet_SAGW_K",
+    "model":"ST_MultiPoint_STDisNet_SAGW_K",
     "emb_W":"3DCNN",
     "model_init":null,
     "pretrain_model":null,
@@ -67,20 +66,28 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 2.5e-4,
+    "weight_decay": 1e-5,
     "l2_alpha":0,
 
-    "physics":false,
+    "physics":true,
     "physics_scheduling":null,
     "physics_scheduling_offset":null,
-    "coherence_alpha":0,
-    "diffusion_alpha":0,
-    "tstep_control_points":null,
+    "coherence_alpha":1,
+    "cpoints_start_epoch":0,
+    "reg_diffusion_eq":5e-4,
+    "reg_delta_gw_l2":1e-3,
+    "reg_delta_gw_l1":0,
+    "reg_K":0,
+    "reg_delta_s_l2":1e-3,
+    "reg_delta_s_l1":1e-3,
+    "reg_latlon_smoothness":0,
+    "reg_temp_smoothness":0,
+    "tstep_control_points":2,
 
     "lr": 5e-4,
     "lr_scheduling":null,
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 2000, 
 
     "n_pred_plot":104,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
