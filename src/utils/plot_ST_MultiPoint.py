@@ -153,6 +153,8 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 X = [torch.stack(list(X_deque[0])).to(device),
                      torch.stack(list(X_deque[1])).to(device),
                      torch.stack(list(X_deque[2])).to(device)]
+                
+        del X_deque
             
     true = torch.stack(true, dim = 0).to(device)
     predictions = torch.stack(predictions, dim = 0).to(device)
@@ -168,7 +170,7 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
         output_list.append(hydrConductivity)
         Lag_GW = torch.stack(Lag_GW).to(device)
         output_list.append(Lag_GW)
-        
+    
     return output_list
     
     
@@ -286,6 +288,9 @@ def predict_and_plot_time_series(dataset, model, device,
                     
                 plt.close("all")
                 
+            del prediction_ds
+            del true_ds
+                
                 
 def predict_and_plot_video(dataset, model, device,
                 start_dates_input, n_pred,
@@ -373,6 +378,10 @@ def predict_and_plot_video(dataset, model, device,
                                 print_plot = False)
                     
                 plt.close("all")
+                
+            # delete object
+            del predictions_xr
+            del predictions_xr_wtd
                     
                 
                 
@@ -503,6 +512,13 @@ def predict_and_plot_video_displacements(dataset, model, device,
                                                     print_plot = False)
                     
                 plt.close("all")
+                
+            # delete object
+            del predictions_xr
+            del predictions_xr_wtd
+            del displacement_gw_xr
+            del displacement_s_xr
+            del hydrConductivity_xr
         
         
 

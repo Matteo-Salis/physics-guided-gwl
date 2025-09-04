@@ -61,6 +61,7 @@ def main(config):
         if torch.backends.mps.is_available()
         else "cpu"
     )
+    
     print("Device: ", device)
     
     print("Loading model...")

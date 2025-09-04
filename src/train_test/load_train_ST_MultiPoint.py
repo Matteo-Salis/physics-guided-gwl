@@ -36,18 +36,31 @@ def training_model(config):
             
             cpoints_start_epoch = config["cpoints_start_epoch"]
             print("cpoints_start_epoch: ", cpoints_start_epoch)
+            
             coherence_alpha = config["coherence_alpha"]
             print("coherence_alpha: ", coherence_alpha)
+            
             tstep_control_points = config["tstep_control_points"]
             print("tstep_control_points: ", tstep_control_points)
-            diffusion_alpha = config["diffusion_alpha"]
-            print("diffusion_alpha: ", diffusion_alpha)
-            reg_diffusion_alpha = config["reg_diffusion_alpha"]
-            print("reg_diffusion_alpha: ", reg_diffusion_alpha)
-            reg_K_alpha = config["reg_K_alpha"]
-            print("reg_K_alpha: ", reg_K_alpha)
-            reg_displacement_S = config["reg_displacement_S"]
-            print("reg_displacement_S: ", reg_displacement_S)
+            
+            reg_diffusion_eq = config["reg_diffusion_eq"]
+            print("reg_diffusion_eq: ", reg_diffusion_eq)
+            
+            reg_delta_gw_l2 = config["reg_delta_gw_l2"]
+            print("reg_delta_gw_l2: ", reg_delta_gw_l2)
+            
+            reg_delta_gw_l1 = config["reg_delta_gw_l1"]
+            print("reg_delta_gw_l1: ", reg_delta_gw_l1)
+            
+            reg_K = config["reg_K"]
+            print("reg_K: ", reg_K)
+            
+            reg_delta_s_l2 = config["reg_delta_s_l2"]
+            print("reg_delta_s_l2: ", reg_delta_s_l2)
+            
+            reg_delta_s_l1 = config["reg_delta_s_l1"]
+            print("reg_delta_s_l1: ", reg_delta_s_l1)
+            
             reg_latlon_smoothness = config["reg_latlon_smoothness"]
             print("reg_latlon_smoothness: ", reg_latlon_smoothness)
             reg_temp_smoothness = config["reg_temp_smoothness"]
@@ -62,11 +75,13 @@ def training_model(config):
                            plot_arch = plot_arch,
                            l2_alpha = l2_alpha,
                            cpoints_start_epoch = cpoints_start_epoch,
-                           diffusion_alpha = diffusion_alpha,
+                           reg_diffusion_eq = reg_diffusion_eq,
                            coherence_alpha = coherence_alpha,
-                           reg_diffusion_alpha = reg_diffusion_alpha,
-                           reg_K_alpha = reg_K_alpha,
-                           reg_displacement_S = reg_displacement_S,
+                           reg_delta_gw_l2 = reg_delta_gw_l2,
+                           reg_delta_gw_l1 = reg_delta_gw_l1,
+                           reg_K = reg_K,
+                           reg_delta_s_l2 = reg_delta_s_l2,
+                           reg_delta_s_l1 = reg_delta_s_l1,
                            reg_latlon_smoothness = reg_latlon_smoothness,
                            reg_temp_smoothness = reg_temp_smoothness,
                            plot_displacements = plot_displacements)

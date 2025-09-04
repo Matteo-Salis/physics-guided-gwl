@@ -7,6 +7,8 @@ from utils.plot_ST_MultiPoint import *
 from torch import autograd
 from loss.losses_ST_MultiPoint import *
 
+import gc
+
 
 def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
                       start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
@@ -136,6 +138,10 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                         log_wandb=False,
                                         save_dir=model_dir,
                                         title_ext = f"E{epoch}")
+                    
+                    # Clear GPU cache
+                    torch.cuda.empty_cache()
+                    gc.collect()
                             
                             
 def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
@@ -143,9 +149,10 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     tstep_control_points,
                     device = "cuda", plot_arch = True,
                     l2_alpha = 0, coherence_alpha = 1,
-                    diffusion_alpha = 1, cpoints_start_epoch = 0,
-                    reg_diffusion_alpha = 0, reg_K_alpha = 0,
-                    reg_displacement_S = 0,
+                    reg_diffusion_eq = 1, cpoints_start_epoch = 0,
+                    reg_delta_gw_l2 = 0, reg_delta_gw_l1 = 0,
+                    reg_K = 0,
+                    reg_delta_s_l2 = 0, reg_delta_s_l1 = 0,
                     reg_latlon_smoothness=0, reg_temp_smoothness = 0,
                     plot_displacements = False):  
     
@@ -191,49 +198,71 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             
                             print(f"COH_loss: {round(coh_loss.item(),7)}", end = " -- ")
                             wandb.log({"COH_loss":coh_loss.item()})
-                            
-                        if reg_diffusion_alpha>0:
-                                reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW, #/(HydrConductivity+1e-7)
+                        
+                        ### Delta GW Regularizations 
+                        if reg_delta_gw_l2>0:
+                                reg_delta_gw_l2_loss = reg_delta_gw_l2 * displacement_reg(Displacement_GW/(HydrConductivity+1e-7), #
                                                                         res_fn = "mse")
                             
-                                loss += reg_diffusion_loss
+                                loss += reg_delta_gw_l2_loss
                                 
-                                print(f"RegD_loss: {round(reg_diffusion_loss.item(),7)}", end = " -- ")
-                                wandb.log({"RegD_loss":reg_diffusion_loss.item()})
+                                print(f"L2DeltaGW_loss: {round(reg_delta_gw_l2_loss.item(),7)}", end = " -- ")
+                                wandb.log({"L2DeltaGW_loss":reg_delta_gw_l2_loss.item()})
                                 
                         
-                        if reg_K_alpha!=0:
-                                reg_K = reg_K_alpha * displacement_reg(HydrConductivity,
-                                                                        res_fn = "mse")
+                        if reg_delta_gw_l1>0:
+                                reg_delta_gw_l1_loss = reg_delta_gw_l1 * displacement_reg(Displacement_GW/(HydrConductivity+1e-7), #
+                                                                        res_fn = "mae")
                             
-                                loss += reg_K
+                                loss += reg_delta_gw_l1_loss
                                 
-                                print(f"regK_loss: {round(reg_K.item(),7)}", end = " -- ")
-                                wandb.log({"RegD_loss":reg_K.item()})
+                                print(f"L1DeltaGW_loss: {round(reg_delta_gw_l1_loss.item(),7)}", end = " -- ")
+                                wandb.log({"L1DeltaGW_loss":reg_delta_gw_l1_loss.item()})
                                 
                         
-                        if reg_displacement_S>0:
-                                reg_displacement_S_loss = reg_displacement_S * displacement_reg(Displacement_S,
+                        ### K Regularization 
+                        if reg_K!=0:
+                                reg_K_loss = reg_K * displacement_reg(HydrConductivity,
                                                                         res_fn = "mse")
                             
-                                loss += reg_displacement_S_loss
+                                loss += reg_K_loss
                                 
-                                print(f"RegS_loss: {round(reg_displacement_S_loss.item(),7)}", end = " -- ")
-                                wandb.log({"RegS_loss":reg_displacement_S_loss.item()})
+                                print(f"regK_loss: {round(reg_K_loss.item(),7)}", end = " -- ")
+                                wandb.log({"regK_loss":reg_K_loss.item()})
+                                
+                        ### Delta S Regularizations
+                        if reg_delta_s_l2>0:
+                                reg_delta_s_l2_loss = reg_delta_s_l2 * displacement_reg(Displacement_S, #
+                                                                        res_fn = "mse")
+                            
+                                loss += reg_delta_s_l2_loss
+                                
+                                print(f"L2DeltaS_loss: {round(reg_delta_s_l2_loss.item(),7)}", end = " -- ")
+                                wandb.log({"L2DeltaS_loss":reg_delta_s_l2_loss.item()})
+                                
+                        
+                        if reg_delta_s_l1>0:
+                                reg_delta_s_l1_loss = reg_delta_s_l1 * displacement_reg(Displacement_S, #
+                                                                        res_fn = "mae")
+                            
+                                loss += reg_delta_s_l1_loss
+                                
+                                print(f"L1DeltaS_loss: {round(reg_delta_s_l1_loss.item(),7)}", end = " -- ")
+                                wandb.log({"L1DeltaS_loss":reg_delta_s_l1_loss.item()})
                             
                             
                             
                         ### Control Points Losses
                         if epoch >= cpoints_start_epoch:
                             
-                            if reg_temp_smoothness+reg_latlon_smoothness+diffusion_alpha>0:
+                            if reg_temp_smoothness+reg_latlon_smoothness+reg_diffusion_eq>0:
                                 ## Prediction
                                 Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
                                     tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
                                     eval_mode = False)
                                 
-                                if diffusion_alpha > 0:
-                                    diff_loss = diffusion_alpha * diffusion_loss(
+                                if reg_diffusion_eq > 0:
+                                    diff_loss = reg_diffusion_eq * diffusion_loss(
                                                             Lag_GW = Lag_GW_CP.reshape(tstep_control_points,
                                                                                     lat_lon_points[0],
                                                                                     lat_lon_points[1]),
@@ -370,6 +399,10 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                         log_wandb=False,
                                         save_dir=model_dir,
                                         title_ext = f"E{epoch}")
+                    
+                    # Clear GPU cache
+                    torch.cuda.empty_cache()
+                    gc.collect()
                                 
                                 
                                 
