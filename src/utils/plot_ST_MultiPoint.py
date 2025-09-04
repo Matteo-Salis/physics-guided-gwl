@@ -240,12 +240,15 @@ def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
     
 #### WANDB ######
 
-def wandb_time_series(dataset, model, device,
+def predict_and_plot_time_series(dataset, model, device,
                     start_dates_input, n_pred,
                     sensors_to_plot,
-                    eval_mode):
+                    eval_mode,
+                    log_wandb = False,
+                    save_dir = None,
+                    title_ext = ""):
     
-        title_ext = "_iter" if eval_mode else ""
+        title_ext += "_iter" if eval_mode else ""
         
         for date in start_dates_input:
     
@@ -268,24 +271,36 @@ def wandb_time_series(dataset, model, device,
                 
                 municipality = dataset.wtd_geodf["munic"].loc[dataset.wtd_geodf["sensor_id"] == sensor_id].values[0]
                 
-                wandb.log({f"{municipality}_ts_{date}{title_ext}":wandb.Image(plot_time_series(
-                                                                            prediction_ds[sensor_id], true_ds[sensor_id],
-                                                                            title = f"Prediction{title_ext} {sensor_id} - {municipality} - from {date}",
-                                                                            save_dir = None,
-                                                                            print_plot = False))})
+                if log_wandb is True:
+                    wandb.log({f"{municipality}_ts_{date}_{title_ext}":wandb.Image(plot_time_series(
+                                                                                prediction_ds[sensor_id], true_ds[sensor_id],
+                                                                                title = f"Prediction {title_ext} {sensor_id} - {municipality} - from {date}",
+                                                                                save_dir = None,
+                                                                                print_plot = False))})
+                
+                else:
+                    plot_time_series(prediction_ds[sensor_id], true_ds[sensor_id],
+                                    title = f"Prediction {title_ext} {sensor_id} - {municipality} - from {date}",
+                                    save_dir = f"{save_dir}/ts_plots/{municipality}_{date}_{title_ext}",
+                                    print_plot = False)
+                    
+                plt.close("all")
                 
                 
-def wandb_video(dataset, model, device,
+def predict_and_plot_video(dataset, model, device,
                 start_dates_input, n_pred,
                 t_step_to_plot,
                 lat_points,
                 lon_points,
-                eval_mode):
+                eval_mode,
+                log_wandb = False,
+                save_dir = None,
+                title_ext = ""):
     
 
         Z_grid = grid_generation(dataset, lat_points,lon_points)
         Z_grid_matrix = Z_grid.reshape(lat_points,lon_points,3)
-        title_ext = "_iter" if eval_mode else ""
+        title_ext += "_iter" if eval_mode else ""
         
         for date in start_dates_input:
     
@@ -339,27 +354,42 @@ def wandb_video(dataset, model, device,
                                       
             for t_step in t_step_to_plot:
                 
-                wandb.log({f"map_prediction{title_ext}_{date_seq[t_step]} -":wandb.Image(
+                if log_wandb is True:
+                    wandb.log({f"map_prediction_{title_ext}_{date} -":wandb.Image(
+                        plot_map(predictions_xr[t_step], predictions_xr_wtd[t_step],
+                                title = f"Map prediction {title_ext}",
+                                shapefile=dataset.piemonte_shp,
+                                vmin = [vmin_H,vmin_WTD],
+                                vmax = [vmax_H,vmax_WTD],
+                                save_dir = None,
+                                print_plot = False))})
+                else:
                     plot_map(predictions_xr[t_step], predictions_xr_wtd[t_step],
-                            title = f"Map prediction{title_ext}",
-                            shapefile=dataset.piemonte_shp,
-                            vmin = [vmin_H,vmin_WTD],
-                            vmax = [vmax_H,vmax_WTD],
-                            save_dir = None,
-                            print_plot = False))})
+                                title = f"Map prediction {title_ext}",
+                                shapefile=dataset.piemonte_shp,
+                                vmin = [vmin_H,vmin_WTD],
+                                vmax = [vmax_H,vmax_WTD],
+                                save_dir = f"{save_dir}/map_plots/map_{title_ext}_{date}",
+                                print_plot = False)
+                    
+                plt.close("all")
+                    
                 
                 
-def wandb_video_displacements(dataset, model, device,
+def predict_and_plot_video_displacements(dataset, model, device,
                 start_dates_input, n_pred,
                 t_step_to_plot,
                 lat_points,
                 lon_points,
-                eval_mode):
+                eval_mode,
+                log_wandb = False,
+                save_dir = None,
+                title_ext = ""):
     
 
         Z_grid = grid_generation(dataset, lat_points,lon_points)
         Z_grid_matrix = Z_grid.reshape(lat_points,lon_points,3)
-        title_ext = "_iter" if eval_mode else ""
+        title_ext += "_iter" if eval_mode else ""
         
         for date in start_dates_input:
     
@@ -444,18 +474,35 @@ def wandb_video_displacements(dataset, model, device,
                                       
             for t_step in t_step_to_plot:
                 
-                wandb.log({f"map_prediction{title_ext}_{date_seq[t_step]} -":wandb.Image(
+                if log_wandb is True:
+                
+                    wandb.log({f"map_prediction_{title_ext}_{date} -":wandb.Image(
+                        plot_pred_displacement_maps(predictions_xr[t_step],
+                                                    predictions_xr_wtd[t_step],
+                                                    displacement_gw_xr[t_step],
+                                                    displacement_s_xr[t_step],
+                                                    hydrConductivity_xr[t_step],
+                                                    title = f"Map prediction {title_ext}",
+                                                    shapefile=dataset.piemonte_shp,
+                                                    vmin = [vmin_H,vmin_WTD],
+                                                    vmax = [vmax_H,vmax_WTD],
+                                                    save_dir = None,
+                                                    print_plot = False))})
+                else:
+                    
                     plot_pred_displacement_maps(predictions_xr[t_step],
-                                                predictions_xr_wtd[t_step],
-                                                displacement_gw_xr[t_step],
-                                                displacement_s_xr[t_step],
-                                                hydrConductivity_xr[t_step],
-                                                title = f"Map prediction{title_ext}",
-                                                shapefile=dataset.piemonte_shp,
-                                                vmin = [vmin_H,vmin_WTD],
-                                                vmax = [vmax_H,vmax_WTD],
-                                                save_dir = None,
-                                                print_plot = False))})
+                                                    predictions_xr_wtd[t_step],
+                                                    displacement_gw_xr[t_step],
+                                                    displacement_s_xr[t_step],
+                                                    hydrConductivity_xr[t_step],
+                                                    title = f"Map prediction {title_ext}",
+                                                    shapefile=dataset.piemonte_shp,
+                                                    vmin = [vmin_H,vmin_WTD],
+                                                    vmax = [vmax_H,vmax_WTD],
+                                                    save_dir = f"{save_dir}/map_plots/map_{title_ext}_{date}",
+                                                    print_plot = False)
+                    
+                plt.close("all")
         
         
 

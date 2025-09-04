@@ -17,7 +17,7 @@ from loss.losses_ST_MultiPoint import *
     
 def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                     start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
-                    #timesteps_to_look,
+                    model_dir,
                     device = "cuda", plot_displacements = False):
     
     with torch.no_grad():
@@ -48,51 +48,69 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                 wandb.log({"Test_data_loss":loss.item()})
                             
                             if (epoch+1) % 25 == 0:
-                              wandb_time_series(dataset, model, device,
+                              predict_and_plot_time_series(dataset, model, device,
                                 start_dates_plot, n_pred_plot,
                                 sensors_to_plot,
-                                eval_mode=False)
+                                eval_mode=False,
+                                log_wandb=False,
+                                save_dir=model_dir,
+                                title_ext = f"E{epoch}")
                               
                             
                               if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                         start_dates_plot, n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = False)
+                                        eval_mode = False,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                               
                               else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                         start_dates_plot, n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = False)
+                                        eval_mode = False,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                             
                             if (epoch+1) % 50 == 0:
                             
                               print("Computing iterated predictions...")
                               
-                              wandb_time_series(dataset, model, device,
+                              predict_and_plot_time_series(dataset, model, device,
                                 [start_dates_plot[-1]], n_pred_plot,
                                 sensors_to_plot,
-                                eval_mode = True)
+                                eval_mode = True,
+                                log_wandb=False,
+                                save_dir=model_dir,
+                                title_ext = f"E{epoch}")
                               
                               if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                         [start_dates_plot[-1]], n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = True)
+                                        eval_mode = True,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                               else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                       [start_dates_plot[-1]], n_pred_plot,
                                       t_step_to_plot,
                                       lat_points = lat_lon_points[0],
                                       lon_points= lat_lon_points[1],
-                                      eval_mode = True)
+                                      eval_mode = True,
+                                      log_wandb=False,
+                                      save_dir=model_dir,
+                                      title_ext = f"E{epoch}")
                             
                             
 # def test_pinns_model(epoch, dataset, model, test_loader, loss_fn, loss_physics_fn,

@@ -169,4 +169,7 @@ src/notebooks/*.nc
 src/*.csv
 src/*.nc
 
+data/
+results/
+
 src/notebooks/*.gif

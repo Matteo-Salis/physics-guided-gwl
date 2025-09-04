@@ -66,56 +66,76 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                     model.eval()
                     with torch.no_grad():
                         if (epoch+1) % 25 == 0:
-                            wandb_time_series(dataset, model, device,
+                            predict_and_plot_time_series(dataset, model, device,
                                 start_dates_plot, n_pred_plot,
                                 sensors_to_plot,
-                                eval_mode = False)
+                                eval_mode = False,
+                                log_wandb=False,
+                                save_dir=model_dir,
+                                title_ext = f"E{epoch}")
                             
                             if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                             start_dates_plot, n_pred_plot,
                                             t_step_to_plot,
                                             lat_points = lat_lon_points[0],
                                             lon_points= lat_lon_points[1],
-                                            eval_mode = False)
+                                            eval_mode = False,
+                                            log_wandb=False,
+                                            save_dir=model_dir,
+                                            title_ext = f"E{epoch}")
                             else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                             start_dates_plot, n_pred_plot,
                                             t_step_to_plot,
                                             lat_points = lat_lon_points[0],
                                             lon_points= lat_lon_points[1],
-                                            eval_mode = False)
+                                            eval_mode = False,
+                                            log_wandb=False,
+                                            save_dir=model_dir,
+                                            title_ext = f"E{epoch}")
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
-                            wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
-                                                                      sample_input = (X, W, Z),
-                                                                                    device = device)})
+                            
+                            #wandb.log({"model_arch": })
+                            plot_model_graph(model_dir, model_name, model,
+                                                sample_input = (X, W, Z),
+                                                device = device)
                             
                         if (epoch+1) % 50 == 0:
                             
                             print("Computing iterated predictions...")
                             
-                            wandb_time_series(dataset, model, device,
-                              [start_dates_plot[-1]], n_pred_plot,
-                              sensors_to_plot,
-                              eval_mode = True)
+                            predict_and_plot_time_series(dataset, model, device,
+                            [start_dates_plot[-1]], n_pred_plot,
+                            sensors_to_plot,
+                            eval_mode = True,
+                            log_wandb=False,
+                            save_dir=model_dir,
+                            title_ext = f"E{epoch}")
                             
                             if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                         [start_dates_plot[-1]], n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = True)
+                                        eval_mode = True,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                             
                             else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                         [start_dates_plot[-1]], n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = True)
+                                        eval_mode = True,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                             
                             
 def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
@@ -281,56 +301,75 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     model.eval()
                     with torch.no_grad():
                         if (epoch+1) % 25 == 0:
-                            wandb_time_series(dataset, model, device,
+                            predict_and_plot_time_series(dataset, model, device,
                                 start_dates_plot, n_pred_plot,
                                 sensors_to_plot,
-                                eval_mode = False)
+                                eval_mode = False,
+                                log_wandb=False,
+                                save_dir=model_dir,
+                                title_ext = f"E{epoch}")
                             
                             if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                             start_dates_plot, n_pred_plot,
                                             t_step_to_plot,
                                             lat_points = lat_lon_points[0],
                                             lon_points= lat_lon_points[1],
-                                            eval_mode = False)
+                                            eval_mode = False,
+                                            log_wandb=False,
+                                            save_dir=model_dir,
+                                            title_ext = f"E{epoch}")
                             else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                             start_dates_plot, n_pred_plot,
                                             t_step_to_plot,
                                             lat_points = lat_lon_points[0],
                                             lon_points= lat_lon_points[1],
-                                            eval_mode = False)
+                                            eval_mode = False,
+                                            log_wandb=False,
+                                            save_dir=model_dir,
+                                            title_ext = f"E{epoch}")
                         
                         if epoch == 0 and plot_arch is True:
                             print("Saving plot of the model's architecture...")
-                            wandb.log({"model_arch": plot_model_graph(model_dir, model_name, model,
-                                                                      sample_input = (X, W, Z),
-                                                                                    device = device)})
+                            #wandb.log({"model_arch": })
+                            plot_model_graph(model_dir, model_name, model,
+                                                sample_input = (X, W, Z),
+                                                device = device)
                             
                         if (epoch+1) % 50 == 0:
                             
                             print("Computing iterated predictions...")
                             
-                            wandb_time_series(dataset, model, device,
-                              [start_dates_plot[-1]], n_pred_plot,
-                              sensors_to_plot,
-                              eval_mode = True)
+                            predict_and_plot_time_series(dataset, model, device,
+                            [start_dates_plot[-1]], n_pred_plot,
+                            sensors_to_plot,
+                            eval_mode = True,
+                            log_wandb=False,
+                            save_dir=model_dir,
+                            title_ext = f"E{epoch}")
                             
                             if plot_displacements is False:
-                                wandb_video(dataset, model, device,
+                                predict_and_plot_video(dataset, model, device,
                                         [start_dates_plot[-1]], n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = True)
+                                        eval_mode = True,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                             
                             else:
-                                wandb_video_displacements(dataset, model, device,
+                                predict_and_plot_video_displacements(dataset, model, device,
                                         [start_dates_plot[-1]], n_pred_plot,
                                         t_step_to_plot,
                                         lat_points = lat_lon_points[0],
                                         lon_points= lat_lon_points[1],
-                                        eval_mode = True)
+                                        eval_mode = True,
+                                        log_wandb=False,
+                                        save_dir=model_dir,
+                                        title_ext = f"E{epoch}")
                                 
                                 
                                 
