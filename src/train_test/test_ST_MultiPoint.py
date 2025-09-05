@@ -79,38 +79,38 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                         save_dir=model_dir,
                                         title_ext = f"E{epoch}")
                             
-                            if (epoch+1) % 50 == 0:
+                            # if (epoch+1) % 50 == 0:
                             
-                              print("Computing iterated predictions...")
+                            #   print("Computing iterated predictions...")
                               
-                              predict_and_plot_time_series(dataset, model, device,
-                                [start_dates_plot[-1]], n_pred_plot,
-                                sensors_to_plot,
-                                eval_mode = True,
-                                log_wandb=False,
-                                save_dir=model_dir,
-                                title_ext = f"E{epoch}")
+                            #   predict_and_plot_time_series(dataset, model, device,
+                            #     [start_dates_plot[-1]], n_pred_plot,
+                            #     sensors_to_plot,
+                            #     eval_mode = True,
+                            #     log_wandb=False,
+                            #     save_dir=model_dir,
+                            #     title_ext = f"E{epoch}")
                               
-                              if plot_displacements is False:
-                                predict_and_plot_video(dataset, model, device,
-                                        [start_dates_plot[-1]], n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = True,
-                                        log_wandb=False,
-                                        save_dir=model_dir,
-                                        title_ext = f"E{epoch}")
-                              else:
-                                predict_and_plot_video_displacements(dataset, model, device,
-                                      [start_dates_plot[-1]], n_pred_plot,
-                                      t_step_to_plot,
-                                      lat_points = lat_lon_points[0],
-                                      lon_points= lat_lon_points[1],
-                                      eval_mode = True,
-                                      log_wandb=False,
-                                      save_dir=model_dir,
-                                      title_ext = f"E{epoch}")
+                            #   if plot_displacements is False:
+                            #     predict_and_plot_video(dataset, model, device,
+                            #             [start_dates_plot[-1]], n_pred_plot,
+                            #             t_step_to_plot,
+                            #             lat_points = lat_lon_points[0],
+                            #             lon_points= lat_lon_points[1],
+                            #             eval_mode = True,
+                            #             log_wandb=False,
+                            #             save_dir=model_dir,
+                            #             title_ext = f"E{epoch}")
+                            #   else:
+                            #     predict_and_plot_video_displacements(dataset, model, device,
+                            #           [start_dates_plot[-1]], n_pred_plot,
+                            #           t_step_to_plot,
+                            #           lat_points = lat_lon_points[0],
+                            #           lon_points= lat_lon_points[1],
+                            #           eval_mode = True,
+                            #           log_wandb=False,
+                            #           save_dir=model_dir,
+                            #           title_ext = f"E{epoch}")
                             
                             
 # def test_pinns_model(epoch, dataset, model, test_loader, loss_fn, loss_physics_fn,

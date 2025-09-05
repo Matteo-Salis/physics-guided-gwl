@@ -46,7 +46,19 @@ def loss_masked_mape(Y_hat, Y, Y_mask):
         mape = torch.tensor(0.).to(Y_mask.device)
     return mape
     
-    
+def orthogonality_loss(weights):
+    """
+    embeddings: [N, emb_dim]
+    return mean squared off-diagonal of Gram matrix
+    """
+    G = weights @ weights.t()  # [N,N]
+    diag = torch.diag(G)
+    off = G - torch.diag(diag)
+    # normalize by number of off-diagonal elements
+    n = weights.size(0)
+    return (off ** 2).sum() / (n * (n - 1) + 1e-12)
+
+
 ######################
 ### Physics Losses ###
 ######################
@@ -116,7 +128,7 @@ def coherence_loss(Lag_GW_true,
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/(Lag_GW_true[not_Lag_GW_true_mask] + 1e-7)))
+        return torch.mean(torch.abs(residuals/(Lag_GW_true[not_Lag_GW_true_mask] + 1e-8)))
 
 def groundwater_flow_equation(Lag_GW_denorm,
                               K_denorm,
@@ -171,7 +183,7 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/((spatial_grads+1e-5)/normf_sigma)))
+        return torch.mean(torch.abs(residuals/((spatial_grads+1e-8)/normf_sigma)))
 
 def Fdiff_conv(x, mode = "first_lon", der_order = 1):
     """

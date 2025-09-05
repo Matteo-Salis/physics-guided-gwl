@@ -5,6 +5,7 @@ import xarray
 import torch
 import wandb
 from tqdm import tqdm
+import gc
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -116,6 +117,10 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 Displacement_S.append(pred_list[3])
                 hydrConductivity.append(pred_list[4])
                 Lag_GW.append(pred_list[5])
+                
+            if "cuda" in device: 
+                torch.cuda.empty_cache()
+            gc.collect()
             
     else:
         X = None
@@ -153,6 +158,10 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 X = [torch.stack(list(X_deque[0])).to(device),
                      torch.stack(list(X_deque[1])).to(device),
                      torch.stack(list(X_deque[2])).to(device)]
+                
+            if "cuda" in device: 
+                torch.cuda.empty_cache()
+            gc.collect()
                 
         del X_deque
             

@@ -253,10 +253,10 @@ class Conv3d_Embedding(nn.Module):
                  hidden_channels,
                  out_channels,
                  activation,
+                 kernel_size = (1,3,3),
                  padding_mode = "replicate",
                  normalization = None,
-                 elementwise_affine = True,
-                 avg_pooling = False):
+                 elementwise_affine = True):
         super().__init__()
         
         if activation == "LeakyReLU":
@@ -271,11 +271,10 @@ class Conv3d_Embedding(nn.Module):
         self.out_channels = out_channels
         self.normalization = normalization
         self.elementwise_affine = elementwise_affine
-        self.avg_pooling = avg_pooling
         
         layers = []
         
-        layers.append(nn.Conv3d(self.in_channels, self.hidden_channels, (1,5,5),
+        layers.append(nn.Conv3d(self.in_channels, self.hidden_channels, kernel_size,
                                 padding='same', padding_mode = padding_mode,
                                 dtype=torch.float32))
         layers.append(self.activation)
@@ -287,7 +286,7 @@ class Conv3d_Embedding(nn.Module):
             elif self.normalization == "instancenorm":
                 layers.append(nn.InstanceNorm3d(self.hidden_channels, affine = self.elementwise_affine))
                 
-        # layers.append(nn.Conv3d(self.hidden_channels, self.hidden_channels, (1,5,5),
+        # layers.append(nn.Conv3d(self.hidden_channels, self.hidden_channels, kernel_size,
         #                         padding='same', padding_mode = padding_mode,
         #                         dtype=torch.float32))
         # layers.append(self.activation)
@@ -299,10 +298,8 @@ class Conv3d_Embedding(nn.Module):
         #     elif self.normalization == "instancenorm":
         #         layers.append(nn.InstanceNorm3d(self.hidden_channels, affine = self.elementwise_affine))
         
-        if self.avg_pooling is True:
-            layers.append(nn.AvgPool3d((1,3,3),count_include_pad=False))
-                            
-        layers.append(nn.Conv3d(self.hidden_channels, self.hidden_channels, (1,5,5),
+                                   
+        layers.append(nn.Conv3d(self.hidden_channels, self.hidden_channels, kernel_size,
                                 padding='same', padding_mode = padding_mode,
                                 dtype=torch.float32))
         layers.append(self.activation)
@@ -1102,8 +1099,10 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
-                                                elementwise_affine = False,
-                                                avg_pooling = False)
+                                                elementwise_affine = False)
+            
+            self.Avg_pooling3d = nn.AvgPool3d((1,3,3))
+            
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                     hidden_channels = self.embedding_dim,
@@ -1122,7 +1121,7 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         
         self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
                                                    cond_dim=self.embedding_dim,
-                                                   n_layer=4)
+                                                   n_layer=3)
         
         
         ### Self-Attention and Interpolation Modules #####
@@ -1164,14 +1163,14 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 rescon_input = True,
                                                 dropout = 0.)
         
-        self.SA_W_Module_1 = MHA_Block(embedding_dim = self.embedding_dim,
-                                                heads = self.spatial_mha_heads,
-                                                output_channels = self.embedding_dim,
-                                                activation = self.activation,
-                                                normalization = self.normalization,
-                                                elementwise_affine = False,
-                                                rescon_input = True,
-                                                dropout = 0.)
+        # self.SA_W_Module_1 = MHA_Block(embedding_dim = self.embedding_dim,
+        #                                         heads = self.spatial_mha_heads,
+        #                                         output_channels = self.embedding_dim,
+        #                                         activation = self.activation,
+        #                                         normalization = self.normalization,
+        #                                         elementwise_affine = False,
+        #                                         rescon_input = True,
+        #                                         dropout = 0.)
         
         
         ### Joint Modules #####
@@ -1210,14 +1209,19 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         
         Z_st_coords = self.ST_coords_Embedding(Z)
         
+        W_coors = W[1]
+        
         if self.emb_W == "3DCNN":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1)
-            Weather_values = self.Value_Embedding_Weather(Weather_values_input).permute((0,2,3,4,1)).flatten(2,3)
+            Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            Weather_values = self.Avg_pooling3d(Weather_values).permute((0,2,3,4,1)).flatten(2,3)
+            W_coors = self.Avg_pooling3d(W_coors).permute((0,2,3,4,1)).flatten(2,3)
         elif self.emb_W == "linear":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            W_coors = W_coors.permute((0,2,3,4,1)).flatten(2,3)
             
-        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        Weather_st_coords = self.ST_coords_Embedding(W_coors) #N, D, S, C
         
         FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
         
@@ -1251,11 +1255,11 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         ## Add FiLM
         Weather_out =  Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3] + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
         
-        Weather_out = self.SA_W_Module_1(K = Weather_out,
-                                    V = Weather_out, 
-                                    Q = Weather_out)
-        ## Add Film
-        Weather_out = Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:] + FiLM_betas[:,:,self.embedding_dim*3:]
+        # Weather_out = self.SA_W_Module_1(K = Weather_out,
+        #                             V = Weather_out, 
+        #                             Q = Weather_out)
+        # ## Add Film
+        # Weather_out = Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:] + FiLM_betas[:,:,self.embedding_dim*3:]
         
         
         
@@ -2305,8 +2309,10 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 out_channels= self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
-                                                elementwise_affine = False,
-                                                avg_pooling = False)
+                                                elementwise_affine = False)
+            
+            self.Avg_pooling3d = nn.AvgPool3d((1,3,3))
+            
         elif self.emb_W == "linear":
             self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
                                     hidden_channels = self.embedding_dim,
@@ -2325,7 +2331,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         
         self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
                                                    cond_dim=self.embedding_dim,
-                                                   n_layer=4)
+                                                   n_layer=3)
         
         ### HydrConductivity Module ####
         
@@ -2379,14 +2385,14 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 rescon_input = True,
                                                 dropout = 0.)
         
-        self.SA_W_Module_1 = MHA_Block(embedding_dim = self.embedding_dim,
-                                                heads = self.spatial_mha_heads,
-                                                output_channels = self.embedding_dim,
-                                                activation = self.activation,
-                                                normalization = self.normalization,
-                                                elementwise_affine = False,
-                                                rescon_input = True,
-                                                dropout = 0.)
+        # self.SA_W_Module_1 = MHA_Block(embedding_dim = self.embedding_dim,
+        #                                         heads = self.spatial_mha_heads,
+        #                                         output_channels = self.embedding_dim,
+        #                                         activation = self.activation,
+        #                                         normalization = self.normalization,
+        #                                         elementwise_affine = False,
+        #                                         rescon_input = True,
+        #                                         dropout = 0.)
         
         
         ### Displacement Modules #####
@@ -2437,14 +2443,20 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         HydrConductivity = self.HydrConductivity(Z[:,:,:self.s_coords_dim])
         HydrConductivity = self.HydrConductivity_Linear(HydrConductivity)
         
+        W_coors = W[1]
+        
         if self.emb_W == "3DCNN":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1)
-            Weather_values = self.Value_Embedding_Weather(Weather_values_input).permute((0,2,3,4,1)).flatten(2,3)
+            Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            Weather_values = self.Avg_pooling3d(Weather_values).permute((0,2,3,4,1)).flatten(2,3)
+            W_coors = self.Avg_pooling3d(W_coors).permute((0,2,3,4,1)).flatten(2,3)
+            
         elif self.emb_W == "linear":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            W_coors = W_coors.permute((0,2,3,4,1)).flatten(2,3)
             
-        Weather_st_coords = self.ST_coords_Embedding(W[1].permute((0,2,3,4,1)).flatten(2,3)) #N, D, S, C
+        Weather_st_coords = self.ST_coords_Embedding(W_coors) #N, D, S, C
         
         FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
         
@@ -2467,6 +2479,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                     Q = GW_out)
         ## Add Film
         GW_out =  GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2] + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+        Displacement_GW_p = GW_out
         
         ##### Weather ####
         Weather_values = Weather_values.flatten(1,2)
@@ -2476,14 +2489,14 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                 V = Weather_values,
                                 Q = Z_st_coords)
         ## Add FiLM
-        Weather_out =  Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3] + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
+        Displacement_S_p =  Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3] + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
         
-        Weather_out = self.SA_W_Module_1(K = Weather_out,
-                                    V = Weather_out, 
-                                    Q = Weather_out)
-        ## Add Film
-        Displacement_S_p = Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:] + FiLM_betas[:,:,self.embedding_dim*3:]    
-        Displacement_GW_p = GW_out
+        # Weather_out = self.SA_W_Module_1(K = Weather_out,
+        #                             V = Weather_out, 
+        #                             Q = Weather_out)
+        # ## Add Film
+        # Displacement_S_p = Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:] + FiLM_betas[:,:,self.embedding_dim*3:]    
+        
         
                 
         for i in range(self.displacement_mod_blocks):
