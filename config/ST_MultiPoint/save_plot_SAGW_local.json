@@ -1,0 +1,64 @@
+{
+    "device":"cuda:0",
+
+    "dtm_nc" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/dtm_ROI.nc",
+    "weather_nc_path" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/era5land_2000_2024_weekly.nc",
+    "weather_dtm": "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/era5land_dtm.nc",
+    "wtd_csv_path" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/dataset_wtd_roi.csv",
+    "wtd_shp" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/shapefile/underground_wtd_sensor_roi.shp",
+    "piedmont_shp" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/shapefile/piemonte_admin_boundaries.shp",
+
+    "stdout_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/output",
+    "stderr_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/error",
+
+    "dataset_type": "ST_MultiPoint",
+    "piezo_head":true,
+    "relative_target":false,
+    "nan_treshold":10,
+    "fill_value":"ffill_bfill",
+    "normalization": true,
+    "target_norm_type": "overall_zscore",
+    "date_max_norm":"2020-12-31",
+    "temporal_encoding":"sin",
+
+    "weather_variables": ["tp","t2m","pev","smlt"],
+
+    "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
+    "sel_sensor_list":null,
+
+    "model_name":["GWL_STNet","GWL_STDisNet","GW_STDisNet_PI"],
+    "model_with_displacements":["GWL_STDisNet","GW_STDisNet_PI"],
+    
+    "model_config_path":["C:/Users/Matteo Salis/Desktop/Python/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STNet_SAGW_ERA5_local.json",
+        "C:/Users/Matteo Salis/Desktop/Python/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_ERA5_local.json",
+        "C:/Users/Matteo Salis/Desktop/Python/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_ERA5_local.json"],
+    
+    "model_path":["C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_2FiLM_SA_20250904_220539/ST_MultiPoint_STNet_SAGW_S_2FiLM_SA_20250904_220539.pt",
+        "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_FiLM_SAgw_20250904_202812/ST_MultiPoint_STDisNet_SAGW_K_S_FiLM_SAgw_20250904_202812.pt",
+        "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SA_20250905_062838/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SA_20250905_062838.pt"],
+
+    "all_dataset" : true,
+    "max_ds_elems" : null,
+    "test_split_p" :"2020-12-31",
+    "frequency": "W",
+
+    "random_sampler": true,
+
+    "weather_lags": 4,
+    "target_lags":[1,2,3,4],
+    "weather_get_coords": true,
+
+
+    "n_pred_ts":255,
+    "start_date_pred_ts":"2019-01-06",
+    "get_displacement":true,
+    "iter_pred":true,
+    "lat_points": 70,
+    "lon_points": 70,
+
+    "n_pred_map":255,
+    "start_date_pred_map":"2019-01-06",
+    "map_dates":["2019-05-12","2019-07-21","2019-10-06","2022-05-15","2022-07-17","2022-10-02"],
+
+    "save_dir":"C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/plots/"
+}

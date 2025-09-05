@@ -57,6 +57,10 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                             loss += aux_loss
                             print("aux_moe_loss: ", aux_loss, end = " -- ")
                             
+                        # if orthogonality_loss > 0:
+                        #     ortho_emb_w_loss = orthogonality_loss(model)
+                        
+                            
                         print("Total_loss: ", loss.item())
                         
                         loss.backward()
@@ -105,39 +109,39 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                                 sample_input = (X, W, Z),
                                                 device = device)
                             
-                        if (epoch+1) % 50 == 0:
+                        # if (epoch+1) % 50 == 0:
                             
-                            print("Computing iterated predictions...")
+                        #     print("Computing iterated predictions...")
                             
-                            predict_and_plot_time_series(dataset, model, device,
-                            [start_dates_plot[-1]], n_pred_plot,
-                            sensors_to_plot,
-                            eval_mode = True,
-                            log_wandb=False,
-                            save_dir=model_dir,
-                            title_ext = f"E{epoch}")
+                        #     predict_and_plot_time_series(dataset, model, device,
+                        #     [start_dates_plot[-1]], n_pred_plot,
+                        #     sensors_to_plot,
+                        #     eval_mode = True,
+                        #     log_wandb=False,
+                        #     save_dir=model_dir,
+                        #     title_ext = f"E{epoch}")
                             
-                            if plot_displacements is False:
-                                predict_and_plot_video(dataset, model, device,
-                                        [start_dates_plot[-1]], n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = True,
-                                        log_wandb=False,
-                                        save_dir=model_dir,
-                                        title_ext = f"E{epoch}")
+                        #     if plot_displacements is False:
+                        #         predict_and_plot_video(dataset, model, device,
+                        #                 [start_dates_plot[-1]], n_pred_plot,
+                        #                 t_step_to_plot,
+                        #                 lat_points = lat_lon_points[0],
+                        #                 lon_points= lat_lon_points[1],
+                        #                 eval_mode = True,
+                        #                 log_wandb=False,
+                        #                 save_dir=model_dir,
+                        #                 title_ext = f"E{epoch}")
                             
-                            else:
-                                predict_and_plot_video_displacements(dataset, model, device,
-                                        [start_dates_plot[-1]], n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = True,
-                                        log_wandb=False,
-                                        save_dir=model_dir,
-                                        title_ext = f"E{epoch}")
+                        #     else:
+                        #         predict_and_plot_video_displacements(dataset, model, device,
+                        #                 [start_dates_plot[-1]], n_pred_plot,
+                        #                 t_step_to_plot,
+                        #                 lat_points = lat_lon_points[0],
+                        #                 lon_points= lat_lon_points[1],
+                        #                 eval_mode = True,
+                        #                 log_wandb=False,
+                        #                 save_dir=model_dir,
+                        #                 title_ext = f"E{epoch}")
                     
                     # Clear GPU cache
                     torch.cuda.empty_cache()
@@ -366,39 +370,39 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                                 sample_input = (X, W, Z),
                                                 device = device)
                             
-                        if (epoch+1) % 50 == 0:
+                        # if (epoch+1) % 50 == 0:
                             
-                            print("Computing iterated predictions...")
+                        #     print("Computing iterated predictions...")
                             
-                            predict_and_plot_time_series(dataset, model, device,
-                            [start_dates_plot[-1]], n_pred_plot,
-                            sensors_to_plot,
-                            eval_mode = True,
-                            log_wandb=False,
-                            save_dir=model_dir,
-                            title_ext = f"E{epoch}")
+                        #     predict_and_plot_time_series(dataset, model, device,
+                        #     [start_dates_plot[-1]], n_pred_plot,
+                        #     sensors_to_plot,
+                        #     eval_mode = True,
+                        #     log_wandb=False,
+                        #     save_dir=model_dir,
+                        #     title_ext = f"E{epoch}")
                             
-                            if plot_displacements is False:
-                                predict_and_plot_video(dataset, model, device,
-                                        [start_dates_plot[-1]], n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = True,
-                                        log_wandb=False,
-                                        save_dir=model_dir,
-                                        title_ext = f"E{epoch}")
+                        #     if plot_displacements is False:
+                        #         predict_and_plot_video(dataset, model, device,
+                        #                 [start_dates_plot[-1]], n_pred_plot,
+                        #                 t_step_to_plot,
+                        #                 lat_points = lat_lon_points[0],
+                        #                 lon_points= lat_lon_points[1],
+                        #                 eval_mode = True,
+                        #                 log_wandb=False,
+                        #                 save_dir=model_dir,
+                        #                 title_ext = f"E{epoch}")
                             
-                            else:
-                                predict_and_plot_video_displacements(dataset, model, device,
-                                        [start_dates_plot[-1]], n_pred_plot,
-                                        t_step_to_plot,
-                                        lat_points = lat_lon_points[0],
-                                        lon_points= lat_lon_points[1],
-                                        eval_mode = True,
-                                        log_wandb=False,
-                                        save_dir=model_dir,
-                                        title_ext = f"E{epoch}")
+                        #     else:
+                        #         predict_and_plot_video_displacements(dataset, model, device,
+                        #                 [start_dates_plot[-1]], n_pred_plot,
+                        #                 t_step_to_plot,
+                        #                 lat_points = lat_lon_points[0],
+                        #                 lon_points= lat_lon_points[1],
+                        #                 eval_mode = True,
+                        #                 log_wandb=False,
+                        #                 save_dir=model_dir,
+                        #                 title_ext = f"E{epoch}")
                     
                     # Clear GPU cache
                     torch.cuda.empty_cache()
