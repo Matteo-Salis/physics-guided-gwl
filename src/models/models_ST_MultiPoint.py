@@ -33,7 +33,7 @@ from st_moe_pytorch import SparseMoEBlock
 #         if m.bias is not None:
 #             nn.init.zeros_(m.bias)
             
-def weight_init(m, activation):
+def weight_init_he(m, activation):
     if activation == "ReLU":
         nonlinearity='relu'
     else:     
@@ -42,6 +42,13 @@ def weight_init(m, activation):
     
     if isinstance(m, nn.Linear):
         nn.init.kaiming_uniform_(m.weight, nonlinearity = nonlinearity)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+            
+def weight_init_ortho(m):
+    
+    if isinstance(m, nn.Linear):
+        nn.init.orthogonal_(m.weight)
         if m.bias is not None:
             nn.init.zeros_(m.bias)
             
@@ -2273,6 +2280,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                 GW_W_temp_dim = [2,5],
                 densification_dropout_p = 0.25,
                 activation = "GELU",
+                simplified_embedding = False,
                 normalization = "layernorm"):
         
         super().__init__()
@@ -2290,6 +2298,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         self.activation = activation
         self.emb_W = emb_W
         self.normalization = normalization
+        self.simplified_embedding = simplified_embedding
         
         if self.activation == "LeakyReLU":
             self.activation_fn = nn.LeakyReLU()
@@ -2297,32 +2306,51 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
             self.activation_fn = nn.GELU()
         
         ### Embedding #####
-        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+        if simplified_embedding is True:
+            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim)
+        else:
+            self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
                                             normalization = None,
                                             elementwise_affine = False)
         if self.emb_W == "3DCNN":
-            self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
-                                                hidden_channels = self.embedding_dim,
-                                                out_channels= self.embedding_dim,
-                                                activation = self.activation,
-                                                normalization = self.normalization,
-                                                elementwise_affine = False)
+            if simplified_embedding is True:
+                self.Value_Embedding_Weather = nn.Conv3d(self.value_dim_Weather, self.embedding_dim, (1,3,3),
+                                padding='same', padding_mode = "replicate",
+                                dtype=torch.float32)
+            
+            else:
+                self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
+                                                    hidden_channels = self.embedding_dim,
+                                                    out_channels= self.embedding_dim,
+                                                    activation = self.activation,
+                                                    normalization = self.normalization,
+                                                    elementwise_affine = False)
+            
+            
+            
+            
             
             self.Avg_pooling3d = nn.AvgPool3d((1,3,3))
             
         elif self.emb_W == "linear":
-            self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
-                                    hidden_channels = self.embedding_dim,
-                                    out_channels= self.embedding_dim,
-                                    activation = self.activation,
-                                    normalization = None,
-                                    elementwise_affine = False)
+            if simplified_embedding is True:
+                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim)
             
-        
-        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+            else: 
+                self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                        hidden_channels = self.embedding_dim,
+                                        out_channels= self.embedding_dim,
+                                        activation = self.activation,
+                                        normalization = None,
+                                        elementwise_affine = False)
+            
+        if simplified_embedding is True:
+            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim)
+        else:
+            self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
