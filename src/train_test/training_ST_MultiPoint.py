@@ -8,11 +8,12 @@ from torch import autograd
 from loss.losses_ST_MultiPoint import *
 
 import gc
-
+         
 
 def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
                       start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
-                      device = "cuda", plot_arch = True, l2_alpha = 0, plot_displacements = False):  
+                      device = "cuda", plot_arch = True, l2_alpha = 0, orthogonality_loss_alpha = 0,
+                      plot_displacements = False):  
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -57,9 +58,17 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                             loss += aux_loss
                             print("aux_moe_loss: ", aux_loss, end = " -- ")
                             
-                        # if orthogonality_loss > 0:
-                        #     ortho_emb_w_loss = orthogonality_loss(model)
-                        
+                        if orthogonality_loss_alpha > 0:
+                            
+                            # orthogonality_loss_alpha = adjust_ortho_decay_rate(epoch,
+                            #                                                    orthogonality_loss_alpha)
+                            
+                            l2_ortho_loss = l2_reg_ortho(model)
+                            
+                            loss += orthogonality_loss_alpha*l2_ortho_loss
+                            
+                            print(f"L2Ortho_loss: {round(l2_ortho_loss.item(),7)}", end = " -- ")
+                            wandb.log({"L2Ortho_loss":l2_ortho_loss.item()})
                             
                         print("Total_loss: ", loss.item())
                         
@@ -441,6 +450,20 @@ def Control_Points_Predictions(dataset, model, device,
     
     return predictions, displacement_gw, displacement_s, hydrConductivity, Lag_GW
     
+def adjust_ortho_decay_rate(epoch, o_d):
+    if epoch > 120:
+        o_d = 0.0
+         
+    elif epoch > 70:
+        o_d = 1e-6 * o_d
+    
+    elif epoch > 50:
+        o_d = 1e-4 * o_d
+    
+    elif epoch > 30:
+        o_d = 1e-3 * o_d
+
+
     # # Denormalization
     # if dataset.config["normalization"] is True:
     #     Z_grid_matrix_lat = (Z_grid_matrix[:,:,0]*dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]

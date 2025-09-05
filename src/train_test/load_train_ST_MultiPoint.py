@@ -16,6 +16,7 @@ def training_model(config):
         lat_lon_points = config["lat_lon_npoints"]
         plot_arch = config["plot_arch"]
         l2_alpha = config["l2_alpha"]
+        orthogonality_loss_alpha = config["orthogonality_loss_alpha"]
         plot_displacements = True if "_K" in config["model"] else False
         
         if config["physics"] is False:
@@ -29,6 +30,7 @@ def training_model(config):
                            lat_lon_points = lat_lon_points,
                            plot_arch = plot_arch,
                            l2_alpha = l2_alpha,
+                           orthogonality_loss_alpha = orthogonality_loss_alpha,
                            plot_displacements = plot_displacements)
             
         else:

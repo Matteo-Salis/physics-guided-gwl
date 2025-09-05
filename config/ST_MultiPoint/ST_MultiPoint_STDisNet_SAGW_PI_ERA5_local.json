@@ -61,6 +61,7 @@
     "displacement_mod_heads": 4,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
+    "simplified_embedding":true,
 
     "loss":"mape",
     "optimizer": "adamw",
@@ -68,6 +69,7 @@
     "nesterov": null,
     "weight_decay": 1e-5,
     "l2_alpha":0,
+    "orthogonality_loss_alpha":5e-4,
 
     "physics":true,
     "physics_scheduling":null,
