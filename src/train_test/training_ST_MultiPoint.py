@@ -63,7 +63,8 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                             # orthogonality_loss_alpha = adjust_ortho_decay_rate(epoch,
                             #                                                    orthogonality_loss_alpha)
                             
-                            l2_ortho_loss = l2_reg_ortho(model)
+                            l2_ortho_loss = l2_reg_ortho(model,
+                                                         every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
                             
                             loss += orthogonality_loss_alpha*l2_ortho_loss
                             
