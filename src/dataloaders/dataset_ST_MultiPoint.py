@@ -402,6 +402,11 @@ class Dataset_ST_MultiPoint(Dataset):
         
         self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
         
+        # Discard Summer
+        if self.config["discard_summer_data"] is True:
+            summer_mask = ~self.lagged_df.index.get_level_values("date").month.isin([6,7,8])
+            self.lagged_df = self.lagged_df[summer_mask]
+        
         # Create nan-mask
         self.lagged_df["nan_mask"] = self.lagged_df[self.target].isna()
         

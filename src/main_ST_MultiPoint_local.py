@@ -134,12 +134,13 @@ if __name__ == "__main__":
     config = {}
     with open(args.config) as f:
         config = json.load(f)
-        
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_id = '{}_{}_{}'.format(config["model"], config["run_name"], timestamp)
-        
-    # Redirect sys.stdout and err to the files
-    sys.stdout = open(f'{config["stdout_log_dir"]}_{run_id}.txt', 'w')
-    sys.stderr = open(f'{config["stderr_log_dir"]}_{run_id}.txt', 'w')
+    
+    if config["stdout_log_dir"] is not None:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        run_id = '{}_{}_{}'.format(config["model"], config["run_name"], timestamp)
+            
+        # Redirect sys.stdout and err to the files
+        sys.stdout = open(f'{config["stdout_log_dir"]}_{run_id}.txt', 'w')
+        sys.stderr = open(f'{config["stderr_log_dir"]}_{run_id}.txt', 'w')
 
     main(config)
