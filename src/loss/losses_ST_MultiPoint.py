@@ -121,6 +121,20 @@ def l2_reg_ortho(mdl, every_layer = True,
 ### Physics Losses ###
 ######################
 
+def recharge_areas_loss(displacement_s, recharge_area_rasterized):
+    """
+    recharge_area_rasterized True: recharge areas
+    """
+    recharge_mask = recharge_area_rasterized[None,:,:].repeat(displacement_s.shape[0],1,1)
+    positive_displacements = torch.relu(displacement_s)
+    not_recharge_positive = positive_displacements[~recharge_mask]
+    if torch.count_nonzero(not_recharge_positive)>0:
+        residuals = torch.sum(not_recharge_positive)/torch.count_nonzero(not_recharge_positive)
+    else:
+        residuals = 0
+    
+    return residuals
+
 ##VEDI DeBenzac e optical flow
 def displacement_reg(displacement_term,
                      res_fn):

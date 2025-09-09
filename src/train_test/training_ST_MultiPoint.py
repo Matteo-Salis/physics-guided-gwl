@@ -162,11 +162,13 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
                     tstep_control_points,
                     device = "cuda", plot_arch = True,
-                    l2_alpha = 0, coherence_alpha = 1,
+                    l2_alpha = 0, orthogonality_loss_alpha = 0,
+                    coherence_alpha = 1,
                     reg_diffusion_eq = 1, cpoints_start_epoch = 0,
                     reg_delta_gw_l2 = 0, reg_delta_gw_l1 = 0,
                     reg_K = 0,
                     reg_delta_s_l2 = 0, reg_delta_s_l1 = 0,
+                    reg_recharge_areas = 0,
                     reg_latlon_smoothness=0, reg_temp_smoothness = 0,
                     plot_displacements = False):  
     
@@ -201,6 +203,19 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         
                         if l2_alpha > 0:
                             loss += l2_alpha * loss_l2_regularization(model)
+                            
+                        if orthogonality_loss_alpha > 0:
+                            
+                            # orthogonality_loss_alpha = adjust_ortho_decay_rate(epoch,
+                            #                                                    orthogonality_loss_alpha)
+                            
+                            l2_ortho_loss = l2_reg_ortho(model,
+                                                         every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
+                            
+                            loss += orthogonality_loss_alpha*l2_ortho_loss
+                            
+                            print(f"L2Ortho_loss: {round(l2_ortho_loss.item(),7)}", end = " -- ")
+                            wandb.log({"L2Ortho_loss":l2_ortho_loss.item()})
                         
                         if coherence_alpha > 0:
                             coh_loss = coherence_alpha * coherence_loss(X[0][:,0,:],
@@ -215,7 +230,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         
                         ### Delta GW Regularizations 
                         if reg_delta_gw_l2>0:
-                                reg_delta_gw_l2_loss = reg_delta_gw_l2 * displacement_reg(Displacement_GW/(HydrConductivity+1e-7), #
+                                reg_delta_gw_l2_loss = reg_delta_gw_l2 * displacement_reg(Displacement_GW*dataset.norm_factors["target_stds"]/(HydrConductivity+1e-7), #
                                                                         res_fn = "mse")
                             
                                 loss += reg_delta_gw_l2_loss
@@ -225,7 +240,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 
                         
                         if reg_delta_gw_l1>0:
-                                reg_delta_gw_l1_loss = reg_delta_gw_l1 * displacement_reg(Displacement_GW/(HydrConductivity+1e-7), #
+                                reg_delta_gw_l1_loss = reg_delta_gw_l1 * displacement_reg(Displacement_GW*dataset.norm_factors["target_stds"]/(HydrConductivity+1e-7), #
                                                                         res_fn = "mae")
                             
                                 loss += reg_delta_gw_l1_loss
@@ -246,7 +261,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 
                         ### Delta S Regularizations
                         if reg_delta_s_l2>0:
-                                reg_delta_s_l2_loss = reg_delta_s_l2 * displacement_reg(Displacement_S, #
+                                reg_delta_s_l2_loss = reg_delta_s_l2 * displacement_reg(Displacement_S*dataset.norm_factors["target_stds"], #
                                                                         res_fn = "mse")
                             
                                 loss += reg_delta_s_l2_loss
@@ -256,7 +271,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 
                         
                         if reg_delta_s_l1>0:
-                                reg_delta_s_l1_loss = reg_delta_s_l1 * displacement_reg(Displacement_S, #
+                                reg_delta_s_l1_loss = reg_delta_s_l1 * displacement_reg(Displacement_S*dataset.norm_factors["target_stds"], #
                                                                         res_fn = "mae")
                             
                                 loss += reg_delta_s_l1_loss
@@ -269,7 +284,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         ### Control Points Losses
                         if epoch >= cpoints_start_epoch:
                             
-                            if reg_temp_smoothness+reg_latlon_smoothness+reg_diffusion_eq>0:
+                            if reg_diffusion_eq>0:
                                 ## Prediction
                                 Y_hat_CP, Displacement_GW_CP, Displacement_S_CP, HydrConductivity_CP, Lag_GW_CP = Control_Points_Predictions(dataset, model, device,
                                     tstep_control_points, lat_points = lat_lon_points[0], lon_points = lat_lon_points[1],
@@ -295,6 +310,19 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                     
                                     print(f"CP_Diff_loss: {round(diff_loss.item(),7)}", end = " -- ")
                                     wandb.log({"CP_Diff_loss":diff_loss.item()})
+                                    
+                                if reg_recharge_areas > 0:
+                                    recharge_loss = reg_recharge_areas * recharge_areas_loss(Displacement_S_CP.reshape(tstep_control_points,
+                                                                                    lat_lon_points[0],
+                                                                                    lat_lon_points[1])*dataset.norm_factors["target_stds"],
+                                                                                    dataset.recharge_area_shp_rasterized)
+                                    
+                                    loss += recharge_loss
+                                    
+                                    print(f"RCH_loss: {round(recharge_loss.item(),7)}", end = " -- ")
+                                    wandb.log({"RCH_loss":recharge_loss.item()})
+                                    
+                                
                                 
                                 # if reg_diffusion_alpha>0:
                                 #     reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-7),

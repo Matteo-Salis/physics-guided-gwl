@@ -227,10 +227,15 @@ def load_model(config):
         print("Done!")
     
     
-    if config["model_init"] == "He":
+    if config["model_init"] == "He_uniform":
         print("He Initialization Applied.")
-        model = model.apply(partial(weight_init_he, activation = config["activation"]))
-    if config["model_init"] == "Ortho":
+        model = model.apply(partial(weight_init_he, activation = config["activation"], distribution = "uniform"))
+    
+    elif config["model_init"] == "He_normal":
+        print("He Initialization Applied.")
+        model = model.apply(partial(weight_init_he, activation = config["activation"], distribution = "normal"))
+    
+    elif config["model_init"] == "Ortho":
         print("Orthogonal Initialization Applied.")
         model = model.apply(weight_init_ortho)
     return model, model_name
