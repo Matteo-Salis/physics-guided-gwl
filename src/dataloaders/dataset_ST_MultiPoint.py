@@ -6,8 +6,10 @@ import copy
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import shapely.geometry as sg
 import xarray
 
+import rasterio
 import rioxarray
 import fiona
 
@@ -16,6 +18,8 @@ from torch.utils.data import Dataset
 import torch.nn as nn
 
 import warnings
+
+from rasterio import features
 
 class Dataset_ST_MultiPoint(Dataset):
     """Weather and Groundwater Dataset for the continuous case model"""
@@ -43,7 +47,7 @@ class Dataset_ST_MultiPoint(Dataset):
         self.loading_dtm()
         print("Done!")
         
-        print("    Loading Piedmont Shapefile...", end = " ")
+        print("    Loading Piedmont Shapefiles...", end = " ")
         self.load_shapefile()
         print("Done!")
         
@@ -62,12 +66,69 @@ class Dataset_ST_MultiPoint(Dataset):
         
     ### Data loading
     
-    def load_shapefile(self):
+    def load_shapefile(self, buffer_recharge = None):
         piemonte_shp = gpd.read_file(self.config["piedmont_shp"], engine='fiona')
         piemonte_shp = piemonte_shp.to_crs('epsg:4326')
 
         # remove the small enclaved Cuneo area inside Torino province
         self.piemonte_shp = piemonte_shp[:-1]
+        
+        # Rasterize Recharge Areas
+        if self.config["recharge_areas_shp"] is not None:
+            
+            if self.config["buffer_recharge"] is None:
+                
+                buffer_recharge = 0.05
+            else:
+                buffer_recharge = self.config["buffer_recharge"]
+            
+            reacharge_area_shp = gpd.read_file(self.config["recharge_areas_shp"], engine='fiona')
+            reacharge_area_shp = reacharge_area_shp.to_crs('epsg:4326')
+            
+            reacharge_area_shp = reacharge_area_shp.loc[reacharge_area_shp["denom_area"] == "Area ricarica"]
+            
+            # extract bounds from xarray dataset
+            xmin, ymin, xmax, ymax = self.dtm_roi.rio.bounds()
+
+            # create polygon from bounds
+            bbox = sg.box(xmin, ymin, xmax, ymax)
+            boundary_gdf = gpd.GeoDataFrame(geometry=[bbox], crs=self.dtm_roi.rio.crs)
+
+            # clip
+            clipped = gpd.clip(reacharge_area_shp, boundary_gdf)
+            
+            # Create Buffer 
+            clipped_buffer = clipped.buffer(buffer_recharge)
+            clipped_buffer = gpd.GeoDataFrame(geometry=clipped_buffer, crs=clipped.crs)
+            
+            # define transform and shape
+            bbox = [self.dtm_roi.x.min().values,
+                    self.dtm_roi.x.max().values,
+                    self.dtm_roi.y.min().values,
+                    self.dtm_roi.y.max().values]
+
+            x = np.linspace(bbox[0], bbox[1], self.config["lat_lon_npoints"][1])
+            y = np.linspace(bbox[2], bbox[3], self.config["lat_lon_npoints"][0])[::-1]
+
+            xres = (x[1] - x[0])
+            yres = (y[0] - y[1])
+            transform = rasterio.transform.from_origin(self.dtm_roi.x.min().values,
+                                                    self.dtm_roi.y.max().values,
+                                                    xres,
+                                                    yres)
+
+            # rasterize
+            recharge_area_shp_rasterized = features.rasterize(
+                ((geom, 1) for geom in clipped_buffer.geometry),
+                out_shape=(len(x), len(y)),
+                transform=transform,
+                fill=0,
+                dtype="uint8"
+            )
+            
+            self.recharge_area_shp_rasterized = torch.tensor(recharge_area_shp_rasterized).to(torch.bool)
+        
+        
         
     def loading_weather(self):
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])

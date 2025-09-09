@@ -68,6 +68,9 @@ def training_model(config):
             reg_temp_smoothness = config["reg_temp_smoothness"]
             print("reg_temp_smoothness: ", reg_temp_smoothness)
             
+            reg_recharge_areas = config["reg_recharge_areas"]
+            print("reg_recharge_areas: ", reg_recharge_areas)
+            
             return partial(physics_guided_trainer, start_dates_plot = start_dates_plot_training,
                            n_pred_plot = n_pred_plot,
                            sensors_to_plot = sensors_to_plot,
@@ -76,6 +79,7 @@ def training_model(config):
                            tstep_control_points = tstep_control_points,
                            plot_arch = plot_arch,
                            l2_alpha = l2_alpha,
+                           orthogonality_loss_alpha = orthogonality_loss_alpha,
                            cpoints_start_epoch = cpoints_start_epoch,
                            reg_diffusion_eq = reg_diffusion_eq,
                            coherence_alpha = coherence_alpha,
@@ -84,6 +88,7 @@ def training_model(config):
                            reg_K = reg_K,
                            reg_delta_s_l2 = reg_delta_s_l2,
                            reg_delta_s_l1 = reg_delta_s_l1,
+                           reg_recharge_areas = reg_recharge_areas,
                            reg_latlon_smoothness = reg_latlon_smoothness,
                            reg_temp_smoothness = reg_temp_smoothness,
                            plot_displacements = plot_displacements)

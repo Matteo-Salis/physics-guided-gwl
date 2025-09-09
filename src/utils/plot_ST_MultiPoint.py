@@ -16,7 +16,6 @@ from collections import deque
 
 from matplotlib.colors import TwoSlopeNorm
     
-    
 #######################
 #### ST MultiPoint ####
 #######################
@@ -220,7 +219,9 @@ def plot_time_series(y_hat, y, title,
     else:
         return fig
     
-    
+
+### Grid ###
+
 def grid_generation(dataset, nh = 30, hw = 45, bbox = None):
     if bbox is None:
         

@@ -33,17 +33,23 @@ from st_moe_pytorch import SparseMoEBlock
 #         if m.bias is not None:
 #             nn.init.zeros_(m.bias)
             
-def weight_init_he(m, activation):
+def weight_init_he(m, activation, distribution = "uniform"):
     if activation == "ReLU":
         nonlinearity='relu'
     else:     
         nonlinearity='leaky_relu'
         
-    
-    if isinstance(m, nn.Linear):
-        nn.init.kaiming_uniform_(m.weight, nonlinearity = nonlinearity)
-        if m.bias is not None:
-            nn.init.zeros_(m.bias)
+    if distribution == "uniform":
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_uniform_(m.weight, nonlinearity = nonlinearity)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+                
+    elif distribution == "normal":
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, nonlinearity = nonlinearity)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
             
 def weight_init_ortho(m):
     
