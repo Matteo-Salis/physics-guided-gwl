@@ -63,6 +63,9 @@ def training_model(config):
             reg_delta_s_l1 = config["reg_delta_s_l1"]
             print("reg_delta_s_l1: ", reg_delta_s_l1)
             
+            reg_delta_gw_s_on_cps = config["reg_delta_gw_s_on_cps"]
+            print("reg_delta_gw_s_on_cps: ", reg_delta_gw_s_on_cps)
+            
             reg_latlon_smoothness = config["reg_latlon_smoothness"]
             print("reg_latlon_smoothness: ", reg_latlon_smoothness)
             reg_temp_smoothness = config["reg_temp_smoothness"]
@@ -88,6 +91,7 @@ def training_model(config):
                            reg_K = reg_K,
                            reg_delta_s_l2 = reg_delta_s_l2,
                            reg_delta_s_l1 = reg_delta_s_l1,
+                           reg_delta_gw_s_on_cps = reg_delta_gw_s_on_cps,
                            reg_recharge_areas = reg_recharge_areas,
                            reg_latlon_smoothness = reg_latlon_smoothness,
                            reg_temp_smoothness = reg_temp_smoothness,

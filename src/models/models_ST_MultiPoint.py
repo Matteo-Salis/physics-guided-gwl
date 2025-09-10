@@ -51,12 +51,90 @@ def weight_init_he(m, activation, distribution = "uniform"):
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
             
-def weight_init_ortho(m):
+def weight_init_ortho(m, activation):
+    if activation == "LeakyReLU":
+        nonlinearity='leaky_relu'
+    else:     
+        nonlinearity='relu'
     
-    if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight)
+    if isinstance(m, (nn.Linear, nn.Conv2d, nn.Conv3d)):
+        nn.init.orthogonal_(m.weight, gain = nn.init.calculate_gain(nonlinearity))
         if m.bias is not None:
             nn.init.zeros_(m.bias)
+            
+def weight_init_ortho_alt(model,
+                          activation,
+                          no_act_layers=["Value_Embedding_GW",
+                                    "Value_Embedding_Weather",
+                                    "ST_coords_Embedding",
+                                    "Output",
+                                    "Output_Lag",
+                                    "FiLM_conditioning.fc_gamma_beta"],
+                          tanh_layers = ["Output_Delta_GW.0",
+                                    "Output_Delta_S.0"]):
+    """
+    gain_map: dict mapping layer names (strings) to activation names (strings, e.g. "relu", "tanh")
+              If a layer is not in gain_map, it defaults to default_gain.
+    """
+    if activation == "LeakyReLU":
+        nonlinearity='leaky_relu'
+    else:     
+        nonlinearity='relu'
+            
+    for name, m in model.named_modules():
+        
+        if isinstance(m, (nn.Linear, nn.Conv2d, nn.Conv3d)):
+            # Determine gain
+            if name in no_act_layers or "out_proj" in name:
+                print(f"{name} init gain: 1.0")
+                gain = 1.0
+            elif name in tanh_layers:
+                print(f"{name} init gain: tanh")
+                gain = nn.init.calculate_gain("tanh")
+            else:
+                gain = nn.init.calculate_gain(nonlinearity)
+            # Initialize
+            nn.init.orthogonal_(m.weight, gain=gain)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+                
+                
+def weight_init_He_alt(model,
+                          activation,
+                          conv3d_layers = ["Value_Embedding_Weather"],
+                          linear_layers=["Value_Embedding_GW",
+                                    "ST_coords_Embedding",
+                                    "Output",
+                                    "Output_Lag",
+                                    "FiLM_conditioning.fc_gamma_beta"]):
+    """
+    gain_map: dict mapping layer names (strings) to activation names (strings, e.g. "relu", "tanh")
+              If a layer is not in gain_map, it defaults to default_gain.
+    """
+    if activation == "LeakyReLU":
+        default_nonlinearity='leaky_relu'
+    else:     
+        default_nonlinearity='relu'
+            
+    for name, m in model.named_modules():
+        
+        if isinstance(m, (nn.Linear, nn.Conv2d, nn.Conv3d)):
+            # Determine gain
+            if name in linear_layers or "out_proj" in name:
+                print(f"{name} init gain: 1.0 - linear")
+                act_fn = "linear"
+                a = 0
+            if name in conv3d_layers:
+                print(f"{name} init gain: 1.0 - conv3d")
+                act_fn = "conv3d"
+                a = 0
+            else:
+                act_fn = default_nonlinearity
+                a = 0.01
+            # Initialize
+            nn.init.kaiming_uniform_(m.weight, a=a, nonlinearity=act_fn)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
             
 class Densification_Dropout(nn.Module):
     def __init__(self,
@@ -1077,6 +1155,7 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                 GW_W_temp_dim = [2,5],
                 densification_dropout_p = 0.25,
                 activation = "GELU",
+                simplified_embedding = False,
                 normalization = "layernorm"):
         
         super().__init__()
@@ -1093,6 +1172,7 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         self.activation = activation
         self.emb_W = emb_W
         self.normalization = normalization
+        self.simplified_embedding = simplified_embedding
         
         if self.activation == "LeakyReLU":
             self.activation_fn = nn.LeakyReLU()
@@ -1100,32 +1180,51 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
             self.activation_fn = nn.GELU()
         
         ### Embedding #####
-        self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
+        if simplified_embedding is True:
+            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim)
+        else:
+            self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
                                             normalization = None,
                                             elementwise_affine = False)
         if self.emb_W == "3DCNN":
-            self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
-                                                hidden_channels = self.embedding_dim,
-                                                out_channels= self.embedding_dim,
-                                                activation = self.activation,
-                                                normalization = self.normalization,
-                                                elementwise_affine = False)
+            if simplified_embedding is True:
+                self.Value_Embedding_Weather = nn.Conv3d(self.value_dim_Weather, self.embedding_dim, (1,3,3),
+                                padding='same', padding_mode = "replicate",
+                                dtype=torch.float32)
+            
+            else:
+                self.Value_Embedding_Weather = Conv3d_Embedding(in_channels = self.value_dim_Weather,
+                                                    hidden_channels = self.embedding_dim,
+                                                    out_channels= self.embedding_dim,
+                                                    activation = self.activation,
+                                                    normalization = self.normalization,
+                                                    elementwise_affine = False)
+            
+            
+            
+            
             
             self.Avg_pooling3d = nn.AvgPool3d((1,3,3))
             
         elif self.emb_W == "linear":
-            self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
-                                    hidden_channels = self.embedding_dim,
-                                    out_channels= self.embedding_dim,
-                                    activation = self.activation,
-                                    normalization = None,
-                                    elementwise_affine = False)
+            if simplified_embedding is True:
+                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim)
             
-        
-        self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
+            else: 
+                self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
+                                        hidden_channels = self.embedding_dim,
+                                        out_channels= self.embedding_dim,
+                                        activation = self.activation,
+                                        normalization = None,
+                                        elementwise_affine = False)
+            
+        if simplified_embedding is True:
+            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim)
+        else:
+            self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
                                             out_channels= self.embedding_dim,
                                             activation = self.activation,
@@ -2469,10 +2568,13 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                             X[1],
                             ],
                             dim = -1)) #N, D, S, C
+        #GW_values = self.activation_fn(GW_values)
         
         GW_st_coords = self.ST_coords_Embedding(X[1]) #N, D, S, C
+        #GW_st_coords = self.activation_fn(GW_st_coords)
         
         Z_st_coords = self.ST_coords_Embedding(Z)
+        #Z_st_coords = self.activation_fn(Z_st_coords)
         
         HydrConductivity = self.HydrConductivity(Z[:,:,:self.s_coords_dim])
         HydrConductivity = self.HydrConductivity_Linear(HydrConductivity)
@@ -2482,15 +2584,18 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         if self.emb_W == "3DCNN":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            #Weather_values = self.activation_fn(Weather_values)
             Weather_values = self.Avg_pooling3d(Weather_values).permute((0,2,3,4,1)).flatten(2,3)
             W_coors = self.Avg_pooling3d(W_coors).permute((0,2,3,4,1)).flatten(2,3)
             
         elif self.emb_W == "linear":
             Weather_values_input = torch.cat([W[0], W[1]], dim = 1).permute((0,2,3,4,1)).flatten(2,3)
             Weather_values = self.Value_Embedding_Weather(Weather_values_input)
+            #Weather_values = self.activation_fn(Weather_values)
             W_coors = W_coors.permute((0,2,3,4,1)).flatten(2,3)
             
         Weather_st_coords = self.ST_coords_Embedding(W_coors) #N, D, S, C
+        #Weather_st_coords = self.activation_fn(Weather_st_coords)
         
         FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
         
@@ -2546,12 +2651,12 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         
         # GW Continuity equation component
         Displacement_GW_p = self.Output_Delta_GW(Displacement_GW_p) # Darcy velocity
-        Displacement_GW = Displacement_GW_p * GW_lag_out
+        Displacement_GW = Displacement_GW_p * torch.abs(GW_lag_out)
         Displacement_GW = Displacement_GW * HydrConductivity # Weight by HydrConductivity: ISOTROPIC Conductivity Field
         
         
         Displacement_S_p = self.Output_Delta_S(Displacement_S_p)
-        Displacement_S =  Displacement_S_p * GW_lag_out
+        Displacement_S =  Displacement_S_p * torch.abs(GW_lag_out)
         
         
         Y_hat = GW_lag_out + Displacement_GW + Displacement_S # Euler method

@@ -169,6 +169,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     reg_K = 0,
                     reg_delta_s_l2 = 0, reg_delta_s_l1 = 0,
                     reg_recharge_areas = 0,
+                    reg_delta_gw_s_on_cps = False,
                     reg_latlon_smoothness=0, reg_temp_smoothness = 0,
                     plot_displacements = False):  
     
@@ -322,25 +323,47 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                     print(f"RCH_loss: {round(recharge_loss.item(),7)}", end = " -- ")
                                     wandb.log({"RCH_loss":recharge_loss.item()})
                                     
-                                
-                                
-                                # if reg_diffusion_alpha>0:
-                                #     reg_diffusion_loss = reg_diffusion_alpha * displacement_reg(Displacement_GW_CP/(HydrConductivity_CP+1e-7),
-                                #                                             res_fn = "mse")
-                                
-                                #     loss += reg_diffusion_loss
+                                if reg_delta_gw_s_on_cps is True:
+                                    ### Delta GW Regularizations 
+                                    if reg_delta_gw_l2>0:
+                                            reg_delta_gw_l2_cp_loss = reg_delta_gw_l2 * displacement_reg(Displacement_GW_CP*dataset.norm_factors["target_stds"]/(HydrConductivity_CP+1e-7), #
+                                                                                    res_fn = "mse")
+                                        
+                                            loss += reg_delta_gw_l2_cp_loss
+                                            
+                                            print(f"CP_L2DeltaGW_loss: {round(reg_delta_gw_l2_cp_loss.item(),7)}", end = " -- ")
+                                            wandb.log({"L2DeltaGW_loss":reg_delta_gw_l2_cp_loss.item()})
+                                            
                                     
-                                #     print(f"CP_RegD_loss: {round(reg_diffusion_loss.item(),7)}", end = " -- ")
-                                #     wandb.log({"CP_RegD_loss":reg_diffusion_loss.item()})
+                                    if reg_delta_gw_l1>0:
+                                            reg_delta_gw_l1_cp_loss = reg_delta_gw_l1 * displacement_reg(Displacement_GW_CP*dataset.norm_factors["target_stds"]/(HydrConductivity_CP+1e-7), #
+                                                                                    res_fn = "mae")
+                                        
+                                            loss += reg_delta_gw_l1_cp_loss
+                                            
+                                            print(f"CP_L1DeltaGW_loss: {round(reg_delta_gw_l1_cp_loss.item(),7)}", end = " -- ")
+                                            wandb.log({"CP_L1DeltaGW_loss":reg_delta_gw_l1_cp_loss.item()})
+                                            
+                                    ### Delta S Regularizations
+                                    if reg_delta_s_l2>0:
+                                            reg_delta_s_l2_cp_loss = reg_delta_s_l2 * displacement_reg(Displacement_S_CP*dataset.norm_factors["target_stds"], #
+                                                                                    res_fn = "mse")
+                                        
+                                            loss += reg_delta_s_l2_cp_loss
+                                            
+                                            print(f"CP_L2DeltaS_loss: {round(reg_delta_s_l2_cp_loss.item(),7)}", end = " -- ")
+                                            wandb.log({"CP_L2DeltaS_loss":reg_delta_s_l2_cp_loss.item()})
+                                            
                                     
-                                # if reg_displacement_S>0:
-                                #     reg_displacement_S_loss = reg_displacement_S * displacement_reg(Displacement_S_CP,
-                                #                                             res_fn = "mse")
-                                
-                                #     loss += reg_displacement_S_loss
-                                    
-                                #     print(f"CP_RegS_loss: {round(reg_displacement_S_loss.item(),7)}", end = " -- ")
-                                #     wandb.log({"CP_RegS_loss":reg_displacement_S_loss.item()})
+                                    if reg_delta_s_l1>0:
+                                            reg_delta_s_l1_cp_loss = reg_delta_s_l1 * displacement_reg(Displacement_S_CP*dataset.norm_factors["target_stds"], #
+                                                                                    res_fn = "mae")
+                                        
+                                            loss += reg_delta_s_l1_cp_loss
+                                            
+                                            print(f"CP_L1DeltaS_loss: {round(reg_delta_s_l1_cp_loss.item(),7)}", end = " -- ")
+                                            wandb.log({"CP_L1DeltaS_loss":reg_delta_s_l1_cp_loss.item()})
+                        
                                     
                                 # if reg_latlon_smoothness >0:
                                 #     reg_smoothness_latlon_dis_gw = reg_latlon_smoothness * sum(smoothness_reg(Displacement_GW_CP.reshape(tstep_control_points,

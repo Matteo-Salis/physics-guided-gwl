@@ -1,5 +1,5 @@
 {
-    "cuda_device":"cuda:1",
+    "cuda_device":"cuda:0",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
@@ -39,7 +39,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0,
+    "densification_dropout_p":0.15,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -50,7 +50,7 @@
 
     "model":"ST_MultiPoint_STDisNet_SAGW_K",
     "emb_W":"3DCNN",
-    "model_init":"Ortho",
+    "model_init":null,
     "pretrain_model":null,
     "plot_arch": true,
     "layernorm_affine":true,
@@ -72,8 +72,8 @@
     "nesterov": null,
     "weight_decay": 0,
     "l2_alpha":0,
-    "orthogonality_loss_alpha":0,
-    "layers_orthogonality": null,
+    "orthogonality_loss_alpha":1e-3,
+    "layers_orthogonality": "embedding",
 
     "physics":true,
     "physics_scheduling":null,
@@ -81,12 +81,13 @@
     "coherence_alpha":1,
     "cpoints_start_epoch":0,
     "reg_diffusion_eq":2.5e-4,
-    "reg_delta_gw_l2":0,
-    "reg_delta_gw_l1":1e-3,
+    "reg_delta_gw_l2":5e-4,
+    "reg_delta_gw_l1":1e-4,
     "reg_K":0,
-    "reg_delta_s_l2":0,
-    "reg_delta_s_l1":1e-3,
-    "reg_recharge_areas":1e-2,
+    "reg_delta_s_l2":5e-4,
+    "reg_delta_s_l1":1e-4,
+    "reg_delta_gw_s_on_cps":true,
+    "reg_recharge_areas":1e-4,
     "reg_latlon_smoothness":0,
     "reg_temp_smoothness":0,
     "tstep_control_points":2,
@@ -94,7 +95,7 @@
     "lr": 5e-5,
     "lr_scheduling":null,
     "batch_size": 32,
-    "epochs": 2000, 
+    "epochs": 1500, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],

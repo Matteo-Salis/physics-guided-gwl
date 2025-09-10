@@ -3,7 +3,7 @@
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "Ortho_SEmb",
+    "run_name": "S_2FiLM_SAgw",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -47,7 +47,7 @@
 
     "lat_lon_npoints":[70,70],
 
-    "model":"ST_MultiPoint_STDisNet_SAGW_K",
+    "model":"ST_MultiPoint_STNet_SAGW",
     "emb_W":"3DCNN",
     "model_init":null,
     "pretrain_model":null,
@@ -59,8 +59,8 @@
     "s_coords_input_dim":3,
     "embedding_dim":64,
     "spatial_mha_heads": 8,
-    "displacement_mod_blocks": 1,
-    "displacement_mod_heads": 8,
+    "joint_mod_blocks": 2,
+    "joint_mod_heads": 8,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
     "simplified_embedding":true,
@@ -69,7 +69,7 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 1e-5,
+    "weight_decay": 5e-4,
     "l2_alpha":0,
     "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
@@ -81,7 +81,7 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 5e-5,
+    "lr": 5e-4,
     "lr_scheduling":null,
     "batch_size": 32,
     "epochs": 1000, 
