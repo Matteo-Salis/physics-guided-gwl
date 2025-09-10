@@ -69,7 +69,7 @@ def orthogonality_penality(W):
     wt = torch.transpose(w1,0,1)
     m  = torch.matmul(wt,w1)
     ident = Variable(torch.eye(cols,cols))
-    ident = ident.cuda()
+    ident = ident.to(W.device)
 
     w_tmp = (m - ident)
     height = w_tmp.size(0)
@@ -81,10 +81,11 @@ def orthogonality_penality(W):
     
     return penality
 
-def l2_reg_ortho(mdl, every_layer = True,
+def l2_reg_ortho(mdl, every_layer = False,
                  constrained_layers = ["Value_Embedding_GW",
                                     "Value_Embedding_Weather",
-                                    "ST_coords_Embedding"]):
+                                    "ST_coords_Embedding",
+                                    "FiLM_conditioning.fc_gamma_beta"]):
     # from https://github.com/VITA-Group/Orthogonality-in-CNNs/tree/master
 	
     l2_reg = None

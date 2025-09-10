@@ -1,5 +1,5 @@
 {
-    "cuda_device":"cuda:0",
+    "cuda_device":"cuda:1",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
@@ -16,7 +16,7 @@
     "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/dataset_wtd_roi.csv",
     "wtd_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/shapefile/piemonte_admin_boundaries.shp",
-    "recharge_areas_shp":"/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
+    "recharge_areas_shp":null,
 
     "stdout_log_dir" : null,
     "stderr_log_dir" : null,
@@ -38,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.3,
+    "densification_dropout_p":0.15,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -49,7 +49,7 @@
 
     "model":"ST_MultiPoint_STDisNet_SAGW_K",
     "emb_W":"3DCNN",
-    "model_init":"Ortho",
+    "model_init":null,
     "pretrain_model":null,
     "plot_arch": true,
     "layernorm_affine":true,
@@ -71,8 +71,8 @@
     "nesterov": null,
     "weight_decay": 1e-5,
     "l2_alpha":0,
-    "orthogonality_loss_alpha":0,
-    "layers_orthogonality": null,
+    "orthogonality_loss_alpha":1e-3,
+    "layers_orthogonality": "embedding",
 
     "physics":false,
     "physics_scheduling":null,

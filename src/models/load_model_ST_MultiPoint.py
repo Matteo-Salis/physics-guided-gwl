@@ -65,7 +65,8 @@ def load_model(config):
                 densification_dropout_p = config["densification_dropout_p"],
                 activation = config["activation"],
                 emb_W=config["emb_W"],
-                normalization = config["model_normalization"])
+                normalization = config["model_normalization"],
+                simplified_embedding= config["simplified_embedding"])
         
     elif config["model"] == "ST_MultiPoint_STDisNet_SAGW_K":
         
@@ -229,7 +230,9 @@ def load_model(config):
     
     if config["model_init"] == "He_uniform":
         print("He Initialization Applied.")
-        model = model.apply(partial(weight_init_he, activation = config["activation"], distribution = "uniform"))
+        #model = model.apply(partial(weight_init_he, activation = config["activation"], distribution = "uniform"))
+        weight_init_He_alt(model,
+                          config["activation"])
     
     elif config["model_init"] == "He_normal":
         print("He Initialization Applied.")
@@ -237,7 +240,9 @@ def load_model(config):
     
     elif config["model_init"] == "Ortho":
         print("Orthogonal Initialization Applied.")
-        model = model.apply(weight_init_ortho)
+        #model = model.apply(partial(weight_init_ortho, activation = config["activation"]))
+        weight_init_ortho_alt(model,
+                          config["activation"])
     return model, model_name
     
     

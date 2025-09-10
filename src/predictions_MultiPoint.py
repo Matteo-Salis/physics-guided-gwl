@@ -30,6 +30,9 @@ from utils.plot import *
 import seaborn as sns
 import argparse
 
+import sys
+import os
+
 ### Import Module ###
 
 from dataloaders import dataset_ST_MultiPoint
@@ -54,6 +57,17 @@ def main(config):
     else "cpu"
     )
     print("Device: ", device)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    model_names_dir = "_".join(config["model_name"])
+    save_dir = '{}/{}_{}'.format(config["save_dir"],model_names_dir,timestamp)
+    
+    # Create Saving Directories
+    os.makedirs(save_dir)
+    ts_saving_path = save_dir+"/time_series"
+    map_saving_path = save_dir+"/maps"
+    os.makedirs(ts_saving_path)
+    os.makedirs(map_saving_path)
 
 
     dataset = dataset_ST_MultiPoint.Dataset_ST_MultiPoint(config)
@@ -61,8 +75,8 @@ def main(config):
     models_predictions = {}
     
     Z_grid = plot_ST_MultiPoint.grid_generation(dataset,
-                                                config["lat_points"],
-                                                config["lon_points"])
+                                                config["lat_lon_npoints"][0],
+                                                config["lat_lon_npoints"][1])
     
     # Load the model and compute predictions
     for i in range(len(config["model_name"])):
@@ -116,12 +130,13 @@ def main(config):
         print(f"Saving Time Series of {munic} - {sensor}")
         plt.legend()
         ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
-        title = f"{config['time_series_saving_path']}/{munic}_{sensor}_{config['start_date_pred_ts']}_{config['n_pred_ts']}"
+        title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{config['n_pred_ts']}"
         
         if config["iter_pred"]:
             title += "_iter_pred"
             
         plt.savefig(f"{title}.png", bbox_inches='tight', dpi=400, pad_inches=0.1) #dpi = 400, transparent = True
+        plt.close("all")
             
             
     print("All time series plots saved!")
@@ -129,7 +144,7 @@ def main(config):
     print("Drawing maps...")
     for date in config["map_dates"]:
         
-        save_map_dir = f"{config['map_saving_path']}/maps_{date.replace('-','_')}"
+        save_map_dir = f"{map_saving_path}/maps_{date.replace('-','_')}"
         
         if config["iter_pred"]:
             save_map_dir += "_iter_pred"
@@ -144,7 +159,8 @@ def main(config):
             model_names = config["model_name"],
             var_name_title = "H [m]",
             save_dir = save_map_dir + "_H", 
-            print_plot = True)
+            print_plot = False)
+        plt.close("all")
         
         ### Map Plots WTD
         
@@ -154,8 +170,8 @@ def main(config):
             model_names = config["model_name"],
             var_name_title = "WTD [m]",
             save_dir = save_map_dir + "_WTD", 
-            print_plot = True)
-        
+            print_plot = False)
+        plt.close("all")
         ### Map Plots Displacements
         model_pred_displacements_list = [] 
         
@@ -174,7 +190,8 @@ def main(config):
             shapefile = dataset.piemonte_shp,
             model_names = config["model_with_displacements"],
             save_dir = save_map_dir + "_Deltas", 
-            print_plot = True)
+            print_plot = False)
+        plt.close("all")
     
     print("All Maps saved!")
     #######
@@ -182,7 +199,7 @@ def main(config):
     #######
     
     print("Drawing GIFs...")
-    save_gif_dir = f"{config['map_saving_path']}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
+    save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
         
     if config["iter_pred"]:
         save_gif_dir += "_iter_pred"
@@ -196,6 +213,8 @@ def main(config):
                         save_dir = save_gif_dir + "_H",
                         print_plot = False)
         
+        plt.close("all")
+        
     
         
     for model in config["model_with_displacements"]:
@@ -206,7 +225,7 @@ def main(config):
                         freq = "W",
                         save_dir = save_gif_dir + "_DGW",
                         print_plot = False)
-        
+        plt.close("all")
     
     
         ### Delta S
@@ -216,6 +235,7 @@ def main(config):
                         freq = "W",
                         save_dir = save_gif_dir + "_DS",
                         print_plot = False)
+        plt.close("all")
         
         print("All GIFs saved!")
     
@@ -323,11 +343,11 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
                                                                                                                                                                     get_displacement_terms = True,
                                                                                                                                                                     Z_grid = Z_grid)
         
-        grid_predictions = grid_predictions.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Displacement_GW = grid_Displacement_GW.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Displacement_S = grid_Displacement_S.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Conductivity = grid_Conductivity.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Lag_GW = grid_Lag_GW.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
+        grid_predictions = grid_predictions.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Displacement_GW = grid_Displacement_GW.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Displacement_S = grid_Displacement_S.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Conductivity = grid_Conductivity.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Lag_GW = grid_Lag_GW.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
         
         grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
         grid_Lag_GW = (grid_Lag_GW * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
@@ -338,7 +358,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
         start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
         date_seq = [dataset.dates[start_date_idx+i] for i in range(config["n_pred_map"])]
 
-        Z_grid_matrix = Z_grid.reshape(config["lat_points"],config["lon_points"],3)
+        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
         Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
         Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
         dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
@@ -402,14 +422,14 @@ def compute_grid_prediction(config, dataset,
                                                                                 get_displacement_terms = False,
                                                                                 Z_grid = Z_grid)
         
-        grid_predictions = grid_predictions.detach().cpu().reshape(config["n_pred_map"],config["lat_points"],config["lon_points"])
+        grid_predictions = grid_predictions.detach().cpu().reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1])
         
         grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
                                                                                                                                                             
         start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
         date_seq = [dataset.dates[start_date_idx+i] for i in range(config["n_pred_map"])]
 
-        Z_grid_matrix = Z_grid.reshape(config["lat_points"],config["lon_points"],3)
+        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
         Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
         Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
         dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
@@ -476,5 +496,15 @@ if __name__ == "__main__":
     config = {}
     with open(args.config) as f:
         config = json.load(f)
+    
+    if config["stdout_log_dir"] is not None:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        model_names_dir = "_".join(config["model_name"])
+        save_dir_stdout = '{}/{}_{}.txt'.format(config["stdout_log_dir"],model_names_dir,timestamp)
+        save_dir_stderr = '{}/{}_{}.txt'.format(config["stderr_log_dir"],model_names_dir,timestamp)
+            
+        # Redirect sys.stdout and err to the files
+        sys.stdout = open(save_dir_stdout, 'w')
+        sys.stderr = open(save_dir_stderr, 'w')
 
     main(config)

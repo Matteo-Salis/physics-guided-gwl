@@ -74,8 +74,8 @@ def main(config):
     models_predictions = {}
     
     Z_grid = plot_ST_MultiPoint.grid_generation(dataset,
-                                                config["lat_points"],
-                                                config["lon_points"])
+                                                config["lat_lon_npoints"][0],
+                                                config["lat_lon_npoints"][1])
     
     # Load the model and compute predictions
     for i in range(len(config["model_name"])):
@@ -342,11 +342,11 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
                                                                                                                                                                     get_displacement_terms = True,
                                                                                                                                                                     Z_grid = Z_grid)
         
-        grid_predictions = grid_predictions.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Displacement_GW = grid_Displacement_GW.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Displacement_S = grid_Displacement_S.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Conductivity = grid_Conductivity.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
-        grid_Lag_GW = grid_Lag_GW.reshape(config["n_pred_map"],config["lat_points"],config["lon_points"]).detach().cpu()
+        grid_predictions = grid_predictions.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Displacement_GW = grid_Displacement_GW.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Displacement_S = grid_Displacement_S.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Conductivity = grid_Conductivity.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
+        grid_Lag_GW = grid_Lag_GW.reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
         
         grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
         grid_Lag_GW = (grid_Lag_GW * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
@@ -357,7 +357,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
         start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
         date_seq = [dataset.dates[start_date_idx+i] for i in range(config["n_pred_map"])]
 
-        Z_grid_matrix = Z_grid.reshape(config["lat_points"],config["lon_points"],3)
+        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
         Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
         Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
         dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
@@ -421,14 +421,14 @@ def compute_grid_prediction(config, dataset,
                                                                                 get_displacement_terms = False,
                                                                                 Z_grid = Z_grid)
         
-        grid_predictions = grid_predictions.detach().cpu().reshape(config["n_pred_map"],config["lat_points"],config["lon_points"])
+        grid_predictions = grid_predictions.detach().cpu().reshape(config["n_pred_map"],config["lat_lon_npoints"][0],config["lat_lon_npoints"][1])
         
         grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
                                                                                                                                                             
         start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
         date_seq = [dataset.dates[start_date_idx+i] for i in range(config["n_pred_map"])]
 
-        Z_grid_matrix = Z_grid.reshape(config["lat_points"],config["lon_points"],3)
+        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
         Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
         Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
         dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
@@ -495,13 +495,14 @@ if __name__ == "__main__":
     config = {}
     with open(args.config) as f:
         config = json.load(f)
-        
+    
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_id = 'test_plots_{}'.format(timestamp)
+    model_names_dir = "_".join(config["model_name"])
+    save_dir_stdout = '{}/{}_{}.txt'.format(config["stdout_log_dir"],model_names_dir,timestamp)
+    save_dir_stderr = '{}/{}_{}.txt'.format(config["stderr_log_dir"],model_names_dir,timestamp)
         
     # Redirect sys.stdout and err to the files
-    sys.stdout = open(f'{config["stdout_log_dir"]}_{run_id}.txt', 'w')
-    sys.stderr = open(f'{config["stderr_log_dir"]}_{run_id}.txt', 'w')
-
+    sys.stdout = open(save_dir_stdout, 'w')
+    sys.stderr = open(save_dir_stderr, 'w')
 
     main(config)

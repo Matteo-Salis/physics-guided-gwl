@@ -1,5 +1,5 @@
 {
-    "cuda_device":"cuda:0",
+    "cuda_device":"cuda:1",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
@@ -16,6 +16,7 @@
     "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/dataset_wtd_roi.csv",
     "wtd_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/data/shapefile/piemonte_admin_boundaries.shp",
+    "recharge_areas_shp":null,
 
     "stdout_log_dir" : null,
     "stderr_log_dir" : null,
@@ -37,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.1,
+    "densification_dropout_p":0.3,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -56,10 +57,10 @@
     "Weather_value_input_dim":9,
     "st_coords_input_dim":5,
     "s_coords_input_dim":3,
-    "embedding_dim":32,
-    "spatial_mha_heads": 4,
+    "embedding_dim":64,
+    "spatial_mha_heads": 8,
     "displacement_mod_blocks": 1,
-    "displacement_mod_heads": 4,
+    "displacement_mod_heads": 8,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
     "simplified_embedding":true,
@@ -68,10 +69,10 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 5e-5,
+    "weight_decay": 1e-5,
     "l2_alpha":0,
-    "orthogonality_loss_alpha":1e-4,
-    "layers_orthogonality": "embedding",
+    "orthogonality_loss_alpha":0,
+    "layers_orthogonality": null,
 
     "physics":false,
     "physics_scheduling":null,
@@ -80,7 +81,7 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 5e-4,
+    "lr": 5e-5,
     "lr_scheduling":null,
     "batch_size": 32,
     "epochs": 1000, 
