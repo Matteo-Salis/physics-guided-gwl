@@ -39,16 +39,18 @@
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
-    "model_name":["STNet","STDisNet","STDisNet_PI"],
-    "model_with_displacements":["STDisNet","STDisNet_PI"],
+    "model_name":["STNet","STDisNet","STDisNet_PI","STDisNet_PI_RCH"],
+    "model_with_displacements":["STDisNet","STDisNet_PI","STDisNet_PI_RCH"],
     
     "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STNet_SAGW_ERA5.json",
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json",
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json"],
     
-    "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_2FiLM_SAgw_20250910_184011/ST_MultiPoint_STNet_SAGW_S_2FiLM_SAgw_20250910_184011.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_Ortho_SEmb_20250910_171929/ST_MultiPoint_STDisNet_SAGW_K_Ortho_SEmb_20250910_171929.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250910_171334/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250910_171334.pt"],
+    "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_2FiLM_SAgw_20250911_090904/ST_MultiPoint_STNet_SAGW_S_2FiLM_SAgw_20250911_090904.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_Ortho_SEmb_20250911_090405/ST_MultiPoint_STDisNet_SAGW_K_Ortho_SEmb_20250911_090405.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250911_085722/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250911_085722.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250911_085831/ST_MultiPoint_STDisNet_SAGW_K_PI_S_2FiLM_SAgw_20250911_085831.pt"],
 
     "n_pred_ts":255,
     "start_date_pred_ts":"2019-01-06",
@@ -57,6 +59,7 @@
     "lat_lon_npoints":[70,70],
 
     "n_pred_map":255,
+    "plot_recharge_areas": true,
     "start_date_pred_map":"2019-01-06",
     "map_dates":["2019-05-12","2019-07-21","2019-10-06","2022-05-15","2022-07-17","2022-10-02"],
 

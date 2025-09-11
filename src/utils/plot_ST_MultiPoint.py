@@ -708,13 +708,24 @@ def plot_map_all_models(predictions_xr_list,
 
     for model_i in range(len(predictions_xr_list)):
         predictions_xr_list[model_i].plot(ax = ax[model_i],
-                                          cbar_kwargs={"shrink": 0.75})
+                                          cbar_kwargs={"shrink": 0.50})
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
                                 label = "Piedmont's bounds")
     
         ax[model_i].set_title(f"{model_names[model_i]} {var_name_title}")
+        
+    # Get handles/labels from the first subplot
+    handles, labels = ax[0].get_legend_handles_labels()
+
+    # Put one shared legend below all subplots
+    fig.legend(
+        handles, labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.05),  # center bottom, slightly outside
+        ncol=len(labels)              # all labels in one row
+    )
 
     plt.tight_layout()
     if save_dir:
@@ -732,6 +743,7 @@ def plot_displacement_all_models(displacement_pred_list,
             title,
             shapefile,
             model_names,
+            recharge_areas = None,
             save_dir = None, 
             print_plot = False):
     
@@ -750,6 +762,11 @@ def plot_displacement_all_models(displacement_pred_list,
         shapefile.boundary.plot(ax = ax[model_i,0],
                                 color = "black",
                                 label = "Piedmont's bounds")
+        if recharge_areas is not None:
+            recharge_areas.boundary.plot(ax = ax[model_i,0],
+                                color = "green",
+                                linestyle = (0, (3, 1, 1, 1)),
+                                label = "Recharge Zones")
         ax[model_i,0].set_title(r"{} $\Delta_{{GW}}$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im0, ax = ax[model_i,0], fraction=0.05, pad=0.04)
         ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
@@ -761,6 +778,11 @@ def plot_displacement_all_models(displacement_pred_list,
         shapefile.boundary.plot(ax = ax[model_i,1],
                                 color = "black",
                                 label = "Piedmont's bounds")
+        if recharge_areas is not None:
+            recharge_areas.boundary.plot(ax = ax[model_i,1],
+                                color = "green",
+                                linestyle = (0, (3, 1, 1, 1)),
+                                label = "Recharge Zones")
         ax[model_i,1].set_title(r"{} $\Delta_S$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
         ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
@@ -771,9 +793,26 @@ def plot_displacement_all_models(displacement_pred_list,
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
                                     label = "Piedmont's bounds")
+        if recharge_areas is not None:
+            recharge_areas.boundary.plot(ax = ax[model_i,2],
+                                color = "green",
+                                linestyle = (0, (3, 1, 1, 1)),
+                                label = "Recharge Zones")
         ax[model_i,2].set_title(r"{} K [m/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im2, ax = ax[model_i,2], fraction=0.05, pad=0.04)
         ax[model_i,2].tick_params(labelsize=6)  # Set tick label size
+    
+    
+    # Get handles/labels from the first subplot
+    handles, labels = ax[0, 0].get_legend_handles_labels()
+
+    # Put one shared legend below all subplots
+    fig.legend(
+        handles[:2], labels[:2],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.05),  # center bottom, slightly outside
+        ncol=len(labels[:2])              # all labels in one row
+    )
 
 
     plt.tight_layout(pad=1.0, h_pad=0.25, w_pad=0.5)
@@ -792,11 +831,14 @@ def plot_displacement_all_models(displacement_pred_list,
 #######################
 
 def generate_gif_from_xr(start_date, n_pred,
-                       xr,
-                       title,
-                       freq,
-                       save_dir = None,
-                       print_plot = False):
+                    xr,
+                    title,
+                    freq,
+                    shapefile,   
+                    recharge_areas = None,
+                    cmap = "seismic_r",
+                    save_dir = None,
+                    print_plot = False):
     
     def update_h_wtd_maps(i):
         
@@ -817,9 +859,24 @@ def generate_gif_from_xr(start_date, n_pred,
     
     fig.suptitle(f"t0: {start_date} - lead time: {0}",
                  x=0.45, ha="center", y=0.1)
+    
+    
+    norm = TwoSlopeNorm(vcenter=0) if cmap == "seismic_r" else None
+    
     image = xr[0,:,:].plot(ax = ax, animated=True,
                                                 vmin = xr.min().values,
-                                                vmax = xr.max().values)
+                                                vmax = xr.max().values,
+                                                norm = norm,
+                                                cmap = cmap)
+    shapefile.boundary.plot(ax = ax,
+                                color = "black",
+                                label = "Piedmont's bounds")
+    if recharge_areas is not None:
+            recharge_areas.boundary.plot(ax = ax,
+                                color = "green",
+                                linestyle = (0, (3, 1, 1, 1)),
+                                label = "Recharge Zones")
+    
     ax.set_title(title)
 
 

@@ -19,6 +19,10 @@ def training_model(config):
         orthogonality_loss_alpha = config["orthogonality_loss_alpha"]
         plot_displacements = True if "_K" in config["model"] else False
         
+        print("densification_dropout_p", config["densification_dropout_p"])
+        print("orthogonality_loss_alpha: ", orthogonality_loss_alpha)
+        
+        
         if config["physics"] is False:
             print("Training Approach: ST_MultiPoint Pure DL")
         

@@ -132,7 +132,7 @@ def recharge_areas_loss(displacement_s, recharge_area_rasterized):
     if torch.count_nonzero(not_recharge_positive)>0:
         residuals = torch.sum(not_recharge_positive)/torch.count_nonzero(not_recharge_positive)
     else:
-        residuals = 0
+        residuals = torch.tensor(0.).to(displacement_s.device)
     
     return residuals
 

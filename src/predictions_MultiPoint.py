@@ -128,6 +128,8 @@ def main(config):
                                                             marker = "o", linestyle = "--" , markersize = 4, linewidth = 2)
             i += 1
         print(f"Saving Time Series of {munic} - {sensor}")
+        plt.xlabel("Date")
+        plt.ylabel("H [m]")
         plt.legend()
         ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
         title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{config['n_pred_ts']}"
@@ -188,6 +190,7 @@ def main(config):
         plot_ST_MultiPoint.plot_displacement_all_models(model_pred_displacements_list,
             title = f"{date} Predicted Displacements",
             shapefile = dataset.piemonte_shp,
+            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
             model_names = config["model_with_displacements"],
             save_dir = save_map_dir + "_Deltas", 
             print_plot = False)
@@ -209,8 +212,10 @@ def main(config):
         plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
                         models_predictions[model][1][0],
                         title = f"{model} - Piezometric Head [m] Evolution",
+                        shapefile = dataset.piemonte_shp,
                         freq = "W",
-                        save_dir = save_gif_dir + "_H",
+                        cmap = "viridis",
+                        save_dir = save_gif_dir + f"_H_{model}",
                         print_plot = False)
         
         plt.close("all")
@@ -222,8 +227,11 @@ def main(config):
         plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
                         models_predictions[model][1][2],
                         title = r"{} $\Delta_{{GW}}$ [m] Evolution".format(model),
+                        shapefile = dataset.piemonte_shp,
+                        recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                         freq = "W",
-                        save_dir = save_gif_dir + "_DGW",
+                        cmap = "seismic_r",
+                        save_dir = save_gif_dir + f"_DGW_{model}",
                         print_plot = False)
         plt.close("all")
     
@@ -232,8 +240,11 @@ def main(config):
         plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
                         models_predictions[model][1][3],
                         title = r"{} $\Delta_S$ [m] Evolution".format(model),
+                        shapefile = dataset.piemonte_shp,
+                        recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                         freq = "W",
-                        save_dir = save_gif_dir + "_DS",
+                        cmap = "seismic_r",
+                        save_dir = save_gif_dir + f"_DS_{model}",
                         print_plot = False)
         plt.close("all")
         
