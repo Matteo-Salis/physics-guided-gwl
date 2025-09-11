@@ -100,7 +100,7 @@ class Dataset_ST_MultiPoint(Dataset):
             # Create Buffer 
             clipped_buffer = clipped.buffer(buffer_recharge)
             clipped_buffer = gpd.GeoDataFrame(geometry=clipped_buffer, crs=clipped.crs)
-            
+            self.recharge_area_buffer_shp = clipped_buffer
             # define transform and shape
             bbox = [self.dtm_roi.x.min().values,
                     self.dtm_roi.x.max().values,

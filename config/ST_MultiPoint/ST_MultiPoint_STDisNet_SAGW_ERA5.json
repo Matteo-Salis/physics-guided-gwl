@@ -38,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.15,
+    "densification_dropout_p":0.25,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -69,9 +69,9 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 1e-5,
+    "weight_decay": 5e-4,
     "l2_alpha":0,
-    "orthogonality_loss_alpha":1e-3,
+    "orthogonality_loss_alpha":5e-3,
     "layers_orthogonality": "embedding",
 
     "physics":false,

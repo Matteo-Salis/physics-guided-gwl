@@ -38,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.15,
+    "densification_dropout_p":0.35,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -69,7 +69,7 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 5e-4,
+    "weight_decay": 1e-3,
     "l2_alpha":0,
     "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
@@ -84,7 +84,7 @@
     "lr": 5e-4,
     "lr_scheduling":null,
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 750, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
