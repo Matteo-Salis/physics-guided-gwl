@@ -1,9 +1,9 @@
 {
-    "cuda_device":"cuda:0",
+    "cuda_device":"cuda:1",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "S_2FiLM_SAgw",
+    "run_name": "S_ref",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -16,11 +16,13 @@
     "wtd_csv_path" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/dataset_wtd_roi.csv",
     "wtd_shp" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/data/shapefile/piemonte_admin_boundaries.shp",
+    "recharge_areas_shp":null,
 
     "stdout_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/output",
     "stderr_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/error",
 
     "dataset_type": "ST_MultiPoint",
+    "discard_summer_data":false,
     "piezo_head":true,
     "relative_target":false,
     "nan_treshold":10,
@@ -36,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.15,
+    "densification_dropout_p":0.35,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -55,19 +57,22 @@
     "Weather_value_input_dim":9,
     "st_coords_input_dim":5,
     "s_coords_input_dim":3,
-    "embedding_dim":32,
-    "spatial_mha_heads": 4,
-    "joint_mod_blocks": 4,
-    "joint_mod_heads": 4,
+    "embedding_dim":64,
+    "spatial_mha_heads": 8,
+    "joint_mod_blocks": 2,
+    "joint_mod_heads": 8,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
+    "simplified_embedding":true,
 
     "loss":"mape",
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 5e-4,
+    "weight_decay": 1e-3,
     "l2_alpha":0,
+    "orthogonality_loss_alpha":1e-3,
+    "layers_orthogonality": "embedding",
 
     "physics":false,
     "physics_scheduling":null,
@@ -76,12 +81,12 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 1e-4,
+    "lr": 2.5e-4,
     "lr_scheduling":null,
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 750, 
 
-    "n_pred_plot":104,
+    "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
     "map_t_step_to_plot":[0,78],
     "start_dates_plot_training": ["2008-01-06", "2016-01-03"],
