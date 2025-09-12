@@ -1,9 +1,9 @@
 {
-    "cuda_device":"cuda:1",
+    "cuda_device":"cuda:0",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "Ortho_SEmb",
+    "run_name": "S_ref",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -38,7 +38,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.25,
+    "densification_dropout_p":0.35,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -57,7 +57,7 @@
     "Weather_value_input_dim":9,
     "st_coords_input_dim":5,
     "s_coords_input_dim":3,
-    "embedding_dim":64,
+    "embedding_dim":32,
     "spatial_mha_heads": 8,
     "displacement_mod_blocks": 1,
     "displacement_mod_heads": 8,
@@ -71,7 +71,7 @@
     "nesterov": null,
     "weight_decay": 5e-4,
     "l2_alpha":0,
-    "orthogonality_loss_alpha":5e-3,
+    "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
 
     "physics":false,
@@ -81,10 +81,10 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 5e-5,
+    "lr": 5e-4,
     "lr_scheduling":null,
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 750, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],

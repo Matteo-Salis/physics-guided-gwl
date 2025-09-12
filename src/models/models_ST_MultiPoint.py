@@ -477,11 +477,15 @@ class MHA_Block(nn.Module):
                  activation,
                  normalization,
                  elementwise_affine,
+                 norm_1 = True,
+                 norm_2 = True,
                  rescon_input = True,
                  dropout = 0.):
         super().__init__()
         
         self.normalization = normalization
+        self.norm_1 = norm_1
+        self.norm_2 = norm_2
         self.elementwise_affine = elementwise_affine
         self.dropout = dropout
         self.rescon_input = rescon_input
@@ -491,7 +495,7 @@ class MHA_Block(nn.Module):
         elif activation == "GELU":
             self.activation = nn.GELU()
             
-        if self.normalization is not None:
+        if self.normalization is not None and self.norm_1 is True:
             if self.normalization == "layernorm":
                 self.norm_layer_1 = nn.LayerNorm(normalized_shape = embedding_dim,
                                         elementwise_affine=self.elementwise_affine)
@@ -504,7 +508,7 @@ class MHA_Block(nn.Module):
                                          dropout = self.dropout)
 
         
-        if self.normalization is not None:
+        if self.normalization is not None and self.norm_2 is True:
             if self.normalization == "layernorm":
                 self.norm_layer_2 = nn.LayerNorm(normalized_shape = embedding_dim,
                                         elementwise_affine=self.elementwise_affine)
@@ -524,7 +528,7 @@ class MHA_Block(nn.Module):
         if self.rescon_input is True:
             skip_1 = V
             
-        if self.normalization is not None:
+        if self.normalization is not None and self.norm_1 is True:
             K = self.norm_layer_1(K)
             V = self.norm_layer_1(V)
             Q = self.norm_layer_1(Q)
@@ -540,7 +544,7 @@ class MHA_Block(nn.Module):
             
         skip_2 = output
         
-        if self.normalization is not None:      
+        if self.normalization is not None and self.norm_2 is True:      
             output = self.norm_layer_2(output)
             
         output = self.mlp(output)
@@ -1181,7 +1185,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         
         ### Embedding #####
         if simplified_embedding is True:
-            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim)
+            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim,
+                                                bias = False)
         else:
             self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
                                             hidden_channels = self.embedding_dim,
@@ -1192,7 +1197,7 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
         if self.emb_W == "3DCNN":
             if simplified_embedding is True:
                 self.Value_Embedding_Weather = nn.Conv3d(self.value_dim_Weather, self.embedding_dim, (1,3,3),
-                                padding='same', padding_mode = "replicate",
+                                padding='same', padding_mode = "replicate", bias= False,
                                 dtype=torch.float32)
             
             else:
@@ -1211,7 +1216,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
             
         elif self.emb_W == "linear":
             if simplified_embedding is True:
-                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim)
+                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim,
+                                                         bias = False)
             
             else: 
                 self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
@@ -1222,7 +1228,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                         elementwise_affine = False)
             
         if simplified_embedding is True:
-            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim)
+            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim,
+                                                 bias = False)
         else:
             self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
@@ -1242,6 +1249,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = True,
                                                 dropout = self.densification_dropout_p)
@@ -1252,6 +1261,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = False,
                                                 dropout = 0.)
@@ -1261,6 +1272,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = False,
                                                 dropout = 0.)
@@ -1271,6 +1284,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = True,
                                                 dropout = 0.)
@@ -1299,6 +1314,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                 heads = self.joint_mod_heads,
                                 activation = self.activation,
                                 normalization = self.normalization,
+                                norm_1 = False if i == 0 else True,
+                                norm_2 = True,
                                 elementwise_affine = False,
                                 rescon_input = True,
                                 dropout = 0.))
@@ -1350,12 +1367,14 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                             Q = Z_st_coords)
         
         ## Add FiLM
-        GW_out =  GW_out*FiLM_gammas[:,:,:self.embedding_dim] + FiLM_betas[:,:,:self.embedding_dim]
+        GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
+        GW_out = self.activation_fn(GW_out)
         GW_out = self.SA_GW_Module_2(K = GW_out,
                                     V = GW_out, 
                                     Q = GW_out)
         ## Add Film
-        GW_out =  GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2] + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+        GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+        GW_out = self.activation_fn(GW_out)
         
         ##### Weather ####
         Weather_values = Weather_values.flatten(1,2)
@@ -1365,8 +1384,8 @@ class ST_MultiPoint_STNet_SAGW(nn.Module):
                                 V = Weather_values,
                                 Q = Z_st_coords)
         ## Add FiLM
-        Weather_out =  Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3] + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
-        
+        Weather_out =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
+        Weather_out = self.activation_fn(Weather_out)
         # Weather_out = self.SA_W_Module_1(K = Weather_out,
         #                             V = Weather_out, 
         #                             Q = Weather_out)
@@ -2412,7 +2431,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         
         ### Embedding #####
         if simplified_embedding is True:
-            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim)
+            self.Value_Embedding_GW = nn.Linear(self.value_dim_GW, self.embedding_dim,
+                                                bias = False)
         else:
             self.Value_Embedding_GW = Embedding(in_channels = self.value_dim_GW,
                                             hidden_channels = self.embedding_dim,
@@ -2423,7 +2443,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         if self.emb_W == "3DCNN":
             if simplified_embedding is True:
                 self.Value_Embedding_Weather = nn.Conv3d(self.value_dim_Weather, self.embedding_dim, (1,3,3),
-                                padding='same', padding_mode = "replicate",
+                                padding='same', padding_mode = "replicate", bias= False,
                                 dtype=torch.float32)
             
             else:
@@ -2442,7 +2462,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
             
         elif self.emb_W == "linear":
             if simplified_embedding is True:
-                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim)
+                self.Value_Embedding_Weather = nn.Linear(self.value_dim_Weather, self.embedding_dim,
+                                                         bias = False)
             
             else: 
                 self.Value_Embedding_Weather = Embedding(in_channels = self.value_dim_Weather,
@@ -2453,7 +2474,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                         elementwise_affine = False)
             
         if simplified_embedding is True:
-            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim)
+            self.ST_coords_Embedding = nn.Linear(self.st_coords_dim, self.embedding_dim,
+                                                 bias = False)
         else:
             self.ST_coords_Embedding = Embedding(in_channels = self.st_coords_dim,
                                             hidden_channels = self.embedding_dim,
@@ -2485,6 +2507,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = True,
                                                 dropout = self.densification_dropout_p)
@@ -2495,6 +2519,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = False,
                                                 dropout = 0.)
@@ -2504,6 +2530,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
                                                 normalization = self.normalization,
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = False,
                                                 dropout = 0.)
@@ -2513,7 +2541,9 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                                 heads = self.spatial_mha_heads,
                                                 output_channels = self.embedding_dim,
                                                 activation = self.activation,
-                                                normalization = self.normalization,
+                                                normalization = self.normalization,                                    
+                                                norm_1 = False,
+                                                norm_2 = True,
                                                 elementwise_affine = False,
                                                 rescon_input = True,
                                                 dropout = 0.)
@@ -2537,6 +2567,8 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                 heads = self.displacement_mod_heads,
                                 activation = self.activation,
                                 normalization = self.normalization,
+                                norm_1 = False if i == 0 else True,
+                                norm_2 = True,
                                 elementwise_affine = False,
                                 rescon_input = True,
                                 dropout = 0.))
@@ -2612,12 +2644,14 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                             Q = Z_st_coords)
         
         ## Add FiLM
-        GW_out =  GW_out*FiLM_gammas[:,:,:self.embedding_dim] + FiLM_betas[:,:,:self.embedding_dim]
+        GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
+        GW_out = self.activation_fn(GW_out)
         GW_out = self.SA_GW_Module_2(K = GW_out,
                                     V = GW_out, 
                                     Q = GW_out)
         ## Add Film
-        GW_out =  GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2] + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+        GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+        GW_out = self.activation_fn(GW_out)
         Displacement_GW_p = GW_out
         
         ##### Weather ####
@@ -2628,14 +2662,14 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                 V = Weather_values,
                                 Q = Z_st_coords)
         ## Add FiLM
-        Displacement_S_p =  Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3] + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
-        
+        Displacement_S_p =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
+        Displacement_S_p = self.activation_fn(Displacement_S_p)
         # Weather_out = self.SA_W_Module_1(K = Weather_out,
         #                             V = Weather_out, 
         #                             Q = Weather_out)
         # ## Add Film
-        # Displacement_S_p = Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:] + FiLM_betas[:,:,self.embedding_dim*3:]    
-        
+        # Displacement_S_p = (Weather_out*FiLM_gammas[:,:,self.embedding_dim*3:]) + FiLM_betas[:,:,self.embedding_dim*3:]    
+        # Displacement_S_p = self.activation_fn(Displacement_S_p)
         
                 
         for i in range(self.displacement_mod_blocks):
