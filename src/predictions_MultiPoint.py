@@ -511,8 +511,8 @@ if __name__ == "__main__":
     if config["stdout_log_dir"] is not None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         model_names_dir = "_".join(config["model_name"])
-        save_dir_stdout = '{}/{}_{}.txt'.format(config["stdout_log_dir"],model_names_dir,timestamp)
-        save_dir_stderr = '{}/{}_{}.txt'.format(config["stderr_log_dir"],model_names_dir,timestamp)
+        save_dir_stdout = '{}_{}_{}.txt'.format(config["stdout_log_dir"],model_names_dir,timestamp)
+        save_dir_stderr = '{}_{}_{}.txt'.format(config["stderr_log_dir"],model_names_dir,timestamp)
             
         # Redirect sys.stdout and err to the files
         sys.stdout = open(save_dir_stdout, 'w')
