@@ -3,7 +3,7 @@
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "PI_S_ref",
+    "run_name": "PI_RCH_S_ref",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -87,12 +87,12 @@
     "reg_delta_s_l2":5e-4,
     "reg_delta_s_l1":1e-4,
     "reg_delta_gw_s_on_cps":true,
-    "reg_recharge_areas":0,
+    "reg_recharge_areas":2.5e-4,
     "reg_latlon_smoothness":0,
     "reg_temp_smoothness":0,
     "tstep_control_points":2,
 
-    "lr": 5e-4,
+    "lr": 1e-4,
     "lr_scheduling":null,
     "batch_size": 32,
     "epochs": 750, 
