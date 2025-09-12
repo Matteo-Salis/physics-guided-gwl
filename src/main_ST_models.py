@@ -107,7 +107,10 @@ def main(config):
         wandb.log({"tr_epoch_exec_t" : exec_time})
 
         # saving model
-        torch.save(model.state_dict(), f"{save_dir}/{model_name}.pt")
+        if (epoch+1) % 25 == 0 or epoch == config["epochs"]-1:
+            print("Saving Model...", end = " ")
+            torch.save(model.state_dict(), f"{save_dir}/{model_name}.pt")
+            print("Done!")
 
         print(f"############### Test epoch {epoch} ###############")
         model.eval()
