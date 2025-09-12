@@ -58,7 +58,7 @@
     "Weather_value_input_dim":9,
     "st_coords_input_dim":5,
     "s_coords_input_dim":3,
-    "embedding_dim":32,
+    "embedding_dim":64,
     "spatial_mha_heads": 8,
     "displacement_mod_blocks": 1,
     "displacement_mod_heads": 8,
