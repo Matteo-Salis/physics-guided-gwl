@@ -1,5 +1,5 @@
 {
-    "cuda_device":"cuda:1",
+    "cuda_device":"cuda:0",
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
@@ -69,7 +69,7 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 1e-3,
+    "weight_decay": 5e-4,
     "l2_alpha":0,
     "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
@@ -81,10 +81,10 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 2.5e-4,
-    "lr_scheduling":null,
+    "lr": 5e-4,
+    "lr_scheduling":[[500],2e-1],
     "batch_size": 32,
-    "epochs": 750, 
+    "epochs": 1000, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
