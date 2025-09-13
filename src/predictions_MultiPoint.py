@@ -132,7 +132,12 @@ def main(config):
         plt.ylabel("H [m]")
         plt.legend()
         ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
-        title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{config['n_pred_ts']}"
+        
+        if config["forecast_horizon"] is None:
+            n_pred = config['n_pred_ts']
+        else:
+            n_pred = config['n_pred_ts']*config["forecast_horizon"]
+        title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{n_pred}"
         
         if config["iter_pred"]:
             title += "_iter_pred"
@@ -209,7 +214,7 @@ def main(config):
     
     ### H
     for model in config["model_name"]:
-        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
+        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_map"],
                         models_predictions[model][1][0],
                         title = f"{model} - Piezometric Head [m] Evolution",
                         shapefile = dataset.piemonte_shp,
@@ -224,7 +229,7 @@ def main(config):
         
     for model in config["model_with_displacements"]:
         ### Delta GW
-        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
+        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_map"],
                         models_predictions[model][1][2],
                         title = r"{} $\Delta_{{GW}}$ [m] Evolution".format(model),
                         shapefile = dataset.piemonte_shp,
@@ -237,7 +242,7 @@ def main(config):
     
     
         ### Delta S
-        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_ts"],
+        plot_ST_MultiPoint.generate_gif_from_xr(date, config["n_pred_map"],
                         models_predictions[model][1][3],
                         title = r"{} $\Delta_S$ [m] Evolution".format(model),
                         shapefile = dataset.piemonte_shp,
@@ -267,37 +272,75 @@ def compute_ts_prediction_with_displacemnt(config, dataset,
                                            model, device,
                                            iter_pred):
     ### Sensors Time Series Prediction
-        
-        ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                    np.datetime64(config["start_date_pred_ts"]),
-                                                                                    config["n_pred_ts"],
-                                                                                    iter_pred = iter_pred,
-                                                                                    get_displacement_terms = True)
+        if config["forecast_horizon"] is None:
+            
+            ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                                        np.datetime64(config["start_date_pred_ts"]),
+                                                                                        config["n_pred_ts"],
+                                                                                        iter_pred = iter_pred,
+                                                                                        get_displacement_terms = True)
+            
+            n_pred = config["n_pred_ts"]
+            
+        else:
+            ts_true_list = []
+            ts_predictions_list = []
+            ts_Displacement_GW_list = []
+            ts_Displacement_S_list = []
+            ts_Conductivity_list = []
+            ts_Lag_GW_list = []
+            
+            date = np.datetime64(config["start_date_pred_ts"])
+            
+            for i in range(config["n_pred_ts"]):
+                
+                ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                                        date,
+                                                                                        config["n_pred_ts"],
+                                                                                        iter_pred = iter_pred,
+                                                                                        get_displacement_terms = True)
+                ts_true_list.append(ts_true)
+                ts_predictions_list.append(ts_predictions)
+                ts_Displacement_GW_list.append(ts_Displacement_GW)
+                ts_Displacement_S_list.append(ts_Displacement_S)
+                ts_Conductivity_list.append(ts_Conductivity)
+                ts_Lag_GW_list.append(ts_Lag_GW)
+                
+                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
+                
+            ts_true = torch.cat(ts_true_list, dim = 0)
+            ts_predictions = torch.cat(ts_predictions_list, dim = 0)
+            ts_Displacement_GW = torch.cat(ts_Displacement_GW_list, dim = 0)
+            ts_Displacement_S = torch.cat(ts_Displacement_S_list, dim = 0)
+            ts_Conductivity = torch.cat(ts_Conductivity_list, dim = 0)
+            ts_Lag_GW = torch.cat(ts_Lag_GW_list, dim = 0)
+            
+            n_pred = config["forecast_horizon"] * config["n_pred_ts"]
         
         # Build Pandas DF
         
         ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_Displacement_GW_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_GW.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_Displacement_S_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_S.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_Conductivity_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Conductivity.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_Lag_GW = plot_ST_MultiPoint.build_ds_from_pred(ts_Lag_GW.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         
@@ -319,20 +362,46 @@ def compute_ts_prediction(config, dataset,
                         iter_pred):
     ### Sensors Time Series Prediction
         
-        ts_true, ts_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                    np.datetime64(config["start_date_pred_ts"]),
-                                                                                    config["n_pred_ts"],
-                                                                                    iter_pred = iter_pred,
-                                                                                    get_displacement_terms = False)
+        if config["forecast_horizon"] is None:
+            ts_true, ts_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                                        np.datetime64(config["start_date_pred_ts"]),
+                                                                                        config["n_pred_ts"],
+                                                                                        iter_pred = iter_pred,
+                                                                                        get_displacement_terms = False)
+            
+            n_pred = config["n_pred_ts"]
+            
+        else:
+            ts_true_list = []
+            ts_predictions_list = []
+            
+            date = np.datetime64(config["start_date_pred_ts"])
+            
+            for i in range(config["n_pred_ts"]):
+                
+                ts_true, ts_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
+                                                                                        date,
+                                                                                        config["n_pred_ts"],
+                                                                                        iter_pred = iter_pred,
+                                                                                        get_displacement_terms = False)
+                ts_true_list.append(ts_true)
+                ts_predictions_list.append(ts_predictions)
+                
+                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
+                
+            ts_true = torch.cat(ts_true_list, dim = 0)
+            ts_predictions = torch.cat(ts_predictions_list, dim = 0)
+            
+            n_pred = config["forecast_horizon"] * config["n_pred_ts"]
         
         # Build Pandas DF
         
         ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=config["n_pred_ts"],
+                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
                                                         sensor_names=dataset.sensor_id_list)
         
         # Denormalize

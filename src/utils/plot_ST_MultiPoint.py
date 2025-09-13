@@ -122,12 +122,25 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
             gc.collect()
             
     else:
-        X = None
+        #X = None
+        # ANDIAMO A PRENDERE NOI X
+        subset_df = dataset.lagged_df.loc[pd.IndexSlice[dataset.dates[start_date_idx],:],:]
+        subset_df_filled = dataset.lagged_df_filled.loc[pd.IndexSlice[dataset.dates[start_date_idx],:],:]
+        X = dataset.get_lagged_features(subset_df, subset_df_filled)
+        
+
         X_deque = [deque(maxlen=len(dataset.target_lags)),
              deque(maxlen=len(dataset.target_lags)),
              deque(maxlen=len(dataset.target_lags))]
         
+        for i in range(len(dataset.target_lags)):
+            X_deque[0].append(X[0][i,:].to(device))
+            X_deque[1].append(X[1][i,:,:].to(device))
+            X_deque[2].append(X[2][i,:].to(device))
+            
+            
         for i in tqdm(range(n_pred)):
+            
             pred_list = compute_predictions_MultiPoint(dataset.dates[start_date_idx+i],
                                             dataset,
                                             model,
@@ -153,10 +166,12 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
                 hydrConductivity.append(pred_list[4])
                 Lag_GW.append(pred_list[5])
             
-            if i >= len(dataset.target_lags):
+            if Z_grid is None or X_deque[0][-1].shape[0] == Z_grid.shape[0] or i >= len(dataset.target_lags):
                 X = [torch.stack(list(X_deque[0])).to(device),
                      torch.stack(list(X_deque[1])).to(device),
                      torch.stack(list(X_deque[2])).to(device)]
+            else:
+                X = None
                 
             if "cuda" in device: 
                 torch.cuda.empty_cache()
