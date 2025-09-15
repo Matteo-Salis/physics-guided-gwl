@@ -39,6 +39,11 @@ from dataloaders import dataset_ST_MultiPoint
 from models import models_ST_MultiPoint
 from models import load_model_ST_MultiPoint
 from utils import plot_ST_MultiPoint
+from utils import metrics
+
+from utils.test_predictions import load_model
+from utils.test_predictions import compute_prediction_with_displacement
+from utils.test_predictions import compute_prediction
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Training')
@@ -66,8 +71,10 @@ def main(config):
     os.makedirs(save_dir)
     ts_saving_path = save_dir+"/time_series"
     map_saving_path = save_dir+"/maps"
+    metrics_saving_path = save_dir+"/metrics"
     os.makedirs(ts_saving_path)
     os.makedirs(map_saving_path)
+    os.makedirs(metrics_saving_path)
 
 
     dataset = dataset_ST_MultiPoint.Dataset_ST_MultiPoint(config)
@@ -103,6 +110,68 @@ def main(config):
                         model,
                         config["iter_pred"],
                         Z_grid)
+            
+    # Compute metrics 
+    if config["compute_metrics"] is True:
+        print("Computing metrics...", end = " ")
+        median_metrics_dict = {}
+        mean_metrics_dict = {}
+        std_metrics_dict = {}
+        
+        name_suffix = ""
+        
+        if config["iter_pred"]:
+            name_suffix += "_iter_pred"
+            
+        if config["forecast_horizon"] is not None:
+            name_suffix += f"_FO{config['forecast_horizon']}"
+            
+        for model_i in config["model_name"]:
+
+            model_median_metrics = []
+            model_mean_metrics = []
+            model_std_metrics = []
+            sensors_rmse = metrics.compute_test_rmse_per_sensor(models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
+                                                                models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])])
+            sensors_rmse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_rmse.csv", index=True)
+            model_median_metrics.append(sensors_rmse.median())
+            model_mean_metrics.append(sensors_rmse.mean())
+            model_std_metrics.append(sensors_rmse.std())
+            
+            sensors_mape = metrics.compute_test_mape_per_sensor(models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
+                                                                models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])])
+            sensors_mape.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_mape.csv", index=True)
+            model_median_metrics.append(sensors_mape.median())
+            model_mean_metrics.append(sensors_mape.mean())
+            model_std_metrics.append(sensors_mape.std())
+            
+            sensors_nse = metrics.compute_test_nse_per_sensor(models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
+                                                                models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
+                                                                dataset.norm_factors["target_means"])
+            sensors_nse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_nse.csv", index=True)
+            model_median_metrics.append(sensors_nse.median())
+            model_mean_metrics.append(sensors_nse.mean())
+            model_std_metrics.append(sensors_nse.std())
+            
+            sensors_kge = metrics.compute_test_kge_per_sensor(models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
+                                                                models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])])
+            sensors_kge.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_kge.csv", index=True)
+            model_median_metrics.append(sensors_kge.median())
+            model_mean_metrics.append(sensors_kge.mean())
+            model_std_metrics.append(sensors_kge.std())
+            
+            median_metrics_dict[model_i] = model_median_metrics
+            mean_metrics_dict[model_i] = model_mean_metrics
+            std_metrics_dict[model_i] = model_std_metrics
+            
+        median_metrics_ds = pd.DataFrame(median_metrics_dict, index = ["RMSE","MAPE","NSE","KGE"])
+        mean_metrics_ds = pd.DataFrame(mean_metrics_dict, index = ["RMSE","MAPE","NSE","KGE"])
+        std_metrics_ds = pd.DataFrame(std_metrics_dict, index = ["RMSE","MAPE","NSE","KGE"])
+            
+        median_metrics_ds.to_csv(f"{metrics_saving_path}/median_metrics{name_suffix}.csv", index=True)
+        mean_metrics_ds.to_csv(f"{metrics_saving_path}/mean_metrics{name_suffix}.csv", index=True)
+        std_metrics_ds.to_csv(f"{metrics_saving_path}/std_metrics{name_suffix}.csv", index=True)
+        print("Saved!")
             
     # Time Series plot
     
@@ -170,7 +239,7 @@ def main(config):
             
     print("All time series plots saved!")
     
-    print("Drawing maps...")
+    print("Drawing maps...", end = " ")
     for date in config["map_dates"]:
         
         save_map_dir = f"{map_saving_path}/maps_{date.replace('-','_')}"
@@ -233,7 +302,7 @@ def main(config):
     # Gif #
     #######
     
-    print("Drawing GIFs...")
+    print("Drawing GIFs...", end = " ")
     save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
         
     if config["iter_pred"]:
@@ -284,381 +353,7 @@ def main(config):
         plt.close("all")
         
         print("All GIFs saved!")
-    
-    
-    
-            
-            
-    
-def load_model(config, model_path):
-    model, _ = load_model_ST_MultiPoint.load_model(config)
-    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
-    model.eval()
-    
-    return model
-
-### Prediction Functions
-def compute_ts_prediction_with_displacemnt(config, dataset,
-                                           model, device,
-                                           iter_pred):
-    ### Sensors Time Series Prediction
-        if config["forecast_horizon"] is None:
-            
-            ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                        np.datetime64(config["start_date_pred_ts"]),
-                                                                                        config["n_pred_ts"],
-                                                                                        iter_pred = iter_pred,
-                                                                                        get_displacement_terms = True)
-            
-            n_pred = config["n_pred_ts"]
-            
-        else:
-            ts_true_list = []
-            ts_predictions_list = []
-            ts_Displacement_GW_list = []
-            ts_Displacement_S_list = []
-            ts_Conductivity_list = []
-            ts_Lag_GW_list = []
-            
-            date = np.datetime64(config["start_date_pred_ts"])
-            
-            for i in range(config["n_pred_ts"]):
-                
-                ts_true, ts_predictions, ts_Displacement_GW, ts_Displacement_S, ts_Conductivity, ts_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                        date,
-                                                                                        config["forecast_horizon"],
-                                                                                        iter_pred = iter_pred,
-                                                                                        get_displacement_terms = True)
-                ts_true_list.append(ts_true)
-                ts_predictions_list.append(ts_predictions)
-                ts_Displacement_GW_list.append(ts_Displacement_GW)
-                ts_Displacement_S_list.append(ts_Displacement_S)
-                ts_Conductivity_list.append(ts_Conductivity)
-                ts_Lag_GW_list.append(ts_Lag_GW)
-                
-                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
-                
-            ts_true = torch.cat(ts_true_list, dim = 0)
-            ts_predictions = torch.cat(ts_predictions_list, dim = 0)
-            ts_Displacement_GW = torch.cat(ts_Displacement_GW_list, dim = 0)
-            ts_Displacement_S = torch.cat(ts_Displacement_S_list, dim = 0)
-            ts_Conductivity = torch.cat(ts_Conductivity_list, dim = 0)
-            ts_Lag_GW = torch.cat(ts_Lag_GW_list, dim = 0)
-            
-            n_pred = config["forecast_horizon"] * config["n_pred_ts"]
-        
-        # Build Pandas DF
-        
-        ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_Displacement_GW_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_GW.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_Displacement_S_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_S.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_Conductivity_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Conductivity.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_Lag_GW = plot_ST_MultiPoint.build_ds_from_pred(ts_Lag_GW.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        
-        
-        # Denormalize
-        ts_true_ds = (ts_true_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        ts_predictions_ds = (ts_predictions_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        ts_Displacement_GW_ds = ts_Displacement_GW_ds * dataset.norm_factors["target_stds"]
-        ts_Displacement_S_ds = ts_Displacement_S_ds * dataset.norm_factors["target_stds"]
-        ts_Conductivity_ds = ts_Conductivity_ds * dataset.norm_factors["target_stds"]
-        ts_Lag_GW = (ts_Lag_GW * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        
-        return [ts_true_ds, ts_predictions_ds,
-                ts_Displacement_GW_ds, ts_Displacement_S_ds,
-                ts_Conductivity_ds, ts_Lag_GW]
-        
-def compute_ts_prediction(config, dataset,
-                        model, device,
-                        iter_pred):
-    ### Sensors Time Series Prediction
-        
-        if config["forecast_horizon"] is None:
-            ts_true, ts_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                        np.datetime64(config["start_date_pred_ts"]),
-                                                                                        config["n_pred_ts"],
-                                                                                        iter_pred = iter_pred,
-                                                                                        get_displacement_terms = False)
-            
-            n_pred = config["n_pred_ts"]
-            
-        else:
-            ts_true_list = []
-            ts_predictions_list = []
-            
-            date = np.datetime64(config["start_date_pred_ts"])
-            
-            for i in range(config["n_pred_ts"]):
-                
-                ts_true, ts_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                        date,
-                                                                                        config["forecast_horizon"],
-                                                                                        iter_pred = iter_pred,
-                                                                                        get_displacement_terms = False)
-                ts_true_list.append(ts_true)
-                ts_predictions_list.append(ts_predictions)
-                
-                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
-                
-            ts_true = torch.cat(ts_true_list, dim = 0)
-            ts_predictions = torch.cat(ts_predictions_list, dim = 0)
-            
-            n_pred = config["forecast_horizon"] * config["n_pred_ts"]
-        
-        # Build Pandas DF
-        
-        ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
-                                                        start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
-        
-        # Denormalize
-        ts_true_ds = (ts_true_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        ts_predictions_ds = (ts_predictions_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-       
-        return [ts_true_ds, ts_predictions_ds]
-        
-def compute_grid_prediction_with_displacemnt(config, dataset,
-                                           model, device,
-                                           iter_pred,
-                                           Z_grid):
-    
-    ### ST Grid prediction
-        if config["forecast_horizon"] is None:
-        
-            _, grid_predictions, grid_Displacement_GW, grid_Displacement_S, grid_Conductivity, grid_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                                                                                                        np.datetime64(config["start_date_pred_map"]),
-                                                                                                                                                                        config["n_pred_map"],
-                                                                                                                                                                        iter_pred = iter_pred,
-                                                                                                                                                                        get_displacement_terms = True,
-                                                                                                                                                                        Z_grid = Z_grid)
-            
-            n_pred = config["n_pred_map"]
-            
-        else:
-            
-            grid_predictions_list = []
-            grid_Displacement_GW_list = []
-            grid_Displacement_S_list = []
-            grid_Conductivity_list = []
-            grid_Lag_GW_list = []
-            
-            date = np.datetime64(config["start_date_pred_ts"])
-            
-            for i in range(config["n_pred_map"]):
-                _, grid_predictions, grid_Displacement_GW, grid_Displacement_S, grid_Conductivity, grid_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                                                                                                        date,
-                                                                                                                                                                        config["forecast_horizon"],
-                                                                                                                                                                        iter_pred = iter_pred,
-                                                                                                                                                                        get_displacement_terms = True,
-                                                                                                                                                                        Z_grid = Z_grid)
-                
-                grid_predictions_list.append(grid_predictions)
-                grid_Displacement_GW_list.append(grid_Displacement_GW)
-                grid_Displacement_S_list.append(grid_Displacement_S)
-                grid_Conductivity_list.append(grid_Conductivity)
-                grid_Lag_GW_list.append(grid_Lag_GW)
-                
-                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
-            
-            grid_predictions = torch.cat(grid_predictions_list, dim = 0)
-            grid_Displacement_GW = torch.cat(grid_Displacement_GW_list, dim = 0)
-            grid_Displacement_S = torch.cat(grid_Displacement_S_list, dim = 0)
-            grid_Conductivity = torch.cat(grid_Conductivity_list, dim = 0)
-            grid_Lag_GW = torch.cat(grid_Lag_GW_list, dim = 0)
-            
-            n_pred = config["forecast_horizon"] * config["n_pred_map"]
-        
-                       
-        grid_predictions = grid_predictions.reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
-        grid_Displacement_GW = grid_Displacement_GW.reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
-        grid_Displacement_S = grid_Displacement_S.reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
-        grid_Conductivity = grid_Conductivity.reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
-        grid_Lag_GW = grid_Lag_GW.reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1]).detach().cpu()
-        
-        grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        grid_Lag_GW = (grid_Lag_GW * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-        grid_Displacement_GW = grid_Displacement_GW * dataset.norm_factors["target_stds"]
-        grid_Displacement_S = grid_Displacement_S * dataset.norm_factors["target_stds"]
-        grid_Conductivity = grid_Conductivity * dataset.norm_factors["target_stds"]
-                                                                                                                                                              
-        start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
-        date_seq = [dataset.dates[start_date_idx+i] for i in range(n_pred)]
-
-        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
-        Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
-        Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
-        dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
-                
-        predictions_xr = xarray.DataArray(data = grid_predictions,
-                                        coords = dict(
-                                                    lat=("lat", Z_grid_matrix_lat[:,0]),
-                                                    lon=("lon", Z_grid_matrix_lon[0,:]),
-                                                    time=date_seq),
-                                        dims = ["time","lat", "lon"]
-                                        )
-        
-        predictions_wtd_xr = dtm - predictions_xr
-            
-        displacement_gw_xr = xarray.DataArray(data = grid_Displacement_GW,
-                            coords = dict(
-                                        lat=("lat", Z_grid_matrix_lat[:,0]),
-                                        lon=("lon", Z_grid_matrix_lon[0,:]),
-                                        time=date_seq),
-                            dims = ["time","lat", "lon"]
-                            )
-
-        displacement_s_xr = xarray.DataArray(data = grid_Displacement_S,
-                            coords = dict(
-                                        lat=("lat", Z_grid_matrix_lat[:,0]),
-                                        lon=("lon", Z_grid_matrix_lon[0,:]),
-                                        time=date_seq),
-                            dims = ["time","lat", "lon"]
-                            )
-
-        conductivity_xr = xarray.DataArray(data = grid_Conductivity,
-                            coords = dict(
-                                        lat=("lat", Z_grid_matrix_lat[:,0]),
-                                        lon=("lon", Z_grid_matrix_lon[0,:]),
-                                        time=date_seq),
-                            dims = ["time","lat", "lon"]
-                            )
-        
-        Lag_GW_xr = xarray.DataArray(data = grid_Lag_GW,
-                            coords = dict(
-                                        lat=("lat", Z_grid_matrix_lat[:,0]),
-                                        lon=("lon", Z_grid_matrix_lon[0,:]),
-                                        time=date_seq),
-                            dims = ["time","lat", "lon"]
-                            )
-        
-        return [predictions_xr, predictions_wtd_xr,
-                displacement_gw_xr,displacement_s_xr,
-                conductivity_xr, Lag_GW_xr]
-        
-def compute_grid_prediction(config, dataset,
-                            model, device,
-                            iter_pred,
-                            Z_grid):
-    
-    ### ST Grid prediction
-        if config["forecast_horizon"] is None:
-            _, grid_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                    np.datetime64(config["start_date_pred_map"]),
-                                                                                    config["n_pred_map"],
-                                                                                    iter_pred = iter_pred,
-                                                                                    get_displacement_terms = False,
-                                                                                    Z_grid = Z_grid)
-            n_pred = config["n_pred_map"]
-            
-        else:
-            
-            grid_predictions_list = []
-            date = np.datetime64(config["start_date_pred_ts"])
-            
-            for i in range(config["n_pred_map"]):
-                _, grid_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                                        date,
-                                                                                        config["forecast_horizon"],
-                                                                                        iter_pred = iter_pred,
-                                                                                        get_displacement_terms = False,
-                                                                                        Z_grid = Z_grid)
-                grid_predictions_list.append(grid_predictions)
-                date = date + np.timedelta64(config["forecast_horizon"], config["frequency"])
-                
-            grid_predictions = torch.cat(grid_predictions_list, dim = 0)
-            n_pred = config["forecast_horizon"] * config["n_pred_map"]
-            
-            
-        grid_predictions = grid_predictions.detach().cpu().reshape(n_pred,config["lat_lon_npoints"][0],config["lat_lon_npoints"][1])
-        
-        grid_predictions = (grid_predictions * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-                                                                                                                                                            
-        start_date_idx = dataset.dates.get_loc(np.datetime64(config["start_date_pred_map"]))
-        date_seq = [dataset.dates[start_date_idx+i] for i in range(n_pred)]
-
-        Z_grid_matrix = Z_grid.reshape(config["lat_lon_npoints"][0],config["lat_lon_npoints"][1],3)
-        Z_grid_matrix_lat = (Z_grid_matrix[:,:,0] * dataset.norm_factors["lat_std"]) + dataset.norm_factors["lat_mean"]
-        Z_grid_matrix_lon = (Z_grid_matrix[:,:,1] * dataset.norm_factors["lon_std"]) + dataset.norm_factors["lon_mean"]
-        dtm = (Z_grid_matrix[:,:,2] * dataset.norm_factors["dtm_std"].values) + dataset.norm_factors["dtm_mean"].values
-                
-        predictions_xr = xarray.DataArray(data = grid_predictions,
-                                        coords = dict(
-                                                    lat=("lat", Z_grid_matrix_lat[:,0]),
-                                                    lon=("lon", Z_grid_matrix_lon[0,:]),
-                                                    time=date_seq),
-                                        dims = ["time","lat", "lon"]
-                                        )
-        
-        predictions_wtd_xr = dtm - predictions_xr
-        
-        return [predictions_xr, predictions_wtd_xr]
-
-### General Functions
-def compute_prediction_with_displacement(config, dataset, device,
-                                  model,
-                                  iter_pred,
-                                  Z_grid):
-    with torch.no_grad():
-        model.eval()
-        print("Computing Time Series Predictions...")
-        ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
-                                           model, device,
-                                           iter_pred)
-        print("Done!")
-        print("Computing Gridded Predictions...")
-        predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr = compute_grid_prediction_with_displacemnt(config, dataset,
-                                           model, device,
-                                           iter_pred,
-                                           Z_grid)
-        print("Done!")
-        
-        return [[ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict],
-                [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr]]     
-        
-def compute_prediction(config, dataset, device,
-                        model,
-                        iter_pred,
-                        Z_grid):
-    with torch.no_grad():
-        model.eval()
-        print("Computing Time Series Predictions...")
-        ts_true_ds, ts_predictions_ds = compute_ts_prediction(config, dataset,
-                            model, device,
-                            iter_pred)
-        print("Done!")
-        print("Computing Gridded Predictions...")
-        predictions_xr, predictions_wtd_xr = compute_grid_prediction(config, dataset,
-                                model, device,
-                                iter_pred,
-                                Z_grid)
-        print("Done!")
-        
-        return [[ts_true_ds, ts_predictions_ds],
-                [predictions_xr, predictions_wtd_xr]]
-        
+      
 
 if __name__ == "__main__":
     args = parse_arguments()

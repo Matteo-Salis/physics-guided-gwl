@@ -92,10 +92,10 @@
     "reg_temp_smoothness":0,
     "tstep_control_points":2,
 
-    "lr": 5e-4,
-    "lr_scheduling":[[300,600],2e-1],
+    "lr": 1e-3,
+    "lr_scheduling":[[200,500],5e-1],
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 750, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],

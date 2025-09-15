@@ -57,6 +57,7 @@
     "start_date_pred_ts":"2021-06-20",
     "get_displacement":true,
     "iter_pred":false,
+    "compute_metrics":true,
     "lat_lon_npoints":[70,70],
 
     "n_pred_map":132,
@@ -64,5 +65,5 @@
     "start_date_pred_map":"2021-06-20",
     "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2023-10-08"],
 
-    "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/plots"
+    "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/test_predictions"
 }
