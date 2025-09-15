@@ -82,9 +82,9 @@
     "tstep_control_points":null,
 
     "lr": 5e-4,
-    "lr_scheduling":[[200],2e-1],
+    "lr_scheduling":[[300,600],2e-1],
     "batch_size": 32,
-    "epochs": 750, 
+    "epochs": 1000, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],

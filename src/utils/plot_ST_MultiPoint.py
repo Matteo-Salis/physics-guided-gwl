@@ -713,6 +713,7 @@ def plot_map_all_models(predictions_xr_list,
             shapefile,
             model_names,
             var_name_title = "H [m]",
+            cmap = "Blues",
             save_dir = None, 
             print_plot = False):
     
@@ -723,6 +724,7 @@ def plot_map_all_models(predictions_xr_list,
 
     for model_i in range(len(predictions_xr_list)):
         predictions_xr_list[model_i].plot(ax = ax[model_i],
+                                          cmap = cmap,
                                           cbar_kwargs={"shrink": 0.50})
     
         shapefile.boundary.plot(ax = ax[model_i],
@@ -804,6 +806,7 @@ def plot_displacement_all_models(displacement_pred_list,
         
         ### Conductivity
         im2 = displacement_pred_list[model_i][2].plot(ax = ax[model_i,2],
+                                                      cmap = "Purples",
                                                       cbar_kwargs={"shrink": 0.75})
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
