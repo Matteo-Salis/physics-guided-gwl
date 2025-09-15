@@ -43,22 +43,26 @@
     "model_with_displacements":["STDisNet","STDisNet_PI","STDisNet_PI_RCH"],
     
     "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STNet_SAGW_ERA5.json",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_ERA5.json"],
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_RCH_ERA5.json"],
     
     "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_ref_20250913_093701/ST_MultiPoint_STNet_SAGW_S_ref_20250913_093701.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659.pt"],
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250913_164848/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250913_164848.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250913_195012/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250913_195012.pt"],
 
-    "n_pred_ts":20,
-    "forecast_horizon":12,
-    "start_date_pred_ts":"2019-01-06",
+    "n_pred_ts":132,
+    "forecast_horizon":null,
+    "start_date_pred_ts":"2021-06-20",
     "get_displacement":true,
-    "iter_pred":true,
+    "iter_pred":false,
     "lat_lon_npoints":[70,70],
 
-    "n_pred_map":255,
+    "n_pred_map":132,
     "plot_recharge_areas": true,
-    "start_date_pred_map":"2019-01-06",
-    "map_dates":["2019-05-12","2019-07-21","2019-10-06","2022-05-15","2022-07-17","2022-10-02"],
+    "start_date_pred_map":"2021-06-20",
+    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2023-10-08"],
 
     "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/plots"
 }
