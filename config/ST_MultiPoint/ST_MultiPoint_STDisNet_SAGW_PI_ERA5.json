@@ -81,7 +81,7 @@
     "physics_scheduling_offset":null,
     "coherence_alpha":1,
     "cpoints_start_epoch":0,
-    "reg_diffusion_eq":1e-1,
+    "reg_diffusion_eq":5e-1,
     "reg_delta_gw_l2":0,
     "reg_delta_gw_l1":0,
     "reg_K":0,
