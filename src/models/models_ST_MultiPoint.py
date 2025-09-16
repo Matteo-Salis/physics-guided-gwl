@@ -2570,7 +2570,7 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
                                 norm_1 = False if i == 0 else True,
                                 norm_2 = True,
                                 elementwise_affine = False,
-                                rescon_input = True,
+                                rescon_input = False if i == 0 else True,
                                 dropout = 0.))
         
         
