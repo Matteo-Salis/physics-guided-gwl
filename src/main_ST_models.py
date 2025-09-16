@@ -47,6 +47,7 @@ def main(config):
     random.seed(config["seed"])
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    
     # wandb configuration
     wandb_config(config)
 

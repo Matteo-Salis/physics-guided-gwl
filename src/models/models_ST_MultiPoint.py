@@ -69,9 +69,10 @@ def weight_init_ortho_alt(model,
                                     "ST_coords_Embedding",
                                     "Output",
                                     "Output_Lag",
-                                    "FiLM_conditioning.fc_gamma_beta"],
-                          tanh_layers = ["Output_Delta_GW.0",
-                                    "Output_Delta_S.0"]):
+                                    "FiLM_conditioning.fc_gamma_beta",
+                                    "Output_Delta_GW",
+                                    "Output_Delta_S"],
+                          tanh_layers = []):
     """
     gain_map: dict mapping layer names (strings) to activation names (strings, e.g. "relu", "tanh")
               If a layer is not in gain_map, it defaults to default_gain.
@@ -106,7 +107,9 @@ def weight_init_He_alt(model,
                                     "ST_coords_Embedding",
                                     "Output",
                                     "Output_Lag",
-                                    "FiLM_conditioning.fc_gamma_beta"]):
+                                    "FiLM_conditioning.fc_gamma_beta",
+                                    "Output_Delta_GW",
+                                    "Output_Delta_S"]):
     """
     gain_map: dict mapping layer names (strings) to activation names (strings, e.g. "relu", "tanh")
               If a layer is not in gain_map, it defaults to default_gain.
@@ -2581,15 +2584,13 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         
         ### Linear_2_GW
         
-        self.Output_Delta_GW = nn.Sequential(nn.Linear(self.embedding_dim, 1,
-                                                bias=False),
-                                       nn.Tanh())
+        self.Output_Delta_GW = nn.Linear(self.embedding_dim, 1,
+                                                bias=False)
         
         ### Linear_2_S
         
-        self.Output_Delta_S = nn.Sequential(nn.Linear(self.embedding_dim, 1,
-                                                bias=False),
-                                       nn.Tanh())
+        self.Output_Delta_S = nn.Linear(self.embedding_dim, 1,
+                                                bias=False)
          
         
     def forward(self, X, W, Z, mc_dropout = False, get_displacement_terms = False, get_lag_term = False):
@@ -2684,13 +2685,13 @@ class ST_MultiPoint_STDisNet_SAGW_K(nn.Module):
         GW_lag_out = self.Output_Lag(GW_out)
         
         # GW Continuity equation component
-        Displacement_GW_p = self.Output_Delta_GW(Displacement_GW_p) # Darcy velocity
-        Displacement_GW = Displacement_GW_p * torch.abs(GW_lag_out)
+        Displacement_GW = self.Output_Delta_GW(Displacement_GW_p) # Darcy velocity
+        #Displacement_GW = Displacement_GW_p * torch.abs(GW_lag_out)
         Displacement_GW = Displacement_GW * HydrConductivity # Weight by HydrConductivity: ISOTROPIC Conductivity Field
         
         
-        Displacement_S_p = self.Output_Delta_S(Displacement_S_p)
-        Displacement_S =  Displacement_S_p * torch.abs(GW_lag_out)
+        Displacement_S = self.Output_Delta_S(Displacement_S_p)
+        #Displacement_S =  Displacement_S_p * torch.abs(GW_lag_out)
         
         
         Y_hat = GW_lag_out + Displacement_GW + Displacement_S # Euler method
