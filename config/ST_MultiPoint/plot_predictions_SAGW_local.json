@@ -52,6 +52,7 @@
     "start_date_pred_ts":"2019-01-06",
     "get_displacement":true,
     "iter_pred":true,
+    "compute_metrics":true,
     "lat_lon_npoints":[70,70],
 
     "n_pred_map":255,

@@ -80,7 +80,7 @@
     "physics_scheduling_offset":null,
     "coherence_alpha":1,
     "cpoints_start_epoch":0,
-    "reg_diffusion_eq":5e-1,
+    "reg_diffusion_eq":5e-4,
     "reg_delta_gw_l2":0,
     "reg_delta_gw_l1":0,
     "reg_K":0,
@@ -92,8 +92,8 @@
     "reg_temp_smoothness":0,
     "tstep_control_points":2,
 
-    "lr": 1e-3,
-    "lr_scheduling":[[200,500],5e-1],
+    "lr": 5e-4,
+    "lr_scheduling":[[300,600],5e-1],
     "batch_size": 32,
     "epochs": 750, 
 
