@@ -59,7 +59,7 @@
     "s_coords_input_dim":3,
     "embedding_dim":32,
     "spatial_mha_heads": 8,
-    "joint_mod_blocks": 2,
+    "joint_mod_blocks": 4,
     "joint_mod_heads": 8,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",

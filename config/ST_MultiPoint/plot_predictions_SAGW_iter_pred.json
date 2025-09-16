@@ -49,8 +49,8 @@
     
     "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_ref_20250913_093701/ST_MultiPoint_STNet_SAGW_S_ref_20250913_093701.pt",
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250913_093659.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250913_164848/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250913_164848.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250913_195012/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250913_195012.pt"],
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250915_084838/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250915_084838.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250915_085425/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250915_085425.pt"],
 
     "n_pred_ts":5,
     "forecast_horizon":26,
