@@ -12,6 +12,7 @@ import sys
 
 import torch.nn as nn
 from tqdm import tqdm
+import torch, numpy as np, random
 
 from dataloaders.load_dataset_ST_MultiPoint import load_dataset, get_dataloader
 from models.load_model_ST_MultiPoint import load_model
@@ -40,6 +41,12 @@ def wandb_config(config):
     )
 
 def main(config):
+    
+    torch.manual_seed(config["seed"])
+    np.random.seed(config["seed"])
+    random.seed(config["seed"])
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     # wandb configuration
     wandb_config(config)
 
