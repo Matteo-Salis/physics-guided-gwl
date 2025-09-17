@@ -1,5 +1,6 @@
 {
-    "cuda_device":"cuda:0",
+    "cuda_device":"cuda:1",
+    "seed":42,
     
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
@@ -38,7 +39,7 @@
     "frequency": "W",
 
     "random_sampler": true,
-    "densification_dropout_p":0.35,
+    "densification_dropout_p":0.15,
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -59,7 +60,7 @@
     "s_coords_input_dim":3,
     "embedding_dim":32,
     "spatial_mha_heads": 8,
-    "displacement_mod_blocks": 1,
+    "displacement_mod_blocks": 2,
     "displacement_mod_heads": 8,
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
@@ -69,7 +70,7 @@
     "optimizer": "adamw",
     "momentum": null,
     "nesterov": null,
-    "weight_decay": 5e-4,
+    "weight_decay": 2.5e-3,
     "l2_alpha":0,
     "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
@@ -81,10 +82,10 @@
     "diffusion_alpha":0,
     "tstep_control_points":null,
 
-    "lr": 5e-4,
-    "lr_scheduling":[[300,600],2e-1],
+    "lr": 2.5e-4,
+    "lr_scheduling":[[400],4e-1],
     "batch_size": 32,
-    "epochs": 1000, 
+    "epochs": 850, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
