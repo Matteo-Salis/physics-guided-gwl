@@ -256,7 +256,7 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
         return torch.mean(torch.abs(residuals))
     
     elif res_fn == "mape":
-        return torch.mean(torch.abs(residuals/((spatial_grads+1e-8)/normf_sigma)))
+        return torch.mean(torch.abs(residuals/((spatial_grads)/normf_sigma)+1e-8))
 
 def Fdiff_conv(x, mode = "first_lon", der_order = 1):
     """
