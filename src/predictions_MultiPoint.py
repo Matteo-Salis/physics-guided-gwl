@@ -126,6 +126,22 @@ def main(config):
         if config["forecast_horizon"] is not None:
             name_suffix += f"_FO{config['forecast_horizon']}"
             
+        #Compute denormalized sensor means
+        subset_wtd_df = dataset.wtd_df.loc[pd.IndexSlice[dataset.wtd_df.index.get_level_values(0) <= np.datetime64(dataset.config["date_max_norm"]),
+                                                        :]] #
+        
+        subset_wtd_df = (subset_wtd_df[dataset.target] * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
+        
+        sensor_means = subset_wtd_df.groupby(level=1).transform('mean').values
+        sensor_means = sensor_means.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
+                                            len(dataset.sensor_id_list))[0,:] 
+        
+        # sensor_stds = subset_wtd_df.groupby(level=1).transform('std').values
+        # sensor_stds = sensor_stds.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
+        #                                     len(dataset.sensor_id_list))[0,:] 
+        
+    
+            
         for model_i in config["model_name"]:
 
             model_median_metrics = []
@@ -147,7 +163,7 @@ def main(config):
             
             sensors_nse = metrics.compute_test_nse_per_sensor(models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
                                                                 models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])],
-                                                                dataset.norm_factors["target_means"])
+                                                                sensor_means)
             sensors_nse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_nse.csv", index=True)
             model_median_metrics.append(sensors_nse.median())
             model_mean_metrics.append(sensors_nse.mean())
@@ -319,6 +335,8 @@ def main(config):
                         shapefile = dataset.piemonte_shp,
                         freq = "W",
                         cmap = "Blues",
+                        vmin_1 = False,
+                        vmax_1 = False,
                         save_dir = save_gif_dir + f"_H_{model}",
                         print_plot = False)
         

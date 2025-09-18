@@ -16,7 +16,10 @@ def compute_test_mape_per_sensor(ds_true, ds_pred):
     
     return rmse
 
-def compute_test_nse_per_sensor(ds_true, ds_pred, true_mean):
+def compute_test_nse_per_sensor(ds_true, ds_pred, true_mean = None):
+    
+    if true_mean is None:
+        true_mean = ds_true.mean()
     
     numerator = ds_true - ds_pred
     numerator = numerator**2
@@ -30,13 +33,19 @@ def compute_test_nse_per_sensor(ds_true, ds_pred, true_mean):
     
     return nse
 
-def compute_test_kge_per_sensor(ds_true, ds_pred):
+def compute_test_kge_per_sensor(ds_true, ds_pred, true_mean = None, true_sd = None):
+    
+    if true_mean is None:
+        true_mean = ds_true.mean()
+        
+    if true_sd is None:
+        true_sd = ds_true.std()
     
     rho = ds_true.corrwith(ds_pred, axis=0, method = "pearson")
     
-    bias = ds_pred.mean()/ds_true.mean()
+    bias = ds_pred.mean()/true_mean
     
-    variability = ds_pred.std()/ds_true.std()
+    variability = ds_pred.std()/true_sd
     
     kge = 1-np.sqrt((rho-1)**2 + (bias-1)**2 + (variability-1)**2)
     
