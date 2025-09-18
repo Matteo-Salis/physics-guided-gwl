@@ -174,3 +174,4 @@ results/
 sh/
 
 src/notebooks/*.gif
+src/notebooks/*.png

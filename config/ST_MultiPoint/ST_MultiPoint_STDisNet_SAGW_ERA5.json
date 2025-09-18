@@ -1,5 +1,5 @@
 {
-    "cuda_device":"cuda:1",
+    "cuda_device":"cuda:0",
     "seed":42,
     
     "entity" : "gsartor-unito",

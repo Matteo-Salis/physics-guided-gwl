@@ -714,6 +714,8 @@ def plot_map_all_models(predictions_xr_list,
             model_names,
             var_name_title = "H [m]",
             cmap = "Blues",
+            vmin = None,
+            vmax = None,
             save_dir = None, 
             print_plot = False):
     
@@ -721,11 +723,23 @@ def plot_map_all_models(predictions_xr_list,
     
     fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (10,4))
     fig.suptitle(title)
+    
+    if vmin is None and vmax is None:
+        max_list = [predictions_xr_list[model_i].max().values for model_i in range(len(predictions_xr_list))]
+        min_list = [predictions_xr_list[model_i].min().values for model_i in range(len(predictions_xr_list))]
+        
+        print("Max H values: ", max_list)
+        print("Min H values: ", min_list)
+        
+        vmax = min(max_list)
+        vmin = max(min_list)
 
     for model_i in range(len(predictions_xr_list)):
         predictions_xr_list[model_i].plot(ax = ax[model_i],
                                           cmap = cmap,
-                                          cbar_kwargs={"shrink": 0.50})
+                                          vmin = vmin,
+                                          vmax = vmax,
+                                          cbar_kwargs={"shrink": 0.40, "extend": "both"})
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
@@ -744,7 +758,7 @@ def plot_map_all_models(predictions_xr_list,
         ncol=len(labels)              # all labels in one row
     )
 
-    plt.tight_layout()
+    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.3)
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
                     dpi = 400, transparent = True)
@@ -761,21 +775,61 @@ def plot_displacement_all_models(displacement_pred_list,
             shapefile,
             model_names,
             recharge_areas = None,
+            vmin = None,
+            vmax = None,
             save_dir = None, 
             print_plot = False):
     
     ## Plot the maps
     
     fig, ax = plt.subplots(len(displacement_pred_list),
-                           3, figsize = (10,5))
+                           3, figsize = (8,6))
     fig.suptitle(title)
+    
+    if vmin is None and vmax is None:
+        max_delta_GW_list = [displacement_pred_list[model_i][0].max().values for model_i in range(len(displacement_pred_list))]
+        min_delta_GW_list = [displacement_pred_list[model_i][0].min().values for model_i in range(len(displacement_pred_list))]
+        
+        max_delta_S_list = [displacement_pred_list[model_i][1].max().values for model_i in range(len(displacement_pred_list))]
+        min_delta_S_list = [displacement_pred_list[model_i][1].min().values for model_i in range(len(displacement_pred_list))]
+        
+        # max_delta_K_list = [displacement_pred_list[model_i][2].max().values for model_i in range(len(displacement_pred_list))]
+        # min_delta_K_list = [displacement_pred_list[model_i][2].min().values for model_i in range(len(displacement_pred_list))]
+        
+        # print("Max Delta GW values: ", max_delta_GW_list)
+        # print("Min Delta GW values: ", min_delta_GW_list)
+        
+        vmax_GW = min(max_delta_GW_list)
+        vmin_GW = max(min_delta_GW_list)
+        
+        vmax_S = min(max_delta_S_list)
+        vmin_S = max(min_delta_S_list)
+        
+        # vmax_K = min(max_delta_K_list)
+        # vmin_K = max(min_delta_K_list)
+        
+        vmax = [vmax_GW, vmax_S,
+                        #vmax_K
+                        ]
+        vmin = [vmin_GW, vmin_S,
+                        #vmin_K
+                        ]
+        
+    
 
     for model_i in range(len(displacement_pred_list)):
         
-        ### Displacement H
+        ### Displacement GW
+        norm_gw = TwoSlopeNorm(vcenter=0,
+                vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
+                vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0])
+        
         im0 = displacement_pred_list[model_i][0].plot(ax = ax[model_i,0],
                 cmap = "seismic_r",# norm = norm
-                cbar_kwargs={"shrink": 0.75})
+                vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
+                vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0],
+                norm = norm_gw,
+                cbar_kwargs={"shrink": 0.85, "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,0],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -789,9 +843,16 @@ def plot_displacement_all_models(displacement_pred_list,
         ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
         
         ### Displacement S
+        norm_s = TwoSlopeNorm(vcenter=0,
+            vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
+            vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],)
+        
         im1 = displacement_pred_list[model_i][1].plot(ax = ax[model_i,1],
             cmap = "seismic_r",# norm = norm
-            cbar_kwargs={"shrink": 0.75})
+            vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
+            vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],
+            norm = norm_s,
+            cbar_kwargs={"shrink": 0.85, "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,1],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -806,8 +867,11 @@ def plot_displacement_all_models(displacement_pred_list,
         
         ### Conductivity
         im2 = displacement_pred_list[model_i][2].plot(ax = ax[model_i,2],
-                                                      cmap = "Purples",
-                                                      cbar_kwargs={"shrink": 0.75})
+                                                    cmap = "Purples",
+                                                    # vmax = vmax[2],
+                                                    # vmin = vmin[2],
+                                                    cbar_kwargs={"shrink": 0.85,
+                                                                 "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
                                     label = "Piedmont's bounds")
@@ -833,7 +897,7 @@ def plot_displacement_all_models(displacement_pred_list,
     )
 
 
-    plt.tight_layout(pad=1.0, h_pad=0.25, w_pad=0.5)
+    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.4)
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
                     dpi = 400, transparent = True)
@@ -854,6 +918,8 @@ def generate_gif_from_xr(start_date, n_pred,
                     freq,
                     shapefile,   
                     recharge_areas = None,
+                    vmin_1 = True,
+                    vmax_1 = True,
                     cmap = "seismic_r",
                     save_dir = None,
                     print_plot = False):
@@ -882,10 +948,11 @@ def generate_gif_from_xr(start_date, n_pred,
     norm = TwoSlopeNorm(vcenter=0) if cmap == "seismic_r" else None
     
     image = xr[0,:,:].plot(ax = ax, animated=True,
-                                                vmin = xr.min().values,
-                                                vmax = xr.max().values,
+                                                vmin = -1 if vmin_1 is True else xr.min().values,
+                                                vmax = +1 if vmax_1 is True else xr.max().values,
                                                 norm = norm,
-                                                cmap = cmap)
+                                                cmap = cmap,
+                                                extend = "both")
     shapefile.boundary.plot(ax = ax,
                                 color = "black",
                                 label = "Piedmont's bounds")
