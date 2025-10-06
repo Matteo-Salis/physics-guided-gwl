@@ -12,9 +12,9 @@ def compute_test_rmse_per_sensor(ds_true, ds_pred):
 def compute_test_mape_per_sensor(ds_true, ds_pred):
     residuals = (ds_true - ds_pred)/ds_true
     residuals = np.abs(residuals)
-    rmse =  residuals.mean()
+    mape =  residuals.mean()*100
     
-    return rmse
+    return mape
 
 def compute_test_nse_per_sensor(ds_true, ds_pred, true_mean = None):
     
