@@ -191,207 +191,216 @@ def main(config):
             
     # Time Series plot
     
-    print("Drawing plots...")
-    for sensor_idx in range(len(dataset.sensor_id_list)):
+    if config["n_pred_ts"]>0:
+        print("Drawing plots...")
+        for sensor_idx in range(len(dataset.sensor_id_list)):
 
-        sensor = dataset.sensor_id_list[sensor_idx]
-        munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
+            sensor = dataset.sensor_id_list[sensor_idx]
+            munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
 
-        fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
-        plt.title(f"{munic} - {sensor}")
-        
-        markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
-        colors = ['tab:brown','tab:orange','darkgreen','darkmagenta']
-        i = 0
-        for model_i in config["model_name"]:
+            fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
+            plt.title(f"{munic} - {sensor}")
             
-            if config["forecast_horizon"] is not None:
-                for j in range(config["n_pred_ts"]):
-                    models_predictions[model_i][0][1][sensor].iloc[j*config["forecast_horizon"]:(j+1)*config["forecast_horizon"]].plot(
-                                                                                        ax = ax,
-                                                                                        color = colors[i % len(markers)],
-                                                                                        marker=markers[i % len(markers)],
-                                                                                        label = f"{model_i}" if j == config["n_pred_ts"]-1 else "",
-                                                                                        markersize = 2.5, linewidth = 0.8,
-                                                                                        )
+            markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
+            colors = ['tab:brown','tab:orange','darkgreen','darkmagenta']
+            i = 0
+            for model_i in config["model_name"]:
+                
+                if config["forecast_horizon"] is not None:
+                    for j in range(config["n_pred_ts"]):
+                        models_predictions[model_i][0][1][sensor].iloc[j*config["forecast_horizon"]:(j+1)*config["forecast_horizon"]].plot(
+                                                                                            ax = ax,
+                                                                                            color = colors[i % len(markers)],
+                                                                                            marker=markers[i % len(markers)],
+                                                                                            label = f"{model_i}" if j == config["n_pred_ts"]-1 else "",
+                                                                                            #markersize = 2.5, linewidth = 0.8,
+                                                                                            markersize = 1.5, linewidth = 0.2,
+                                                                                            )
+                else:
+                    models_predictions[model_i][0][1][sensor].plot(label = f"{model_i}", ax = ax,
+                                                            color = colors[i % len(markers)],
+                                                            marker=markers[i % len(markers)],
+                                                            #markersize = 2.5, linewidth = 0.8
+                                                            markersize = 1.5, linewidth = 0.2
+                                                            )
+                
+                if model_i == config["model_name"][-1] :
+                    models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
+                                                                color = "tab:blue",
+                                                                marker = "o", linestyle = "--" ,
+                                                                #markersize = 4, linewidth = 2
+                                                                markersize = 1.5, linewidth = 0.2
+                                                                )
+                    
+                
+                i += 1
+                
+            ax.set_ylim([ax.get_ylim()[0] - ax.get_ylim()[0]*0.0005,
+                    ax.get_ylim()[1] + ax.get_ylim()[1].min()*0.0005])
+            
+            # Start Test Vline
+            ax.vlines(config["test_split_p"], ymin = ax.get_ylim()[0],
+                    ymax = ax.get_ylim()[1], ls = "--", color = "darkred", lw = 2,
+                    label = "Start Test")
+            
+            # Grey boxes for missing values
+            all_dates = models_predictions[model_i][0][0][sensor].index.get_level_values(0)
+            if (models_predictions[model_i][0][0][sensor].isnull().any()):
+                ax.bar(all_dates[models_predictions[model_i][0][0][sensor].isnull()],
+                        bottom = ax.get_ylim()[0],
+                        height = ax.get_ylim()[1],
+                        width= 2,
+                        align='center',
+                        color = 'lightgrey',
+                        label = "Missing Values", zorder = 0)
+            
+            print(f"Saving Time Series of {munic} - {sensor}")
+            plt.xlabel("Date")
+            plt.ylabel("Groundwater Level [m]")
+            plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]))
+            ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
+            
+            # for all ds dates 
+            date_xticks = pd.date_range(np.datetime64("2001-01-01"), np.datetime64("2023-12-31"), freq = "6MS",  normalize = True, inclusive = "both")
+            ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
+            ax.tick_params(axis = "x", rotation=50)
+            
+            if config["forecast_horizon"] is None:
+                n_pred = config['n_pred_ts']
             else:
-                models_predictions[model_i][0][1][sensor].plot(label = f"{model_i}", ax = ax,
-                                                        color = colors[i % len(markers)],
-                                                        marker=markers[i % len(markers)],
-                                                        markersize = 3, linewidth = 0.85)
+                n_pred = config['n_pred_ts']*config["forecast_horizon"]
+            title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{n_pred}"
             
-            if model_i == config["model_name"][-1] :
-                models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
-                                                            color = "tab:blue",
-                                                            marker = "o", linestyle = "--" , markersize = 4, linewidth = 2)
+            if config["iter_pred"]:
+                title += "_iter_pred"
                 
+            if config["forecast_horizon"] is not None:
+                title += f"_FO{config['forecast_horizon']}"
+                
+            plt.savefig(f"{title}.png", bbox_inches='tight', dpi=400, pad_inches=0.1) #dpi = 400, transparent = True
+            plt.close("all")
+                
+                
+        print("All time series plots saved!")
+    
+    if config["n_pred_map"]>0:
+        
+        print("Drawing maps...", end = " ")
+        for date in config["map_dates"]:
             
-            i += 1
+            save_map_dir = f"{map_saving_path}/maps_{date.replace('-','_')}"
             
-        ax.set_ylim([ax.get_ylim()[0] - ax.get_ylim()[0]*0.0005,
-                ax.get_ylim()[1] + ax.get_ylim()[1].min()*0.0005])
+            if config["iter_pred"]:
+                save_map_dir += "_iter_pred"
+                
+            if config["forecast_horizon"] is not None:
+                save_map_dir += f"_FO{config['forecast_horizon']}"
+            
+            ### Map Plots H 
+            model_pred_list_H = [models_predictions[config["model_name"][i]][1][0].sel(time = date) for i in range(len(config["model_name"]))]
+            model_pred_list_WTD = [models_predictions[config["model_name"][i]][1][1].sel(time = date) for i in range(len(config["model_name"]))]
         
-        # Start Test Vline
-        ax.vlines(config["test_split_p"], ymin = ax.get_ylim()[0],
-                ymax = ax.get_ylim()[1], ls = "--", color = "darkred", lw = 2,
-                label = "Start Test")
+            plot_ST_MultiPoint.plot_map_all_models(model_pred_list_H,
+                title = f"{date} Predictions Groundwater Level",
+                shapefile = dataset.piemonte_shp,
+                model_names = config["model_name"],
+                cmap = "Blues",
+                var_name_title = "GWL [m]",
+                save_dir = save_map_dir + "_GWL", 
+                print_plot = False)
+            plt.close("all")
+            
+            ### Map Plots WTD
+            
+            plot_ST_MultiPoint.plot_map_all_models(model_pred_list_WTD,
+                title = f"{date} Predictions Water Table Depth",
+                shapefile = dataset.piemonte_shp,
+                model_names = config["model_name"],
+                cmap = "Blues_r",
+                var_name_title = "WTD [m]",
+                save_dir = save_map_dir + "_WTD", 
+                print_plot = False)
+            plt.close("all")
+            ### Map Plots Displacements
+            model_pred_displacements_list = [] 
+            
+            for i in range(len(config["model_with_displacements"])):
+                for j in range(3):
+                    
+                    displacement_list = []
+                    displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][2].sel(time = date))
+                    displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][3].sel(time = date))
+                    displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][4].sel(time = date))
+                    
+                model_pred_displacements_list.append(displacement_list)
+            
+            plot_ST_MultiPoint.plot_displacement_all_models(model_pred_displacements_list,
+                title = f"{date} Predicted Displacements",
+                shapefile = dataset.piemonte_shp,
+                recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
+                model_names = config["model_with_displacements"],
+                save_dir = save_map_dir + "_Deltas", 
+                print_plot = False)
+            plt.close("all")
         
-        # Grey boxes for missing values
-        all_dates = models_predictions[model_i][0][0][sensor].index.get_level_values(0)
-        if (models_predictions[model_i][0][0][sensor].isnull().any()):
-            ax.bar(all_dates[models_predictions[model_i][0][0][sensor].isnull()],
-                    bottom = ax.get_ylim()[0],
-                    height = ax.get_ylim()[1],
-                    width= 2,
-                    align='center',
-                    color = 'lightgrey',
-                    label = "Missing Values", zorder = 0)
+        print("All Maps saved!")
+        #######
+        # Gif #
+        #######
         
-        print(f"Saving Time Series of {munic} - {sensor}")
-        plt.xlabel("Date")
-        plt.ylabel("Groundwater Level [m]")
-        plt.legend()
-        ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
-        
-        # for all ds dates 
-        date_xticks = pd.date_range(np.datetime64("2001-01-01"), np.datetime64("2023-12-31"), freq = "6MS",  normalize = True, inclusive = "both")
-        ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
-        ax.tick_params(axis = "x", rotation=50)
-        
-        if config["forecast_horizon"] is None:
-            n_pred = config['n_pred_ts']
-        else:
-            n_pred = config['n_pred_ts']*config["forecast_horizon"]
-        title = f"{ts_saving_path}/{munic}_{sensor}_{config['start_date_pred_ts']}_{n_pred}"
-        
+        print("Drawing GIFs...", end = " ")
+        save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
+            
         if config["iter_pred"]:
-            title += "_iter_pred"
+            save_gif_dir += "_iter_pred"
             
         if config["forecast_horizon"] is not None:
-            title += f"_FO{config['forecast_horizon']}"
+            save_gif_dir += f"_FO{config['forecast_horizon']}"
+        
+        ### H
+        for model in config["model_name"]:
+            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                            models_predictions[model][1][0],
+                            title = f"{model} - Groundwater Level [m] Evolution",
+                            shapefile = dataset.piemonte_shp,
+                            freq = "W",
+                            cmap = "Blues",
+                            vmin_1 = False,
+                            vmax_1 = False,
+                            save_dir = save_gif_dir + f"_GWL_{model}",
+                            print_plot = False)
             
-        plt.savefig(f"{title}.png", bbox_inches='tight', dpi=400, pad_inches=0.1) #dpi = 400, transparent = True
-        plt.close("all")
+            plt.close("all")
             
+        
             
-    print("All time series plots saved!")
-    
-    print("Drawing maps...", end = " ")
-    for date in config["map_dates"]:
+        for model in config["model_with_displacements"]:
+            ### Delta GW
+            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                            models_predictions[model][1][2],
+                            title = r"{} $\Delta_{{GW}}$ [m] Evolution".format(model),
+                            shapefile = dataset.piemonte_shp,
+                            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
+                            freq = "W",
+                            cmap = "seismic_r",
+                            save_dir = save_gif_dir + f"_DGW_{model}",
+                            print_plot = False)
+            plt.close("all")
         
-        save_map_dir = f"{map_saving_path}/maps_{date.replace('-','_')}"
         
-        if config["iter_pred"]:
-            save_map_dir += "_iter_pred"
+            ### Delta S
+            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                            models_predictions[model][1][3],
+                            title = r"{} $\Delta_S$ [m] Evolution".format(model),
+                            shapefile = dataset.piemonte_shp,
+                            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
+                            freq = "W",
+                            cmap = "seismic_r",
+                            save_dir = save_gif_dir + f"_DS_{model}",
+                            print_plot = False)
+            plt.close("all")
             
-        if config["forecast_horizon"] is not None:
-            save_map_dir += f"_FO{config['forecast_horizon']}"
-        
-        ### Map Plots H 
-        model_pred_list_H = [models_predictions[config["model_name"][i]][1][0].sel(time = date) for i in range(len(config["model_name"]))]
-        model_pred_list_WTD = [models_predictions[config["model_name"][i]][1][1].sel(time = date) for i in range(len(config["model_name"]))]
-    
-        plot_ST_MultiPoint.plot_map_all_models(model_pred_list_H,
-            title = f"{date} Predictions Groundwater Level",
-            shapefile = dataset.piemonte_shp,
-            model_names = config["model_name"],
-            cmap = "Blues",
-            var_name_title = "GWL [m]",
-            save_dir = save_map_dir + "_GWL", 
-            print_plot = False)
-        plt.close("all")
-        
-        ### Map Plots WTD
-        
-        plot_ST_MultiPoint.plot_map_all_models(model_pred_list_WTD,
-            title = f"{date} Predictions Water Table Depth",
-            shapefile = dataset.piemonte_shp,
-            model_names = config["model_name"],
-            cmap = "Blues_r",
-            var_name_title = "WTD [m]",
-            save_dir = save_map_dir + "_WTD", 
-            print_plot = False)
-        plt.close("all")
-        ### Map Plots Displacements
-        model_pred_displacements_list = [] 
-        
-        for i in range(len(config["model_with_displacements"])):
-            for j in range(3):
-                
-                displacement_list = []
-                displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][2].sel(time = date))
-                displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][3].sel(time = date))
-                displacement_list.append(models_predictions[config["model_with_displacements"][i]][1][4].sel(time = date))
-                
-            model_pred_displacements_list.append(displacement_list)
-        
-        plot_ST_MultiPoint.plot_displacement_all_models(model_pred_displacements_list,
-            title = f"{date} Predicted Displacements",
-            shapefile = dataset.piemonte_shp,
-            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
-            model_names = config["model_with_displacements"],
-            save_dir = save_map_dir + "_Deltas", 
-            print_plot = False)
-        plt.close("all")
-    
-    print("All Maps saved!")
-    #######
-    # Gif #
-    #######
-    
-    print("Drawing GIFs...", end = " ")
-    save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
-        
-    if config["iter_pred"]:
-        save_gif_dir += "_iter_pred"
-        
-    if config["forecast_horizon"] is not None:
-        save_gif_dir += f"_FO{config['forecast_horizon']}"
-    
-    ### H
-    for model in config["model_name"]:
-        plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                        models_predictions[model][1][0],
-                        title = f"{model} - Groundwater Level [m] Evolution",
-                        shapefile = dataset.piemonte_shp,
-                        freq = "W",
-                        cmap = "Blues",
-                        vmin_1 = False,
-                        vmax_1 = False,
-                        save_dir = save_gif_dir + f"_GWL_{model}",
-                        print_plot = False)
-        
-        plt.close("all")
-        
-    
-        
-    for model in config["model_with_displacements"]:
-        ### Delta GW
-        plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                        models_predictions[model][1][2],
-                        title = r"{} $\Delta_{{GW}}$ [m] Evolution".format(model),
-                        shapefile = dataset.piemonte_shp,
-                        recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
-                        freq = "W",
-                        cmap = "seismic_r",
-                        save_dir = save_gif_dir + f"_DGW_{model}",
-                        print_plot = False)
-        plt.close("all")
-    
-    
-        ### Delta S
-        plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                        models_predictions[model][1][3],
-                        title = r"{} $\Delta_S$ [m] Evolution".format(model),
-                        shapefile = dataset.piemonte_shp,
-                        recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
-                        freq = "W",
-                        cmap = "seismic_r",
-                        save_dir = save_gif_dir + f"_DS_{model}",
-                        print_plot = False)
-        plt.close("all")
-        
-        print("All GIFs saved!")
+            print("All GIFs saved!")
       
 
 if __name__ == "__main__":

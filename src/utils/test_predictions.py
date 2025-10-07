@@ -217,7 +217,7 @@ def compute_grid_prediction_with_displacemnt(config, dataset,
             grid_Conductivity_list = []
             grid_Lag_GW_list = []
             
-            date = np.datetime64(config["start_date_pred_ts"])
+            date = np.datetime64(config["start_date_pred_map"])
             
             for i in range(config["n_pred_map"]):
                 _, grid_predictions, grid_Displacement_GW, grid_Displacement_S, grid_Conductivity, grid_Lag_GW = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
@@ -328,7 +328,7 @@ def compute_grid_prediction(config, dataset,
         else:
             
             grid_predictions_list = []
-            date = np.datetime64(config["start_date_pred_ts"])
+            date = np.datetime64(config["start_date_pred_map"])
             
             for i in range(config["n_pred_map"]):
                 _, grid_predictions = plot_ST_MultiPoint.compute_predictions_ST_MultiPoint(dataset, model, device,
@@ -373,19 +373,38 @@ def compute_prediction_with_displacement(config, dataset, device,
                                   model,
                                   iter_pred,
                                   Z_grid):
+    
+    ts_true_ds = []
+    ts_predictions_ds = []
+    ts_Displacement_GW_ds = []
+    ts_Displacement_S_ds = [] 
+    ts_Conductivity_ds = []
+    ts_Lag_GW_dict = []
+    
+    predictions_xr = []
+    predictions_wtd_xr = []
+    displacement_gw_xr= []
+    displacement_s_xr = []
+    conductivity_xr = []
+    Lag_GW_xr= []
+    
     with torch.no_grad():
         model.eval()
-        print("Computing Time Series Predictions...")
-        ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
-                                           model, device,
-                                           iter_pred)
-        print("Done!")
-        print("Computing Gridded Predictions...")
-        predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr = compute_grid_prediction_with_displacemnt(config, dataset,
+        if config["n_pred_ts"]>0:
+            print("Computing Time Series Predictions...")
+            ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
+                                            model, device,
+                                            iter_pred)
+            print("Done!")
+            
+        
+        if config["n_pred_map"]>0:
+            print("Computing Gridded Predictions...")
+            predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr = compute_grid_prediction_with_displacemnt(config, dataset,
                                            model, device,
                                            iter_pred,
                                            Z_grid)
-        print("Done!")
+            print("Done!")
         
         return [[ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict],
                 [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr]]     
@@ -394,19 +413,29 @@ def compute_prediction(config, dataset, device,
                         model,
                         iter_pred,
                         Z_grid):
+    
+    ts_true_ds = []
+    ts_predictions_ds = []
+    predictions_xr = []
+    predictions_wtd_xr = []
+    
     with torch.no_grad():
         model.eval()
-        print("Computing Time Series Predictions...")
-        ts_true_ds, ts_predictions_ds = compute_ts_prediction(config, dataset,
-                            model, device,
-                            iter_pred)
-        print("Done!")
-        print("Computing Gridded Predictions...")
-        predictions_xr, predictions_wtd_xr = compute_grid_prediction(config, dataset,
+        
+        if config["n_pred_ts"]>0:
+            print("Computing Time Series Predictions...")
+            ts_true_ds, ts_predictions_ds = compute_ts_prediction(config, dataset,
                                 model, device,
-                                iter_pred,
-                                Z_grid)
-        print("Done!")
+                                iter_pred)
+            print("Done!")
+        
+        if config["n_pred_map"]>0:
+            print("Computing Gridded Predictions...")
+            predictions_xr, predictions_wtd_xr = compute_grid_prediction(config, dataset,
+                                    model, device,
+                                    iter_pred,
+                                    Z_grid)
+            print("Done!")
         
         return [[ts_true_ds, ts_predictions_ds],
                 [predictions_xr, predictions_wtd_xr]]
