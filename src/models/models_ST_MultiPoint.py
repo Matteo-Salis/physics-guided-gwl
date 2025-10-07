@@ -10,8 +10,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from dataloaders.dataset_1d import Dataset_1D
-
 from torch.autograd import Variable
 
 from st_moe_pytorch import MoE

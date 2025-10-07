@@ -721,7 +721,7 @@ def plot_map_all_models(predictions_xr_list,
     
     ## Plot the maps
     
-    fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (10,4))
+    fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (13,3))
     fig.suptitle(title)
     
     if vmin is None and vmax is None:
@@ -739,7 +739,7 @@ def plot_map_all_models(predictions_xr_list,
                                           cmap = cmap,
                                           vmin = vmin,
                                           vmax = vmax,
-                                          cbar_kwargs={"shrink": 0.40, "extend": "both"})
+                                          cbar_kwargs={"shrink": 0.7, "extend": "both"})
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
@@ -754,11 +754,11 @@ def plot_map_all_models(predictions_xr_list,
     fig.legend(
         handles, labels,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.05),  # center bottom, slightly outside
+        bbox_to_anchor=(0.5, -0.09),  # center bottom, slightly outside
         ncol=len(labels)              # all labels in one row
     )
 
-    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.3)
+    plt.tight_layout(h_pad=0, w_pad=0.7)
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
                     dpi = 400, transparent = True)
@@ -829,14 +829,14 @@ def plot_displacement_all_models(displacement_pred_list,
                 vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
                 vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0],
                 norm = norm_gw,
-                cbar_kwargs={"shrink": 0.85, "extend": "both"})
+                cbar_kwargs={"shrink": 0.95, "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,0],
                                 color = "black",
                                 label = "Piedmont's bounds")
         if recharge_areas is not None:
             recharge_areas.boundary.plot(ax = ax[model_i,0],
                                 color = "green",
-                                linestyle = (0, (3, 1, 1, 1)),
+                                #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
         ax[model_i,0].set_title(r"{} $\Delta_{{GW}}$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im0, ax = ax[model_i,0], fraction=0.05, pad=0.04)
@@ -852,14 +852,14 @@ def plot_displacement_all_models(displacement_pred_list,
             vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
             vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],
             norm = norm_s,
-            cbar_kwargs={"shrink": 0.85, "extend": "both"})
+            cbar_kwargs={"shrink": 0.95, "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,1],
                                 color = "black",
                                 label = "Piedmont's bounds")
         if recharge_areas is not None:
             recharge_areas.boundary.plot(ax = ax[model_i,1],
                                 color = "green",
-                                linestyle = (0, (3, 1, 1, 1)),
+                                #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
         ax[model_i,1].set_title(r"{} $\Delta_S$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
@@ -870,7 +870,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                                     cmap = "Purples",
                                                     # vmax = vmax[2],
                                                     # vmin = vmin[2],
-                                                    cbar_kwargs={"shrink": 0.85,
+                                                    cbar_kwargs={"shrink": 0.95,
                                                                  "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
@@ -878,7 +878,7 @@ def plot_displacement_all_models(displacement_pred_list,
         if recharge_areas is not None:
             recharge_areas.boundary.plot(ax = ax[model_i,2],
                                 color = "green",
-                                linestyle = (0, (3, 1, 1, 1)),
+                                #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
         ax[model_i,2].set_title(r"{} K [m/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im2, ax = ax[model_i,2], fraction=0.05, pad=0.04)
@@ -959,7 +959,8 @@ def generate_gif_from_xr(start_date, n_pred,
     if recharge_areas is not None:
             recharge_areas.boundary.plot(ax = ax,
                                 color = "green",
-                                linestyle = (0, (3, 1, 1, 1)),
+                                #linestyle = (0, (3, 1, 1, 1)),
+                                linewidth = 2,
                                 label = "Recharge Zones")
     
     ax.set_title(title)
