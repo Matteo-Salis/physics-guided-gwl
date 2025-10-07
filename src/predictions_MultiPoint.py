@@ -197,7 +197,7 @@ def main(config):
         sensor = dataset.sensor_id_list[sensor_idx]
         munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
 
-        fig, ax = plt.subplots(1,1, figsize = (12,5))
+        fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
         plt.title(f"{munic} - {sensor}")
         
         markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
@@ -252,6 +252,11 @@ def main(config):
         plt.ylabel("Groundwater Level [m]")
         plt.legend()
         ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
+        
+        # for all ds dates 
+        date_xticks = pd.date_range(np.datetime64("2001-01-01"), np.datetime64("2023-12-31"), freq = "6MS",  normalize = True, inclusive = "both")
+        ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
+        ax.tick_params(axis = "x", rotation=50)
         
         if config["forecast_horizon"] is None:
             n_pred = config['n_pred_ts']
