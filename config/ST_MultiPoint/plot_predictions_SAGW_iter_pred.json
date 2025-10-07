@@ -48,7 +48,7 @@
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/config/ST_MultiPoint/ST_MultiPoint_STDisNet_SAGW_PI_RCH_ERA5.json"],
     
     "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STNet_SAGW_S_ref_20250917_233851/ST_MultiPoint_STNet_SAGW_S_ref_20250917_233851.pt",
-        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20251007_151806/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20251007_151806.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250917_182701/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250917_182701.pt",
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250918_092534/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20250918_092534.pt",
         "/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250918_154720/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20250918_154720.pt"],
 
