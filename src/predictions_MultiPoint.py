@@ -201,7 +201,7 @@ def main(config):
         plt.title(f"{munic} - {sensor}")
         
         markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
-        colors = ['tab:gray','tab:orange','tab:green','tab:purple','tab:olive']
+        colors = ['tab:brown','tab:orange','darkgreen','darkmagenta']
         i = 0
         for model_i in config["model_name"]:
             
@@ -212,13 +212,13 @@ def main(config):
                                                                                         color = colors[i % len(markers)],
                                                                                         marker=markers[i % len(markers)],
                                                                                         label = f"{model_i}" if j == config["n_pred_ts"]-1 else "",
-                                                                                        markersize = 2, linewidth = 0.7,
+                                                                                        markersize = 2.5, linewidth = 0.8,
                                                                                         )
             else:
                 models_predictions[model_i][0][1][sensor].plot(label = f"{model_i}", ax = ax,
                                                         color = colors[i % len(markers)],
                                                         marker=markers[i % len(markers)],
-                                                        markersize = 2, linewidth = 0.7)
+                                                        markersize = 3, linewidth = 0.85)
             
             if model_i == config["model_name"][-1] :
                 models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
@@ -228,12 +228,28 @@ def main(config):
             
             i += 1
             
+        ax.set_ylim([ax.get_ylim()[0] - ax.get_ylim()[0]*0.0005,
+                ax.get_ylim()[1] + ax.get_ylim()[1].min()*0.0005])
+        
+        # Start Test Vline
         ax.vlines(config["test_split_p"], ymin = ax.get_ylim()[0],
                 ymax = ax.get_ylim()[1], ls = "--", color = "darkred", lw = 2,
                 label = "Start Test")
+        
+        # Grey boxes for missing values
+        all_dates = models_predictions[model_i][0][0][sensor].index.get_level_values(0)
+        if (models_predictions[model_i][0][0][sensor].isnull().any()):
+            ax.bar(all_dates[models_predictions[model_i][0][0][sensor].isnull()],
+                    bottom = ax.get_ylim()[0],
+                    height = ax.get_ylim()[1],
+                    width= 2,
+                    align='center',
+                    color = 'lightgrey',
+                    label = "Missing Values", zorder = 0)
+        
         print(f"Saving Time Series of {munic} - {sensor}")
         plt.xlabel("Date")
-        plt.ylabel("H [m]")
+        plt.ylabel("Groundwater Level [m]")
         plt.legend()
         ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
         
@@ -271,12 +287,12 @@ def main(config):
         model_pred_list_WTD = [models_predictions[config["model_name"][i]][1][1].sel(time = date) for i in range(len(config["model_name"]))]
     
         plot_ST_MultiPoint.plot_map_all_models(model_pred_list_H,
-            title = f"{date} Predictions Piezometric Head",
+            title = f"{date} Predictions Groundwater Level",
             shapefile = dataset.piemonte_shp,
             model_names = config["model_name"],
             cmap = "Blues",
-            var_name_title = "H [m]",
-            save_dir = save_map_dir + "_H", 
+            var_name_title = "GWL [m]",
+            save_dir = save_map_dir + "_GWL", 
             print_plot = False)
         plt.close("all")
         
@@ -331,13 +347,13 @@ def main(config):
     for model in config["model_name"]:
         plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                         models_predictions[model][1][0],
-                        title = f"{model} - Piezometric Head [m] Evolution",
+                        title = f"{model} - Groundwater Level [m] Evolution",
                         shapefile = dataset.piemonte_shp,
                         freq = "W",
                         cmap = "Blues",
                         vmin_1 = False,
                         vmax_1 = False,
-                        save_dir = save_gif_dir + f"_H_{model}",
+                        save_dir = save_gif_dir + f"_GWL_{model}",
                         print_plot = False)
         
         plt.close("all")
