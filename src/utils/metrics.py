@@ -16,6 +16,19 @@ def compute_test_mape_per_sensor(ds_true, ds_pred):
     
     return mape
 
+def compute_test_nbias_per_sensor(ds_true, ds_pred, true_iv = None):
+    
+    if true_iv is None:
+        true_min = ds_true.min()
+        true_max = ds_true.max()
+        true_iv = true_max - true_min
+        
+    nbias = ds_pred - ds_true 
+    nbias = nbias.mean()
+    nbias = nbias/true_iv
+    
+    return nbias
+
 def compute_test_nse_per_sensor(ds_true, ds_pred, true_mean = None):
     
     if true_mean is None:
