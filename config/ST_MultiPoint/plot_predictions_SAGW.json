@@ -65,7 +65,7 @@
     "n_pred_map":132,
     "plot_recharge_areas": true,
     "start_date_pred_map":"2021-06-20",
-    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-10-08"],
+    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],
 
     "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/water-pinns/results/results_ST_MultiPoint/test_predictions"
 }

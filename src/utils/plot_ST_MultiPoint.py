@@ -15,6 +15,7 @@ from torchview import draw_graph
 from collections import deque
 
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.ticker import FormatStrFormatter
     
 #######################
 #### ST MultiPoint ####
@@ -728,8 +729,8 @@ def plot_map_all_models(predictions_xr_list,
         max_list = [predictions_xr_list[model_i].max().values for model_i in range(len(predictions_xr_list))]
         min_list = [predictions_xr_list[model_i].min().values for model_i in range(len(predictions_xr_list))]
         
-        print("Max H values: ", max_list)
-        print("Min H values: ", min_list)
+        # print("Max H values: ", max_list)
+        # print("Min H values: ", min_list)
         
         vmax = min(max_list)
         vmin = max(min_list)
@@ -739,7 +740,7 @@ def plot_map_all_models(predictions_xr_list,
                                           cmap = cmap,
                                           vmin = vmin,
                                           vmax = vmax,
-                                          cbar_kwargs={"shrink": 0.7, "extend": "both"})
+                                          cbar_kwargs={"shrink": 0.8, "extend": "both"})
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
@@ -820,16 +821,28 @@ def plot_displacement_all_models(displacement_pred_list,
     for model_i in range(len(displacement_pred_list)):
         
         ### Displacement GW
+        v = max(abs(vmax[0]),abs(vmin[0])) if model_i != 0 else max(abs(max_delta_GW_list[0]),abs(min_delta_GW_list[0]))
         norm_gw = TwoSlopeNorm(vcenter=0,
-                vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
-                vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0])
+                vmax = v, #if model_i != 0 else max_delta_GW_list[0],
+                vmin = -v #if model_i != 0 else min_delta_GW_list[0]
+                )
+        ticks = np.linspace(-v,+v,3)# if model_i != 0 else np.linspace(min_delta_GW_list[0],
+                                    #                                 max_delta_GW_list[0],3) 
+        #ticks = ticks.round(2)
         
         im0 = displacement_pred_list[model_i][0].plot(ax = ax[model_i,0],
                 cmap = "seismic_r",# norm = norm
-                vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
-                vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0],
+                # vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
+                # vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0],
                 norm = norm_gw,
                 cbar_kwargs={"shrink": 0.95, "extend": "both"})
+        
+        # Force correct ticks after creation
+        cbar = im0.colorbar
+        cbar.set_ticks(ticks)
+        cbar.update_ticks()
+        cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+        
         shapefile.boundary.plot(ax = ax[model_i,0],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -840,19 +853,31 @@ def plot_displacement_all_models(displacement_pred_list,
                                 label = "Recharge Zones")
         ax[model_i,0].set_title(r"{} $\Delta_{{GW}}$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im0, ax = ax[model_i,0], fraction=0.05, pad=0.04)
-        ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
+        #ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
         
         ### Displacement S
+        v = max(abs(vmax[1]),abs(vmin[1])) if model_i != 0 else max(abs(max_delta_S_list[0]),abs(min_delta_S_list[0]))
         norm_s = TwoSlopeNorm(vcenter=0,
-            vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
-            vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],)
+            vmax = v, # if model_i != 0 else max_delta_S_list[0],
+            vmin = -v #if model_i != 0 else min_delta_S_list[0]
+            )
+        ticks = np.linspace(-v,+v,3) #if model_i != 0 else np.linspace(min_delta_S_list[0],
+                                     #                                 max_delta_S_list[0],3)
+        #ticks = ticks.round(2)
         
         im1 = displacement_pred_list[model_i][1].plot(ax = ax[model_i,1],
             cmap = "seismic_r",# norm = norm
-            vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
-            vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],
+            # vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
+            # vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],
             norm = norm_s,
             cbar_kwargs={"shrink": 0.95, "extend": "both"})
+        
+        # Force correct ticks after creation
+        cbar = im1.colorbar
+        cbar.set_ticks(ticks)
+        cbar.update_ticks()
+        cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+        
         shapefile.boundary.plot(ax = ax[model_i,1],
                                 color = "black",
                                 label = "Piedmont's bounds")
@@ -863,7 +888,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 label = "Recharge Zones")
         ax[model_i,1].set_title(r"{} $\Delta_S$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
-        ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
+        #ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
         
         ### Conductivity
         im2 = displacement_pred_list[model_i][2].plot(ax = ax[model_i,2],
@@ -897,7 +922,7 @@ def plot_displacement_all_models(displacement_pred_list,
     )
 
 
-    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.4)
+    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.2)
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
                     dpi = 400, transparent = True)
