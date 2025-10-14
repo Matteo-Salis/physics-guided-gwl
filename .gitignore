@@ -173,6 +173,8 @@ data/
 results/
 sh/
 
+config/old
+
 src/notebooks/*.gif
 src/notebooks/*.png
 src/notebooks/plots/**
