@@ -12,7 +12,7 @@ We defined $\Delta_{GW} = \mathcal{D}(\frac{\partial^2 h}{\partial x^2} + \frac{
 Architecture of STDisNet, STDisNetPI, and STDisNetPI-RCH:
 
 <p align="center">
-  <img src="https://lh3.googleusercontent.com/d/1xZtsuwpEv6E1-dv6PfD_aLuTGhasESuX=s600?authuser=0" >
+  <img src="https://lh3.googleusercontent.com/d/1D92U0-lUl_ESRayI73k0by_NY-seBWz3=s700?authuser=0" >
 </p>
 
 Here is the predicted evolution of groundwater level for the best-performing model(STDisNetPI):
