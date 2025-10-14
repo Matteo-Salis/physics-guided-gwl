@@ -175,5 +175,5 @@ sh/
 
 src/notebooks/*.gif
 src/notebooks/*.png
-src/notebooks/plots/
-src/deprecated/
+src/notebooks/plots/**
+src/deprecated/**
