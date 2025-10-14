@@ -1,4 +1,5 @@
 absl-py==2.1.0
+adjustText==1.3.0
 affine==2.4.0
 appdirs==1.4.4
 asttokens==2.4.1
@@ -15,6 +16,8 @@ charset-normalizer==3.4.0
 click==8.1.7
 click-plugins==1.1.1
 cligj==0.7.2
+cmasher==1.9.2
+colorspacious==1.1.2
 CoLT5-attention==0.11.1
 comm==0.2.2
 contourpy==1.3.0
