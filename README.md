@@ -9,7 +9,7 @@ Architecture of STDisNet, STDisNetPI, and STDisNetPI-RCH:
 
 Here is the predicted evolution of groundwater level for the best-performing model(STDisNetPI):
 
-![image](https://drive.google.com/uc?export=view&id=1ruQXoQAd8ZhjnFQAN5VTeoutB2mq4kmz)
+![image](https://drive.google.com/file/d/1ruQXoQAd8ZhjnFQAN5VTeoutB2mq4kmz/view?usp=sharing)
 
-Here is the predicted evolution of the diffusion component $\hat{\Delta_{GW}}}$ and the source/sink term $\mathcal{\hat{R}}$:
+Here is the predicted evolution of the diffusion component $\hat{\Delta_{GW}}$ and the source/sink term $\mathcal{\hat{R}}$:
 
