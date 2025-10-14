@@ -16,9 +16,9 @@ Here is the predicted evolution of groundwater level for the best-performing mod
 </p>
 
 Here is the predicted evolution of the diffusion component $\hat{\Delta_{GW}}$ and the source/sink term $\mathcal{\hat{R}}$:
-
+https://drive.google.com/file/d/1TzpAK-yKWTklDmDvHlEF3sOWIxiUq5TB/view?usp=sharing
 <p align="center">
   <img src="https://lh3.googleusercontent.com/d/1b_dWmuk9Julp5_WU1119OqugvwLPUUiI=s400?authuser=0" >
-  <img src="https://lh3.googleusercontent.com/d/yKWTklDmDvHlEF3sOWIxiUq5TB=s400?authuser=0" >
+  <img src="https://lh3.googleusercontent.com/d/1TzpAK-yKWTklDmDvHlEF3sOWIxiUq5TB=s400?authuser=0" >
 </p>
 
