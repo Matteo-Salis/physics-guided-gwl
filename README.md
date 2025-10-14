@@ -1,11 +1,11 @@
 We developed models capable of learning from spatially sparse data and predicting at an arbitrary and variable number of locations, leveraging available spatially sparse in situ measurements (from piezometers) and the spatio-temporal meteorological information structured as a video.
-Furthermore, we explored physics-guided deep learning approaches. Specifically, we tested two strategies, inductive and learning bias, respectively, to embed prior knowledge derived from the groundwater flow equation into the models, focusing on Piedmont.__
+Furthermore, we explored physics-guided deep learning approaches. Specifically, we tested two strategies, inductive and learning bias, respectively, to embed prior knowledge derived from the groundwater flow equation into the models, focusing on Piedmont. <br />
 The proposed models: STNet (pure deep learning), STDisNet (inductive bias), STDisNetPI (inductive+learning bias), STDisNetPI-RCH (inductive+learning bias+recharge zones constraint). 
 Refer to the manuscript for additional details.
 
 The groundwater flow equation:
 ```math
-\frac{\partial h}{\partial t} = \frac{K}{S_s} (\frac{\partial^2 h}{\partial x^2} + \frac{\partial^2 h}{\partial y^2}) + \mathcal{R}$$
+\frac{\partial h}{\partial t} = \frac{K}{S_s} (\frac{\partial^2 h}{\partial x^2} + \frac{\partial^2 h}{\partial y^2}) + \mathcal{R}
 ```
 We defined $\Delta_{GW} = \mathcal{D}(\frac{\partial^2 h}{\partial x^2} + \frac{\partial^2 h}{\partial y^2})$, and $\mathcal{D} = \frac{K}{S_s}$.
 
