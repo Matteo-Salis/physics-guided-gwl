@@ -851,7 +851,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 color = "green",
                                 #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
-        ax[model_i,0].set_title(r"{} $\Delta_{{GW}}$ [m]".format(model_names[model_i]))
+        ax[model_i,0].set_title(r"{} $\hat{{\Delta}}_{{GW}}$ [m/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im0, ax = ax[model_i,0], fraction=0.05, pad=0.04)
         #ax[model_i,0].tick_params(labelsize=6)  # Set tick label size
         
@@ -886,7 +886,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 color = "green",
                                 #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
-        ax[model_i,1].set_title(r"{} $\Delta_S$ [m]".format(model_names[model_i]))
+        ax[model_i,1].set_title(r"{} $\hat{{\mathcal{{R}}}}$ [m/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
         #ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
         
@@ -905,7 +905,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 color = "green",
                                 #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
-        ax[model_i,2].set_title(r"{} K [m/w]".format(model_names[model_i]))
+        ax[model_i,2].set_title(r"{} $\hat{{\mathcal{{D}}}}$ [m$^2$/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im2, ax = ax[model_i,2], fraction=0.05, pad=0.04)
         ax[model_i,2].tick_params(labelsize=6)  # Set tick label size
     

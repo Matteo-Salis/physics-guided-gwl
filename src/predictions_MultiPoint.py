@@ -322,7 +322,7 @@ def main(config):
             model_pred_list_WTD = [models_predictions[config["model_name"][i]][1][1].sel(time = date) for i in range(len(config["model_name"]))]
         
             plot_ST_MultiPoint.plot_map_all_models(model_pred_list_H,
-                title = f"{date} Predictions Groundwater Level",
+                title = f"{date} Groundwater Level Predictions",
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues",
@@ -334,7 +334,7 @@ def main(config):
             ### Map Plots WTD
             
             plot_ST_MultiPoint.plot_map_all_models(model_pred_list_WTD,
-                title = f"{date} Predictions Water Table Depth",
+                title = f"{date} Water Table Depth Predictions",
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues_r",
@@ -356,11 +356,11 @@ def main(config):
                 model_pred_displacements_list.append(displacement_list)
             
             plot_ST_MultiPoint.plot_displacement_all_models(model_pred_displacements_list,
-                title = f"{date} Predicted Displacements",
+                title = f"{date} Predicted PDE Components",
                 shapefile = dataset.piemonte_shp,
                 recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                 model_names = config["model_with_displacements"],
-                save_dir = save_map_dir + "_Deltas", 
+                save_dir = save_map_dir + "_Disp", 
                 print_plot = False)
             plt.close("all")
         
@@ -399,7 +399,7 @@ def main(config):
             ### Delta GW
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                             models_predictions[model][1][2],
-                            title = r"{} $\Delta_{{GW}}$ [m] Evolution".format(model),
+                            title = r"{} $\hat{{\Delta}}_{{GW}}$ [m/w] Evolution".format(model),
                             shapefile = dataset.piemonte_shp,
                             recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                             freq = "W",
@@ -409,15 +409,15 @@ def main(config):
             plt.close("all")
         
         
-            ### Delta S
+            ### Delta R
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                             models_predictions[model][1][3],
-                            title = r"{} $\Delta_S$ [m] Evolution".format(model),
+                            title = r"{} $\hat{{\mathcal{{R}}}}$ [m/w] Evolution".format(model),
                             shapefile = dataset.piemonte_shp,
                             recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                             freq = "W",
                             cmap = "seismic_r",
-                            save_dir = save_gif_dir + f"_DS_{model}",
+                            save_dir = save_gif_dir + f"_R_{model}",
                             print_plot = False)
             plt.close("all")
             
