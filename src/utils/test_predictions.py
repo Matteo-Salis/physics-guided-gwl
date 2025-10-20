@@ -26,7 +26,6 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torchview import draw_graph
 
-from utils.plot import *
 import seaborn as sns
 import argparse
 

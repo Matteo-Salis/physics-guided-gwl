@@ -26,7 +26,6 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torchview import draw_graph
 
-from utils.plot import *
 import seaborn as sns
 import argparse
 
@@ -214,6 +213,18 @@ def main(config):
             
         # Time Series plot
         print("Drawing plots...")
+        if config["recon_ts"] is True:
+            markersize = 1.5
+            linewidth = 0.2
+            date_xticks = pd.date_range(np.datetime64("2001-01-01"),
+                                        np.datetime64("2023-12-31"),
+                                        freq = "6MS",  normalize = True,
+                                        inclusive = "both")
+        else:
+            markersize = 2.5
+            linewidth = 0.8
+            date_xticks = None
+            
         for sensor_idx in range(len(dataset.sensor_id_list)):
 
             sensor = dataset.sensor_id_list[sensor_idx]
@@ -234,23 +245,23 @@ def main(config):
                                                                                             color = colors[i % len(markers)],
                                                                                             marker=markers[i % len(markers)],
                                                                                             label = f"{model_i}" if j == config["n_pred_ts"]-1 else "",
-                                                                                            #markersize = 2.5, linewidth = 0.8,
-                                                                                            markersize = 1.5, linewidth = 0.2,
+                                                                                            markersize = markersize,
+                                                                                            linewidth = linewidth
                                                                                             )
                 else:
                     models_predictions[model_i][0][1][sensor].plot(label = f"{model_i}", ax = ax,
                                                             color = colors[i % len(markers)],
                                                             marker=markers[i % len(markers)],
-                                                            #markersize = 2.5, linewidth = 0.8
-                                                            markersize = 1.5, linewidth = 0.2
+                                                            markersize = markersize,
+                                                            linewidth = linewidth
                                                             )
                 
                 if model_i == config["model_name"][-1] :
                     models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
                                                                 color = "tab:blue",
                                                                 marker = "o", linestyle = "--" ,
-                                                                #markersize = 4, linewidth = 2
-                                                                markersize = 1.5, linewidth = 0.2
+                                                                markersize = markersize,
+                                                                linewidth = linewidth
                                                                 )
                     
                 
@@ -281,10 +292,9 @@ def main(config):
             plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]))
             ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
             
-            # for all ds dates 
-            date_xticks = pd.date_range(np.datetime64("2001-01-01"), np.datetime64("2023-12-31"), freq = "6MS",  normalize = True, inclusive = "both")
-            ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
-            ax.tick_params(axis = "x", rotation=50)
+            if date_xticks is not None:
+                ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
+                ax.tick_params(axis = "x", rotation=50)
             
             if config["forecast_horizon"] is None:
                 n_pred = config['n_pred_ts']
