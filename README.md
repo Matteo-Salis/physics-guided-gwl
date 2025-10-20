@@ -14,19 +14,18 @@ We defined $\Delta_{GW} = \mathcal{D}(\frac{\partial^2 h}{\partial x^2} + \frac{
 Architecture of STAIDiNet, STAIDiNet-PL, and STAIDiNet-PRL:
 
 <p align="center">
-  <img src="https://lh3.googleusercontent.com/d/1D92U0-lUl_ESRayI73k0by_NY-seBWz3=s700?authuser=0" >
+  <img src="https://lh3.googleusercontent.com/d/1D92U0-lUl_ESRayI73k0by_NY-seBWz3=s700" >
 </p>
 
 Here is the predicted evolution of groundwater level using the best-performing model (STAIDiNet-PL):
 
 <p align="center">
-  <img src="https://lh3.googleusercontent.com/d/1ruQXoQAd8ZhjnFQAN5VTeoutB2mq4kmz=s500?authuser=0" >
+  <img src="https://lh3.googleusercontent.com/d/1f1dNbodNo2VZqZmi2sEtKQbj4LpNXKsS=s500" >
 </p>
 
 Here is the predicted evolution of the diffusion component $\hat{\Delta}_{GW}$ and the source/sink term $\mathcal{\hat{R}}$:
 
 <p align="center">
-  <img src="https://lh3.googleusercontent.com/d/1b_dWmuk9Julp5_WU1119OqugvwLPUUiI=s400?authuser=0" >
-  <img src="https://lh3.googleusercontent.com/d/1TzpAK-yKWTklDmDvHlEF3sOWIxiUq5TB=s400?authuser=0" >
+  <img src="https://lh3.googleusercontent.com/d/1auS_ij_uGEyeiBbKKOPvpcSPLGwsTu1y=s400" >
+  <img src="https://lh3.googleusercontent.com/d/18b30t3wg9dJzH1pGVBLR0Ek_-W8xgZax=s400" >
 </p>
-
