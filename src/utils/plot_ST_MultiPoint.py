@@ -954,7 +954,7 @@ def generate_gif_from_xr(start_date, n_pred,
         sample_date_i = np.datetime64(start_date) + np.timedelta64(i, freq)
         
         fig.suptitle(f"t0: {start_date} - lead time: {i} {sample_date_i} ",
-                     x=0.45, ha="center", y=0.1)
+                     x=0.54, ha="center", y=0.1)
         
         ax.set_title(title)
         
@@ -967,7 +967,7 @@ def generate_gif_from_xr(start_date, n_pred,
     fig.subplots_adjust(bottom=0.2, top = 0.9, left=0.1)          # leave space for suptitle
     
     fig.suptitle(f"t0: {start_date} - lead time: {0}",
-                 x=0.45, ha="center", y=0.1)
+                 x=0.54, ha="center", y=0.1)
     
     
     norm = TwoSlopeNorm(vcenter=0) if cmap == "seismic_r" else None
