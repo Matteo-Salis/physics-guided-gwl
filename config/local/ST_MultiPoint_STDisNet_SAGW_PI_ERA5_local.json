@@ -8,20 +8,20 @@
     "comments": null,
     "wandb_mode": "offline",
 
-    "wandb_dir" : "C:/Users/msali/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs",
-    "save_model_dir": "C:/Users/msali/Desktop/Python/water-pinns/results/results_ST_MultiPoint/runs",
+    "wandb_dir" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/results/results_ST_MultiPoint/logs",
+    "save_model_dir": "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/results/results_ST_MultiPoint/runs",
 
-    "dtm_nc" : "C:/Users/msali/Desktop/Python/water-pinns/data/dtm_ROI.nc",
-    "weather_nc_path" : "C:/Users/msali/Desktop/Python/water-pinns/data/era5land_2000_2024_weekly.nc",
-    "weather_dtm": "C:/Users/msali/Desktop/Python/water-pinns/data/era5land_dtm.nc",
-    "wtd_csv_path" : "C:/Users/msali/Desktop/Python/water-pinns/data/dataset_wtd_roi.csv",
-    "wtd_shp" : "C:/Users/msali/Desktop/Python/water-pinns/data/shapefile/underground_wtd_sensor_roi.shp",
-    "piedmont_shp" : "C:/Users/msali/Desktop/Python/water-pinns/data/shapefile/piemonte_admin_boundaries.shp",
-    "recharge_areas_shp":"C:/Users/msali/Desktop/Python/water-pinns/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
+    "dtm_nc" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/dtm_ROI.nc",
+    "weather_nc_path" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/era5land_2000_2024_weekly.nc",
+    "weather_dtm": "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/era5land_dtm.nc",
+    "wtd_csv_path" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/dataset_wtd_roi.csv",
+    "wtd_shp" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/shapefile/underground_wtd_sensor_roi.shp",
+    "piedmont_shp" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/shapefile/piemonte_admin_boundaries.shp",
+    "recharge_areas_shp":"C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
     "buffer_recharge":0.05,
 
-    "stdout_log_dir" : "C:/Users/msali/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/output",
-    "stderr_log_dir" : "C:/Users/msali/Desktop/Python/water-pinns/results/results_ST_MultiPoint/logs/error",
+    "stdout_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/results/results_ST_MultiPoint/logs/output",
+    "stderr_log_dir" : "C:/Users/Matteo Salis/Desktop/Python/physics-guided-gwl/results/results_ST_MultiPoint/logs/error",
 
 
     "dataset_type": "ST_MultiPoint",
