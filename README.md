@@ -1,7 +1,6 @@
-We developed models capable of learning from spatially sparse data and predicting at an arbitrary and variable number of locations, leveraging available spatially sparse in situ measurements (from piezometers) and spatio-temporal meteorological information structured as a video.
-Furthermore, we explored physics-guided deep learning approaches. Specifically, we tested two strategies, inductive and learning bias, respectively, to embed prior knowledge derived from the groundwater flow equation into the models, focusing on Piedmont. <br />
+We developed models capable of predicting at an arbitrary number of points inside the ROI, leveraging available spatially sparse data measured from in situ sensors (piezometers) and spatially distributed meteorological information (meteorological video). Furthermore, we explored physics-guided deep learning approaches. Specifically, we tested two strategies, inductive and learning bias, respectively, to embed prior knowledge derived from the groundwater flow equation into the models, focusing on Piedmont. <br />
 The proposed models: STAINet (pure deep learning), STAIDiNet (inductive bias), STAIDiNet-PL (inductive+learning bias), and STAIDiNet-PRL (inductive+learning bias+recharge zones constraint). 
-Refer to the manuscript for additional details.
+Please refer to the manuscript for additional details.
 
 The groundwater flow equation:
 
