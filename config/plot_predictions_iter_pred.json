@@ -39,8 +39,8 @@
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
-    "model_name":["STAINet","STAIDiNet","STAIDiNet-PL","STAIDiNet-PRL"],
-    "model_with_displacements":["STAIDiNet","STAIDiNet-PL","STAIDiNet-PRL"],
+    "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
+    "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "ts_colors":["tab:brown","tab:orange","darkgreen","darkmagenta"],
     
     "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STNet_SAGW_ERA5.json",

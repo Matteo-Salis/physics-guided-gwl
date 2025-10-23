@@ -39,8 +39,8 @@
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
-    "model_name":["STAIDiNet-PL"],
-    "model_with_displacements":["STAIDiNet-PL"],
+    "model_name":["PSTAINet-ILB"],
+    "model_with_displacements":["PSTAINet-ILB"],
     "ts_colors":["darkgreen"],
     
     "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json"],

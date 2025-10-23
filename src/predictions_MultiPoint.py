@@ -314,6 +314,7 @@ def main(config):
                 
         print("All time series plots saved!")
     
+    # Map plots
     if config["n_pred_map"]>0:
         
         print("Drawing maps...", end = " ")
@@ -409,7 +410,7 @@ def main(config):
             ### Delta GW
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                             models_predictions[model][1][2],
-                            title = r"{} $\hat{{\Delta}}_{{GW}}$ [m/w] Evolution".format(model),
+                            title = r"{} $\hat{{\Delta}}_{{GW_{{t^*}}}}$ [m] Evolution".format(model),
                             shapefile = dataset.piemonte_shp,
                             recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                             freq = "W",
@@ -422,7 +423,7 @@ def main(config):
             ### Delta R
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                             models_predictions[model][1][3],
-                            title = r"{} $\hat{{\mathcal{{R}}}}$ [m/w] Evolution".format(model),
+                            title = r"{} $\hat{{\mathcal{{R}}_{{t^*}}}}$ [m] Evolution".format(model),
                             shapefile = dataset.piemonte_shp,
                             recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                             freq = "W",
