@@ -367,7 +367,7 @@ def main(config):
                 model_pred_displacements_list.append(displacement_list)
             
             plot_ST_MultiPoint.plot_displacement_all_models(model_pred_displacements_list,
-                title = f"{date} Predicted PDE Components",
+                title = f"{date} Predicted Equation Components",
                 shapefile = dataset.piemonte_shp,
                 recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                 model_names = config["model_with_displacements"],
@@ -423,7 +423,7 @@ def main(config):
             ### Delta R
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
                             models_predictions[model][1][3],
-                            title = r"{} $\hat{{\mathcal{{R}}_{{t^*}}}}$ [m] Evolution".format(model),
+                            title = r"{} $\hat{{\mathcal{{R}}}}_{{t^*}}$ [m] Evolution".format(model),
                             shapefile = dataset.piemonte_shp,
                             recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                             freq = "W",
