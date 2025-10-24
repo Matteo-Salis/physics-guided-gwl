@@ -215,6 +215,7 @@ def main(config):
         print("Drawing plots...")
         if config["recon_ts"] is True:
             markersize = 1.5
+            markersize_true_data = markersize
             linewidth = 0.2
             date_xticks = pd.date_range(np.datetime64("2001-01-01"),
                                         np.datetime64("2023-12-31"),
@@ -222,6 +223,7 @@ def main(config):
                                         inclusive = "both")
         else:
             markersize = 2.5
+            markersize_true_data = markersize + 1
             linewidth = 0.8
             date_xticks = None
             
@@ -260,7 +262,7 @@ def main(config):
                     models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
                                                                 color = "tab:blue",
                                                                 marker = "o", linestyle = "--" ,
-                                                                markersize = markersize,
+                                                                markersize = markersize_true_data,
                                                                 linewidth = linewidth
                                                                 )
                     
