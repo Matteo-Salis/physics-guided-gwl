@@ -886,7 +886,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 color = "green",
                                 #linestyle = (0, (3, 1, 1, 1)),
                                 label = "Recharge Zones")
-        ax[model_i,1].set_title(r"{} $\hat{{\mathcal{{R}}_{{t^*}}}}$ [m]".format(model_names[model_i]))
+        ax[model_i,1].set_title(r"{} $\hat{{\mathcal{{R}}}}_{{t^*}}$ [m]".format(model_names[model_i]))
         #cbar = plt.colorbar(im1, ax = ax[model_i,1], fraction=0.05, pad=0.04)
         #ax[model_i,1].tick_params(labelsize=6)  # Set tick label size
         
