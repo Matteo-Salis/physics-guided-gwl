@@ -38,3 +38,8 @@ Here is the predicted evolution of the diffusion component $\hat{\Delta}_{GW}$ a
   <img src="https://lh3.googleusercontent.com/d/1auS_ij_uGEyeiBbKKOPvpcSPLGwsTu1y=s400" >
   <img src="https://lh3.googleusercontent.com/d/18b30t3wg9dJzH1pGVBLR0Ek_-W8xgZax=s400" >
 </p>
+
+
+contributions:
+- Software: Matteo Salis
+- Supervision: Abdourrahmane M. Atto, Stefano Ferraris, and Rosa Meo
