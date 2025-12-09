@@ -408,7 +408,7 @@ def compute_prediction_with_displacement(config, dataset, device,
             print("Done!")
             
         if save_dir:
-            print("Saving objects...", end = " ")
+            print("Saving predictions...", end = " ")
             ts_true_ds.to_csv(save_dir+"_TS_true.csv")
             ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
             ts_Displacement_GW_ds.to_csv(save_dir+"_TS_DeltaGW.csv")
@@ -459,7 +459,7 @@ def compute_prediction(config, dataset, device,
             print("Done!")
         
         if save_dir:
-            print("Saving objects...", end = " ")
+            print("Saving predictions...", end = " ")
             ts_true_ds.to_csv(save_dir+"_TS_true.csv")
             ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
             
