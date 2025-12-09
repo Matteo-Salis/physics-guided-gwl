@@ -463,8 +463,8 @@ def compute_prediction(config, dataset, device,
             ts_true_ds.to_csv(save_dir+"_TS_true.csv")
             ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
             
-            predictions_xr.to_netcdf(save_dir+"_GWLxr_pred.nc")
-            predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr_pred.nc")
+            predictions_xr.to_netcdf(save_dir+"_GWLxr.nc")
+            predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr.nc")
             print("Done!")
             
         if return_obj is True:
