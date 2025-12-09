@@ -62,158 +62,74 @@ def main(config):
     )
     print("Device: ", device)
     
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    model_names_dir = "_".join(config["model_name"])
-    save_dir = '{}/{}_{}'.format(config["save_dir"],model_names_dir,timestamp)
+    # Name suffix for filenames
+    name_suffix = ""
+            
+    if config["iter_pred"]:
+        name_suffix += "_iter_pred"
+        
+    if config["forecast_horizon"] is not None:
+        name_suffix += f"_FO{config['forecast_horizon']}"
     
-    # Create Saving Directories
-    os.makedirs(save_dir)
-    ts_saving_path = save_dir+"/time_series"
-    map_saving_path = save_dir+"/maps"
-    metrics_saving_path = save_dir+"/metrics"
+    # Create Saving Directory
+    ts_saving_path = config["prediction_dir"]+"/time_series"
+    map_saving_path = config["prediction_dir"]+"/maps"
     os.makedirs(ts_saving_path)
     os.makedirs(map_saving_path)
-    os.makedirs(metrics_saving_path)
-
+    
+    # Filenames lists
+    csv_names = ["_TS_true.csv",
+                 "_TS_pred.csv",
+                 "_TS_DeltaGW.csv",
+                 "_TS_R.csv",
+                 "_TS_D.csv",
+                 "_TS_lagGWL.csv"]
+    
+    xr_names = ["_GWLxr.nc",
+                "_WTDxr.nc",
+                "_DeltaGWxr.nc",
+                "_Rxr.nc",
+                "_Dxr.nc",
+                "_lagGWLxr.nc"]
 
     dataset = dataset_ST_MultiPoint.Dataset_ST_MultiPoint(config)
     
     models_predictions = {}
     
-    Z_grid = plot_ST_MultiPoint.grid_generation(dataset,
-                                                config["lat_lon_npoints"][0],
-                                                config["lat_lon_npoints"][1])
-    
-    # Load the model and compute predictions
+    print("Loading predictions...", end = " ")
+    # Load predictions
     for i in range(len(config["model_name"])):
         
-        model_config = {}
-        with open(config["model_config_path"][i]) as f:
-            model_config = json.load(f)
-            print(f"Read data.json: {config['model_config_path'][i]}")
-        
-        model = load_model(model_config, config["model_path"][i])
-        model = model.to(device)
-        print("Total number of trainable parameters: " ,sum(p.numel() for p in model.parameters() if p.requires_grad and p != "Densification_Dropout"))
-        
+        # load only available csv
+        ts_ds_list = []
+        xr_ds_list = []
         if config["get_displacement"] and config["model_name"][i] in config["model_with_displacements"]:
-            
-            models_predictions[config["model_name"][i]] = compute_prediction_with_displacement(config, dataset, device,
-                                  model,
-                                  config["iter_pred"],
-                                  Z_grid)
-            
+            break_id = None
         else:
+            break_id = 1
             
-            models_predictions[config["model_name"][i]] = compute_prediction(config, dataset, device,
-                        model,
-                        config["iter_pred"],
-                        Z_grid)
+        for j in range(len(csv_names)):
             
-    # Compute metrics
+            ts_ds_list.append(pd.read_csv(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{csv_names[j]}",
+                                       index_col=0, parse_dates=True, dtype=np.float32))
+            
+            
+            xr_ds_list.append(xarray.load_dataarray(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{xr_names[j]}"))
+            
+            if j == break_id:
+                break
+            
+        models_predictions[config["model_name"][i]] = [ts_ds_list, xr_ds_list]
+        
+    print("Done!")
+            
     if config["n_pred_ts"]>0:
-        
-        if config["compute_metrics"] is True:
-            
-            print("Computing metrics...", end = " ")
-            median_metrics_dict = {}
-            mean_metrics_dict = {}
-            std_metrics_dict = {}
-            
-            name_suffix = ""
-            
-            if config["iter_pred"]:
-                name_suffix += "_iter_pred"
-                
-            if config["forecast_horizon"] is not None:
-                name_suffix += f"_FO{config['forecast_horizon']}"
-                
-            #Compute denormalized sensor means
-            subset_wtd_df = dataset.wtd_df.loc[pd.IndexSlice[dataset.wtd_df.index.get_level_values(0) <= np.datetime64(dataset.config["date_max_norm"]),
-                                                            :]] #
-            
-            subset_wtd_df = (subset_wtd_df[dataset.target] * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
-            
-            sensor_means = subset_wtd_df.groupby(level=1).transform('mean').values
-            sensor_means = sensor_means.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                                len(dataset.sensor_id_list))[0,:] 
-            
-            sensor_min = subset_wtd_df.groupby(level=1).transform('min').values
-            sensor_min = sensor_min.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                                len(dataset.sensor_id_list))[0,:] 
-            
-            sensor_max = subset_wtd_df.groupby(level=1).transform('max').values
-            sensor_max = sensor_max.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                                len(dataset.sensor_id_list))[0,:] 
-            sensor_iv = sensor_max - sensor_min
-        
-                
-            for model_i in config["model_name"]:
-
-                model_median_metrics = []
-                model_mean_metrics = []
-                model_std_metrics = []
-                
-                if config["metrics_only_on_test"] is True:
-                    true_values = models_predictions[model_i][0][0].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])]
-                    predicted_values = models_predictions[model_i][0][1].loc[models_predictions[model_i][0][0].index>np.datetime64(config["test_split_p"])]
-                else:
-                    true_values = models_predictions[model_i][0][0]
-                    predicted_values = models_predictions[model_i][0][1]
-                    
-                sensors_nbias = metrics.compute_test_nbias_per_sensor(true_values,
-                                                                    predicted_values,
-                                                                    sensor_iv)
-                sensors_nbias.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_nbias.csv", index=True)
-                model_median_metrics.append(sensors_nbias.median())
-                model_mean_metrics.append(sensors_nbias.mean())
-                model_std_metrics.append(sensors_nbias.std())
-                
-                sensors_rmse = metrics.compute_test_rmse_per_sensor(true_values,
-                                                                    predicted_values)
-                sensors_rmse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_rmse.csv", index=True)
-                model_median_metrics.append(sensors_rmse.median())
-                model_mean_metrics.append(sensors_rmse.mean())
-                model_std_metrics.append(sensors_rmse.std())
-                
-                sensors_mape = metrics.compute_test_mape_per_sensor(true_values,
-                                                                    predicted_values)
-                sensors_mape.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_mape.csv", index=True)
-                model_median_metrics.append(sensors_mape.median())
-                model_mean_metrics.append(sensors_mape.mean())
-                model_std_metrics.append(sensors_mape.std())
-                
-                sensors_nse = metrics.compute_test_nse_per_sensor(true_values,
-                                                                predicted_values,
-                                                                sensor_means)
-                sensors_nse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_nse.csv", index=True)
-                model_median_metrics.append(sensors_nse.median())
-                model_mean_metrics.append(sensors_nse.mean())
-                model_std_metrics.append(sensors_nse.std())
-                
-                sensors_kge = metrics.compute_test_kge_per_sensor(true_values,
-                                                                predicted_values)
-                sensors_kge.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_kge.csv", index=True)
-                model_median_metrics.append(sensors_kge.median())
-                model_mean_metrics.append(sensors_kge.mean())
-                model_std_metrics.append(sensors_kge.std())
-                
-                median_metrics_dict[model_i] = model_median_metrics
-                mean_metrics_dict[model_i] = model_mean_metrics
-                std_metrics_dict[model_i] = model_std_metrics
-                
-            median_metrics_ds = pd.DataFrame(median_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
-            mean_metrics_ds = pd.DataFrame(mean_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
-            std_metrics_ds = pd.DataFrame(std_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
-                
-            median_metrics_ds.to_csv(f"{metrics_saving_path}/median_metrics{name_suffix}.csv", index=True)
-            mean_metrics_ds.to_csv(f"{metrics_saving_path}/mean_metrics{name_suffix}.csv", index=True)
-            std_metrics_ds.to_csv(f"{metrics_saving_path}/std_metrics{name_suffix}.csv", index=True)
-            print("Saved!")
+    # plot ts?
             
         # Time Series plot
         print("Drawing plots...")
         if config["recon_ts"] is True:
+            # set params for whole ts plot
             markersize = 1.5
             markersize_true_data = markersize
             linewidth = 0.2
@@ -222,6 +138,7 @@ def main(config):
                                         freq = "6MS",  normalize = True,
                                         inclusive = "both")
         else:
+            # set params for test set ts plot
             markersize = 2.5
             markersize_true_data = markersize + 1
             linewidth = 0.8
@@ -291,7 +208,8 @@ def main(config):
             print(f"Saving Time Series of {munic} - {sensor}")
             plt.xlabel("Date")
             plt.ylabel("Groundwater Level [m]")
-            plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]))
+            plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]),
+                       fontsize=14, markerscale=1.5, borderpad=0.8, labelspacing=0.7)
             ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
             
             if date_xticks is not None:
@@ -407,7 +325,6 @@ def main(config):
             plt.close("all")
             
         
-            
         for model in config["model_with_displacements"]:
             ### Delta GW
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
@@ -420,7 +337,6 @@ def main(config):
                             save_dir = save_gif_dir + f"_DGW_{model}",
                             print_plot = False)
             plt.close("all")
-        
         
             ### Delta R
             plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],

@@ -62,23 +62,36 @@ def main(config):
     )
     print("Device: ", device)
     
+    # Name suffix for filenames
+    name_suffix = ""
+            
+    if config["iter_pred"]:
+        name_suffix += "_iter_pred"
+        
+    if config["forecast_horizon"] is not None:
+        name_suffix += f"_FO{config['forecast_horizon']}"
+    
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     model_names_dir = "_".join(config["model_name"])
-    save_dir = '{}/{}_{}'.format(config["save_dir"],model_names_dir,timestamp)
+    save_dir = '{}/{}{}_{}'.format(config["save_dir"],
+                                model_names_dir,
+                                name_suffix,
+                                timestamp)
     
     # Create Saving Directories
     os.makedirs(save_dir)
-    ts_saving_path = save_dir+"/time_series"
-    map_saving_path = save_dir+"/maps"
-    metrics_saving_path = save_dir+"/metrics"
-    os.makedirs(ts_saving_path)
-    os.makedirs(map_saving_path)
-    os.makedirs(metrics_saving_path)
-
+    
+    # ts_saving_path = save_dir+"/time_series"
+    # map_saving_path = save_dir+"/maps"
+    # metrics_saving_path = save_dir+"/metrics"
+    pred_saving_path = save_dir+"/predictions"
+    
+    # os.makedirs(ts_saving_path)
+    # os.makedirs(map_saving_path)
+    # os.makedirs(metrics_saving_path)
+    os.makedirs(pred_saving_path)
 
     dataset = dataset_ST_MultiPoint.Dataset_ST_MultiPoint(config)
-    
-    models_predictions = {}
     
     Z_grid = plot_ST_MultiPoint.grid_generation(dataset,
                                                 config["lat_lon_npoints"][0],
@@ -98,17 +111,22 @@ def main(config):
         
         if config["get_displacement"] and config["model_name"][i] in config["model_with_displacements"]:
             
-            models_predictions[config["model_name"][i]] = compute_prediction_with_displacement(config, dataset, device,
-                                                                                            model,
-                                                                                            config["iter_pred"],
-                                                                                            Z_grid)
+            compute_prediction_with_displacement(config, dataset, device,
+                                                model,
+                                                config["iter_pred"],
+                                                Z_grid,
+                                                save_dir = f"{pred_saving_path}/{config['model_name'][i]}{name_suffix}")
             
         else:
             
-            models_predictions[config["model_name"][i]] = compute_prediction(config, dataset, device,
-                                                                            model,
-                                                                            config["iter_pred"],
-                                                                            Z_grid)
+            compute_prediction(config, dataset, device,
+                                model,
+                                config["iter_pred"],
+                                Z_grid,
+                                save_dir = f"{pred_saving_path}/{config['model_name'][i]}{name_suffix}")
+            
+    print("################# All predictions done! #################")
+            
             
       
 
