@@ -209,7 +209,7 @@ def main(config):
             plt.xlabel("Date")
             plt.ylabel("Groundwater Level [m]")
             plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]),
-                       fontsize=14, markerscale=1.5, borderpad=0.8, labelspacing=0.7)
+                       fontsize=9.5, markerscale=1.5, borderpad=0.2, labelspacing=0.1)
             ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
             
             if date_xticks is not None:

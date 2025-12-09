@@ -35,7 +35,6 @@
     "target_lags":[1,2,3,4],
     "weather_get_coords": true,
 
-    
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
