@@ -173,8 +173,11 @@ def main(config):
         model_mean_metrics.append(sensors_rmse.mean())
         model_std_metrics.append(sensors_rmse.std())
         
+        sensors_ape = metrics.compute_test_ape_per_sensor(true_values,
+                                                            predicted_values)
         sensors_mape = metrics.compute_test_mape_per_sensor(true_values,
                                                             predicted_values)
+        sensors_ape.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_ape.csv", index=True)
         sensors_mape.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_mape.csv", index=True)
         model_median_metrics.append(sensors_mape.median())
         model_mean_metrics.append(sensors_mape.mean())

@@ -9,10 +9,15 @@ def compute_test_rmse_per_sensor(ds_true, ds_pred):
     
     return rmse
 
+def compute_test_ape_per_sensor(ds_true, ds_pred):
+    ape = (ds_true - ds_pred)/ds_true
+    ape = np.abs(ape)*100
+    
+    return ape
+
 def compute_test_mape_per_sensor(ds_true, ds_pred):
-    residuals = (ds_true - ds_pred)/ds_true
-    residuals = np.abs(residuals)
-    mape =  residuals.mean()*100
+    ape = compute_test_ape_per_sensor(ds_true, ds_pred)
+    mape =  ape.mean()
     
     return mape
 
