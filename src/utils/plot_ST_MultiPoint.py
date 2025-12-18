@@ -717,7 +717,8 @@ def plot_map_all_models(predictions_xr_list,
             cmap = "Blues",
             vmin = None,
             vmax = None,
-            save_dir = None, 
+            save_dir = None,
+            xlim = None, 
             print_plot = False):
     
     ## Plot the maps
@@ -745,6 +746,9 @@ def plot_map_all_models(predictions_xr_list,
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
                                 label = "Piedmont's bounds")
+        
+        if xlim:
+            ax[model_i].set_xlim(xlim)
     
         ax[model_i].set_title(f"{model_names[model_i]} {var_name_title}")
         
