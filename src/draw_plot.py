@@ -71,12 +71,6 @@ def main(config):
     if config["forecast_horizon"] is not None:
         name_suffix += f"_FO{config['forecast_horizon']}"
     
-    # Create Saving Directory
-    ts_saving_path = config["prediction_dir"]+"/time_series"
-    map_saving_path = config["prediction_dir"]+"/maps"
-    os.makedirs(ts_saving_path)
-    os.makedirs(map_saving_path)
-    
     # Filenames lists
     csv_names = ["_TS_true.csv",
                  "_TS_pred.csv",
@@ -110,11 +104,16 @@ def main(config):
             
         for j in range(len(csv_names)):
             
-            ts_ds_list.append(pd.read_csv(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{csv_names[j]}",
-                                       index_col=0, parse_dates=True, dtype=np.float32))
+            if config["n_pred_ts"]>0:
+                ts_ds_list.append(pd.read_csv(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{csv_names[j]}",
+                                        index_col=0, parse_dates=True, dtype=np.float32))
+            else:
+                ts_ds_list.append(None)
             
-            
-            xr_ds_list.append(xarray.load_dataarray(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{xr_names[j]}"))
+            if config["n_pred_map"]>0:
+                xr_ds_list.append(xarray.load_dataarray(f"{config['prediction_dir']}/predictions/{config['model_name'][i]}{name_suffix}{xr_names[j]}"))
+            else:
+                xr_ds_list.append(None)
             
             if j == break_id:
                 break
@@ -125,6 +124,10 @@ def main(config):
             
     if config["n_pred_ts"]>0:
     # plot ts?
+    
+        # Create Saving Directory
+        ts_saving_path = config["prediction_dir"]+"/time_series"
+        os.makedirs(ts_saving_path)
             
         # Time Series plot
         print("Drawing plots...")
@@ -135,14 +138,16 @@ def main(config):
             linewidth = 0.2
             date_xticks = pd.date_range(np.datetime64("2001-01-01"),
                                         np.datetime64("2023-12-31"),
-                                        freq = "6MS",  normalize = True,
+                                        freq = "YS",  normalize = True,
                                         inclusive = "both")
+            date_xticks_format = '%m/%Y'
         else:
             # set params for test set ts plot
             markersize = 2.5
             markersize_true_data = markersize + 1
             linewidth = 0.8
             date_xticks = None
+            #date_xticks_format = '%d/%m/%Y'
             
         for sensor_idx in range(len(dataset.sensor_id_list)):
 
@@ -150,6 +155,9 @@ def main(config):
             munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
 
             fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
+            
+            plt.rcParams.update({'font.size': 16})
+            
             plt.title(f"{munic} - {sensor}")
             
             markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
@@ -208,13 +216,13 @@ def main(config):
             print(f"Saving Time Series of {munic} - {sensor}")
             plt.xlabel("Date")
             plt.ylabel("Groundwater Level [m]")
-            plt.legend(ncol=len(plt.gca().get_legend_handles_labels()[0]),
-                       fontsize=9.5, markerscale=1.5, borderpad=0.2, labelspacing=0.1)
-            ax.grid(axis="x", ls = "--", which = "both", lw = "1.5")
+            plt.legend(ncol=np.ceil(len(plt.gca().get_legend_handles_labels()[0])/2),
+                       fontsize=12, markerscale=1.5, borderpad=0.2, labelspacing=0.1)
+            ax.grid(axis="x", ls = "--", which = "both", lw = "1.5", color = 'black', alpha = 0.5)
             
             if date_xticks is not None:
-                ax.set_xticks(date_xticks, date_xticks.strftime('%d/%m/%Y'))
-                ax.tick_params(axis = "x", rotation=50)
+                ax.set_xticks(date_xticks, date_xticks.strftime(date_xticks_format))
+                ax.tick_params(axis = "x", rotation=25)
             
             if config["forecast_horizon"] is None:
                 n_pred = config['n_pred_ts']
@@ -228,7 +236,7 @@ def main(config):
             if config["forecast_horizon"] is not None:
                 title += f"_FO{config['forecast_horizon']}"
                 
-            plt.savefig(f"{title}.png", bbox_inches='tight', dpi=400, pad_inches=0.1) #dpi = 400, transparent = True
+            plt.savefig(f"{title}.png", bbox_inches='tight', dpi=600, pad_inches=0.1) #dpi = 400, transparent = True
             plt.close("all")
                 
                 
@@ -236,6 +244,10 @@ def main(config):
     
     # Map plots
     if config["n_pred_map"]>0:
+        
+        # Create Saving Directory
+        map_saving_path = config["prediction_dir"]+"/maps"
+        os.makedirs(map_saving_path)
         
         print("Drawing maps...", end = " ")
         for date in config["map_dates"]:

@@ -719,12 +719,19 @@ def plot_map_all_models(predictions_xr_list,
             vmax = None,
             save_dir = None,
             xlim = None, 
-            print_plot = False):
+            print_plot = False,
+            fontsize = 16):
     
     ## Plot the maps
     
-    fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (13,3))
-    fig.suptitle(title)
+    plt.rcParams.update({'font.size': fontsize,
+                         'ytick.labelsize': fontsize,
+                         'xtick.labelsize': fontsize})
+    
+    fig, ax = plt.subplots(1,len(predictions_xr_list), figsize = (13,3.5))
+    
+    fig.suptitle(title, y = 1)
+
     
     if vmin is None and vmax is None:
         max_list = [predictions_xr_list[model_i].max().values for model_i in range(len(predictions_xr_list))]
@@ -737,11 +744,12 @@ def plot_map_all_models(predictions_xr_list,
         vmin = max(min_list)
 
     for model_i in range(len(predictions_xr_list)):
-        predictions_xr_list[model_i].plot(ax = ax[model_i],
+        im = predictions_xr_list[model_i].plot(ax = ax[model_i],
                                           cmap = cmap,
                                           vmin = vmin,
                                           vmax = vmax,
-                                          cbar_kwargs={"shrink": 0.8, "extend": "both"})
+                                          #cbar_kwargs={"shrink": 0.5, "extend": "both"},
+                                          add_colorbar = False)
     
         shapefile.boundary.plot(ax = ax[model_i],
                                 color = "black",
@@ -759,14 +767,21 @@ def plot_map_all_models(predictions_xr_list,
     fig.legend(
         handles, labels,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.09),  # center bottom, slightly outside
+        bbox_to_anchor=(0.125, -0.2),  # center bottom, slightly outside
         ncol=len(labels)              # all labels in one row
     )
+    
+    cax = fig.add_axes([0.25, -0.04, 0.5, 0.04])  # [left, bottom, width, height]
+    cbar = fig.colorbar(im, cax=cax, orientation="horizontal", extend="both")
+    cbar.set_label("[m]",
+                   #labelpad=10
+                   )
 
-    plt.tight_layout(h_pad=0, w_pad=0.7)
+    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+    
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
-                    dpi = 400, transparent = True)
+                    dpi = 600, transparent = True)
     
     if print_plot is True:
         plt.show()
@@ -783,13 +798,19 @@ def plot_displacement_all_models(displacement_pred_list,
             vmin = None,
             vmax = None,
             save_dir = None, 
-            print_plot = False):
+            print_plot = False,
+            fontsize = 16):
     
     ## Plot the maps
     
     fig, ax = plt.subplots(len(displacement_pred_list),
-                           3, figsize = (8,6))
-    fig.suptitle(title)
+                           3, figsize = (13,11))
+    
+    plt.rcParams.update({'font.size': fontsize,
+                         'ytick.labelsize': fontsize,
+                         'xtick.labelsize': fontsize,})
+    
+    fig.suptitle(title, y = 1)
     
     if vmin is None and vmax is None:
         max_delta_GW_list = [displacement_pred_list[model_i][0].max().values for model_i in range(len(displacement_pred_list))]
@@ -839,7 +860,7 @@ def plot_displacement_all_models(displacement_pred_list,
                 # vmax = vmax[0] if model_i != 0 else max_delta_GW_list[0],
                 # vmin = vmin[0] if model_i != 0 else min_delta_GW_list[0],
                 norm = norm_gw,
-                cbar_kwargs={"shrink": 0.95, "extend": "both"})
+                cbar_kwargs={"shrink": 0.8, "extend": "both"})
         
         # Force correct ticks after creation
         cbar = im0.colorbar
@@ -874,7 +895,7 @@ def plot_displacement_all_models(displacement_pred_list,
             # vmax = vmax[1] if model_i != 0 else max_delta_S_list[0],
             # vmin = vmin[1] if model_i != 0 else min_delta_S_list[0],
             norm = norm_s,
-            cbar_kwargs={"shrink": 0.95, "extend": "both"})
+            cbar_kwargs={"shrink": 0.8, "extend": "both"})
         
         # Force correct ticks after creation
         cbar = im1.colorbar
@@ -899,7 +920,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                                     cmap = "Purples",
                                                     # vmax = vmax[2],
                                                     # vmin = vmin[2],
-                                                    cbar_kwargs={"shrink": 0.95,
+                                                    cbar_kwargs={"shrink": 0.8,
                                                                  "extend": "both"})
         shapefile.boundary.plot(ax = ax[model_i,2],
                                     color = "black",
@@ -911,7 +932,7 @@ def plot_displacement_all_models(displacement_pred_list,
                                 label = "Recharge Zones")
         ax[model_i,2].set_title(r"{} $\hat{{\mathcal{{D}}}}$ [m$^2$/w]".format(model_names[model_i]))
         #cbar = plt.colorbar(im2, ax = ax[model_i,2], fraction=0.05, pad=0.04)
-        ax[model_i,2].tick_params(labelsize=6)  # Set tick label size
+        #ax[model_i,2].tick_params(labelsize=6)  # Set tick label size
     
     
     # Get handles/labels from the first subplot
@@ -921,15 +942,17 @@ def plot_displacement_all_models(displacement_pred_list,
     fig.legend(
         handles[:2], labels[:2],
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.05),  # center bottom, slightly outside
+        bbox_to_anchor=(0.5, -0.075),  # center bottom, slightly outside
         ncol=len(labels[:2])              # all labels in one row
     )
-
-
-    plt.tight_layout(pad=1.0, h_pad=0.3, w_pad=0.2)
+    
+    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+    
+    
+    
     if save_dir:
         plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
-                    dpi = 400, transparent = True)
+                    dpi = 600, transparent = True)
     
     if print_plot is True:
         plt.plot()

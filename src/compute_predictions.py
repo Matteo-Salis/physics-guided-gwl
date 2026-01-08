@@ -115,6 +115,7 @@ def main(config):
                                                 model,
                                                 config["iter_pred"],
                                                 Z_grid,
+                                                return_obj=False,
                                                 save_dir = f"{pred_saving_path}/{config['model_name'][i]}{name_suffix}")
             
         else:
@@ -123,6 +124,7 @@ def main(config):
                                 model,
                                 config["iter_pred"],
                                 Z_grid,
+                                return_obj=False,
                                 save_dir = f"{pred_saving_path}/{config['model_name'][i]}{name_suffix}")
             
     print("################# All predictions done! #################")

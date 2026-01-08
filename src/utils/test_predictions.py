@@ -391,12 +391,29 @@ def compute_prediction_with_displacement(config, dataset, device,
     
     with torch.no_grad():
         model.eval()
+        
+        ts_objects = None
+        xr_objects = None
+        
         if config["n_pred_ts"]>0:
             print("Computing Time Series Predictions...")
             ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict = compute_ts_prediction_with_displacemnt(config, dataset,
                                             model, device,
                                             iter_pred)
             print("Done!")
+            
+            ts_objects = [ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict]
+            
+            if save_dir:
+                print("Saving Time Series Predictions...", end = " ")
+                ts_true_ds.to_csv(save_dir+"_TS_true.csv")
+                ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
+                ts_Displacement_GW_ds.to_csv(save_dir+"_TS_DeltaGW.csv")
+                ts_Displacement_S_ds.to_csv(save_dir+"_TS_R.csv")
+                ts_Conductivity_ds.to_csv(save_dir+"_TS_D.csv")
+                ts_Lag_GW_dict.to_csv(save_dir+"_TS_lagGWL.csv") 
+                
+                print("Done!")
             
         
         if config["n_pred_map"]>0:
@@ -407,26 +424,25 @@ def compute_prediction_with_displacement(config, dataset, device,
                                            Z_grid)
             print("Done!")
             
-        if save_dir:
-            print("Saving predictions...", end = " ")
-            ts_true_ds.to_csv(save_dir+"_TS_true.csv")
-            ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
-            ts_Displacement_GW_ds.to_csv(save_dir+"_TS_DeltaGW.csv")
-            ts_Displacement_S_ds.to_csv(save_dir+"_TS_R.csv")
-            ts_Conductivity_ds.to_csv(save_dir+"_TS_D.csv")
-            ts_Lag_GW_dict.to_csv(save_dir+"_TS_lagGWL.csv") 
+            xr_objects = [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr]
             
-            predictions_xr.to_netcdf(save_dir+"_GWLxr.nc")
-            predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr.nc")
-            displacement_gw_xr.to_netcdf(save_dir+"_DeltaGWxr.nc")
-            displacement_s_xr.to_netcdf(save_dir+"_Rxr.nc")
-            conductivity_xr.to_netcdf(save_dir+"_Dxr.nc")
-            Lag_GW_xr.to_netcdf(save_dir+"_lagGWLxr.nc")
-            print("Done!")
+            if save_dir: 
+                print("Saving Gridded Predictions...", end = " ")
+                predictions_xr.to_netcdf(save_dir+"_GWLxr.nc")
+                predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr.nc")
+                displacement_gw_xr.to_netcdf(save_dir+"_DeltaGWxr.nc")
+                displacement_s_xr.to_netcdf(save_dir+"_Rxr.nc")
+                conductivity_xr.to_netcdf(save_dir+"_Dxr.nc")
+                Lag_GW_xr.to_netcdf(save_dir+"_lagGWLxr.nc")
+                print("Done!")
         
         if return_obj is True:
-            return [[ts_true_ds, ts_predictions_ds, ts_Displacement_GW_ds, ts_Displacement_S_ds, ts_Conductivity_ds, ts_Lag_GW_dict],
-                [predictions_xr, predictions_wtd_xr, displacement_gw_xr,displacement_s_xr, conductivity_xr, Lag_GW_xr]]     
+            
+            outputs = [ts_objects, xr_objects]
+            
+            return [output for output in outputs if output is not None]  
+        
+        
         
 def compute_prediction(config, dataset, device,
                         model,
@@ -443,12 +459,23 @@ def compute_prediction(config, dataset, device,
     with torch.no_grad():
         model.eval()
         
+        ts_objects = None
+        xr_objects = None
+        
         if config["n_pred_ts"]>0:
             print("Computing Time Series Predictions...", end = " ")
             ts_true_ds, ts_predictions_ds = compute_ts_prediction(config, dataset,
                                 model, device,
                                 iter_pred)
             print("Done!")
+            
+            ts_objects = [ts_true_ds, ts_predictions_ds]
+            
+            if save_dir:
+                print("Saving Time Series Predictions...", end = " ")
+                ts_true_ds.to_csv(save_dir+"_TS_true.csv")
+                ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
+                print("Done!")
         
         if config["n_pred_map"]>0:
             print("Computing Gridded Predictions...", end = " ")
@@ -458,16 +485,17 @@ def compute_prediction(config, dataset, device,
                                     Z_grid)
             print("Done!")
         
-        if save_dir:
-            print("Saving predictions...", end = " ")
-            ts_true_ds.to_csv(save_dir+"_TS_true.csv")
-            ts_predictions_ds.to_csv(save_dir+"_TS_pred.csv")
+            xr_objects = [predictions_xr, predictions_wtd_xr]
             
-            predictions_xr.to_netcdf(save_dir+"_GWLxr.nc")
-            predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr.nc")
-            print("Done!")
+            if save_dir:
+                print("Saving Gridded Predictions...", end = " ")
+                predictions_xr.to_netcdf(save_dir+"_GWLxr.nc")
+                predictions_wtd_xr.to_netcdf(save_dir+"_WTDxr.nc")
+                print("Done!")
             
         if return_obj is True:
-            return [[ts_true_ds, ts_predictions_ds],
-                    [predictions_xr, predictions_wtd_xr]]
+            
+            outputs = [ts_objects, xr_objects]
+            
+            return [output for output in outputs if output is not None] 
         
