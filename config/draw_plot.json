@@ -42,7 +42,7 @@
     "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "ts_colors":["tab:brown","tab:orange","darkgreen","darkmagenta"],
     
-    "n_pred_ts":132,
+    "n_pred_ts":0,
     "forecast_horizon":null,
     "start_date_pred_ts":"2021-06-20",
     "recon_ts":false,

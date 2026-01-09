@@ -154,9 +154,8 @@ def main(config):
             sensor = dataset.sensor_id_list[sensor_idx]
             munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
 
-            fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
-            
             plt.rcParams.update({'font.size': 16})
+            fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
             
             plt.title(f"{munic} - {sensor}")
             
@@ -269,7 +268,7 @@ def main(config):
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues",
-                var_name_title = "GWL [m]",
+                var_name_title = "Groundwater Level [m]",
                 save_dir = save_map_dir + "_GWL", 
                 print_plot = False)
             plt.close("all")
@@ -281,7 +280,7 @@ def main(config):
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues_r",
-                var_name_title = "WTD [m]",
+                var_name_title = "Water Table Depth [m]",
                 save_dir = save_map_dir + "_WTD", 
                 print_plot = False)
             plt.close("all")
