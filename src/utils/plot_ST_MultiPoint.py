@@ -758,7 +758,7 @@ def plot_map_all_models(predictions_xr_list,
         if xlim:
             ax[model_i].set_xlim(xlim)
     
-        ax[model_i].set_title(f"{model_names[model_i]} {var_name_title}")
+        ax[model_i].set_title(f"{model_names[model_i]}")
         
     # Get handles/labels from the first subplot
     handles, labels = ax[0].get_legend_handles_labels()
@@ -773,7 +773,7 @@ def plot_map_all_models(predictions_xr_list,
     
     cax = fig.add_axes([0.25, -0.04, 0.5, 0.04])  # [left, bottom, width, height]
     cbar = fig.colorbar(im, cax=cax, orientation="horizontal", extend="both")
-    cbar.set_label("[m]",
+    cbar.set_label(f"{var_name_title}",
                    #labelpad=10
                    )
 
