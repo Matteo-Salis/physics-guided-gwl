@@ -54,6 +54,8 @@
     "plot_recharge_areas": null,
     "start_date_pred_map":null,
     "map_dates":null,
+    "draw_gif":false,
 
+    "file_format":"jpg",
     "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/PSTAINet-ILB_iter_pred_FO26_20260108_174550"
 }

@@ -64,9 +64,13 @@ def main(config):
     
     # Name suffix for filenames
     name_suffix = ""
+    title_suffix = ""
             
     if config["iter_pred"]:
         name_suffix += "_iter_pred"
+        
+        if config["recon_ts"] is False:
+            title_suffix = " rollout setting"
         
     if config["forecast_horizon"] is not None:
         name_suffix += f"_FO{config['forecast_horizon']}"
@@ -126,7 +130,7 @@ def main(config):
     # plot ts?
     
         # Create Saving Directory
-        ts_saving_path = config["prediction_dir"]+"/time_series"
+        ts_saving_path = f"{config['prediction_dir']}/time_series_{config['file_format']}"
         os.makedirs(ts_saving_path)
             
         # Time Series plot
@@ -157,7 +161,7 @@ def main(config):
             plt.rcParams.update({'font.size': 16})
             fig, ax = plt.subplots(1,1, figsize = (13,3)) #(12,5)
             
-            plt.title(f"{munic} - {sensor}")
+            plt.title(f"{munic} - {sensor}{title_suffix}")
             
             markers = ['s', 'D', '^', 'v', '<', '>', 'P', '*', 'X', 'd', 'H', '|', '_']
             colors = config["ts_colors"] #['tab:brown','tab:orange','darkgreen','darkmagenta']
@@ -235,7 +239,7 @@ def main(config):
             if config["forecast_horizon"] is not None:
                 title += f"_FO{config['forecast_horizon']}"
                 
-            plt.savefig(f"{title}.png", bbox_inches='tight', dpi=600, pad_inches=0.1) #dpi = 400, transparent = True
+            plt.savefig(f"{title}.{config['file_format']}", bbox_inches='tight', dpi=600, pad_inches=0.1) #dpi = 400, transparent = True
             plt.close("all")
                 
                 
@@ -245,7 +249,7 @@ def main(config):
     if config["n_pred_map"]>0:
         
         # Create Saving Directory
-        map_saving_path = config["prediction_dir"]+"/maps"
+        map_saving_path = f"{config['prediction_dir']}/maps_{config['file_format']}"
         os.makedirs(map_saving_path)
         
         print("Drawing maps...", end = " ")
@@ -264,25 +268,27 @@ def main(config):
             model_pred_list_WTD = [models_predictions[config["model_name"][i]][1][1].sel(time = date) for i in range(len(config["model_name"]))]
         
             plot_ST_MultiPoint.plot_map_all_models(model_pred_list_H,
-                title = f"{date} Groundwater Level Predictions",
+                title = f"{date} Groundwater Level Predictions{title_suffix}",
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues",
                 var_name_title = "Groundwater Level [m]",
                 save_dir = save_map_dir + "_GWL", 
-                print_plot = False)
+                print_plot = False,
+                file_format = config["file_format"])
             plt.close("all")
             
             ### Map Plots WTD
             
             plot_ST_MultiPoint.plot_map_all_models(model_pred_list_WTD,
-                title = f"{date} Water Table Depth Predictions",
+                title = f"{date} Water Table Depth Predictions{title_suffix}",
                 shapefile = dataset.piemonte_shp,
                 model_names = config["model_name"],
                 cmap = "Blues_r",
                 var_name_title = "Water Table Depth [m]",
                 save_dir = save_map_dir + "_WTD", 
-                print_plot = False)
+                print_plot = False,
+                file_format = config["file_format"])
             plt.close("all")
             ### Map Plots Displacements
             model_pred_displacements_list = [] 
@@ -303,7 +309,8 @@ def main(config):
                 recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
                 model_names = config["model_with_displacements"],
                 save_dir = save_map_dir + "_Disp", 
-                print_plot = False)
+                print_plot = False,
+                file_format = config["file_format"])
             plt.close("all")
         
         print("All Maps saved!")
@@ -311,57 +318,58 @@ def main(config):
         # Gif #
         #######
         
-        print("Drawing GIFs...", end = " ")
-        save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
+        if config["draw_gif"] is True:
+            print("Drawing GIFs...", end = " ")
+            save_gif_dir = f"{map_saving_path}/gif_from_{config['start_date_pred_map'].replace('-','_')}"
+                
+            if config["iter_pred"]:
+                save_gif_dir += "_iter_pred"
+                
+            if config["forecast_horizon"] is not None:
+                save_gif_dir += f"_FO{config['forecast_horizon']}"
             
-        if config["iter_pred"]:
-            save_gif_dir += "_iter_pred"
+            ### H
+            for model in config["model_name"]:
+                plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                                models_predictions[model][1][0],
+                                title = f"{model} - Groundwater Level [m] Evolution{title_suffix}",
+                                shapefile = dataset.piemonte_shp,
+                                freq = "W",
+                                cmap = "Blues",
+                                vmin_1 = False,
+                                vmax_1 = False,
+                                save_dir = save_gif_dir + f"_GWL_{model}",
+                                print_plot = False)
+                
+                plt.close("all")
+                
             
-        if config["forecast_horizon"] is not None:
-            save_gif_dir += f"_FO{config['forecast_horizon']}"
-        
-        ### H
-        for model in config["model_name"]:
-            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                            models_predictions[model][1][0],
-                            title = f"{model} - Groundwater Level [m] Evolution",
-                            shapefile = dataset.piemonte_shp,
-                            freq = "W",
-                            cmap = "Blues",
-                            vmin_1 = False,
-                            vmax_1 = False,
-                            save_dir = save_gif_dir + f"_GWL_{model}",
-                            print_plot = False)
+            for model in config["model_with_displacements"]:
+                ### Delta GW
+                plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                                models_predictions[model][1][2],
+                                title = r"{} $\hat{{\Delta}}_{{GW_{{t^*}}}}$ [m] Evolution{}".format(model, title_suffix),
+                                shapefile = dataset.piemonte_shp,
+                                recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
+                                freq = "W",
+                                cmap = "seismic_r",
+                                save_dir = save_gif_dir + f"_DGW_{model}",
+                                print_plot = False)
+                plt.close("all")
             
-            plt.close("all")
-            
-        
-        for model in config["model_with_displacements"]:
-            ### Delta GW
-            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                            models_predictions[model][1][2],
-                            title = r"{} $\hat{{\Delta}}_{{GW_{{t^*}}}}$ [m] Evolution".format(model),
-                            shapefile = dataset.piemonte_shp,
-                            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
-                            freq = "W",
-                            cmap = "seismic_r",
-                            save_dir = save_gif_dir + f"_DGW_{model}",
-                            print_plot = False)
-            plt.close("all")
-        
-            ### Delta R
-            plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
-                            models_predictions[model][1][3],
-                            title = r"{} $\hat{{\mathcal{{R}}}}_{{t^*}}$ [m] Evolution".format(model),
-                            shapefile = dataset.piemonte_shp,
-                            recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
-                            freq = "W",
-                            cmap = "seismic_r",
-                            save_dir = save_gif_dir + f"_R_{model}",
-                            print_plot = False)
-            plt.close("all")
-            
-            print("All GIFs saved!")
+                ### Delta R
+                plot_ST_MultiPoint.generate_gif_from_xr(config['start_date_pred_map'], config["n_pred_map"],
+                                models_predictions[model][1][3],
+                                title = r"{} $\hat{{\mathcal{{R}}}}_{{t^*}}$ [m] Evolution{}".format(model, title_suffix),
+                                shapefile = dataset.piemonte_shp,
+                                recharge_areas = dataset.recharge_area_buffer_shp if config["plot_recharge_areas"] else None,
+                                freq = "W",
+                                cmap = "seismic_r",
+                                save_dir = save_gif_dir + f"_R_{model}",
+                                print_plot = False)
+                plt.close("all")
+                
+                print("All GIFs saved!")
       
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@
     "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "ts_colors":["tab:brown","tab:orange","darkgreen","darkmagenta"],
     
-    "n_pred_ts":0,
+    "n_pred_ts":132,
     "forecast_horizon":null,
     "start_date_pred_ts":"2021-06-20",
     "recon_ts":false,
@@ -54,6 +54,8 @@
     "plot_recharge_areas": true,
     "start_date_pred_map":"2021-06-20",
     "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],
+    "draw_gif":false,
 
+    "file_format":"jpg",
     "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20251209_100741"
 }
