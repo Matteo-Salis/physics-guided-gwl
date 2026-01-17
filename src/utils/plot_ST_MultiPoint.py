@@ -720,7 +720,8 @@ def plot_map_all_models(predictions_xr_list,
             save_dir = None,
             xlim = None, 
             print_plot = False,
-            fontsize = 16):
+            fontsize = 16,
+            file_format = "png"):
     
     ## Plot the maps
     
@@ -780,7 +781,7 @@ def plot_map_all_models(predictions_xr_list,
     plt.tight_layout(pad=0, h_pad=0, w_pad=0)
     
     if save_dir:
-        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
+        plt.savefig(f"{save_dir}.{file_format}", bbox_inches = 'tight',
                     dpi = 600, transparent = True)
     
     if print_plot is True:
@@ -799,7 +800,8 @@ def plot_displacement_all_models(displacement_pred_list,
             vmax = None,
             save_dir = None, 
             print_plot = False,
-            fontsize = 16):
+            fontsize = 16,
+            file_format = "png"):
     
     ## Plot the maps
     
@@ -951,7 +953,7 @@ def plot_displacement_all_models(displacement_pred_list,
     
     
     if save_dir:
-        plt.savefig(f"{save_dir}.png", bbox_inches = 'tight',
+        plt.savefig(f"{save_dir}.{file_format}", bbox_inches = 'tight',
                     dpi = 600, transparent = True)
     
     if print_plot is True:
