@@ -131,18 +131,24 @@ class Dataset_ST_MultiPoint(Dataset):
         
         
     def loading_weather(self):
+        #  load weather netcdf data
         self.weather_xr = xarray.open_dataset(self.config["weather_nc_path"])
         
         self.weather_xr = self.weather_xr.resample(time=self.config["frequency"], label = "left").mean()
         
         self.weather_xr = self.weather_xr.rio.write_crs("epsg:4326")
         
+        # select variables
         if self.config["weather_variables"] is not None:
             self.weather_xr = self.weather_xr[self.config["weather_variables"]]
         
+        # load dtm
         self.weather_dtm = rioxarray.open_rasterio(self.config["weather_dtm"],
-                                               engine='fiona')
+                                            engine='fiona')
+        
+        # create coordinates object
         self.weather_coords = self.coordinates_xr(self.weather_dtm, coord_name = "xy")
+        
         
         self.weather_coords = np.concat([self.weather_coords,
                                     np.moveaxis(self.weather_dtm.values, 0,-1)],
@@ -232,6 +238,7 @@ class Dataset_ST_MultiPoint(Dataset):
         return ((x1-x2)**2+(y1-y2)**2)**0.5
     
     def IDW(self, data, LAT, LON, var, beta=2):
+        # Inverse Distance Weighting function
         array = np.empty((LAT.shape[0], LON.shape[0]))
 
         for i, lat_i in enumerate(LAT):
@@ -242,6 +249,7 @@ class Dataset_ST_MultiPoint(Dataset):
         return array
     
     def NN(self, data, LAT, LON, var):
+        # Nearest Neighbor 
         array = np.empty((LAT.shape[0], LON.shape[0]))
 
         for i, lat_i in enumerate(LAT):
@@ -358,7 +366,7 @@ class Dataset_ST_MultiPoint(Dataset):
         
         
         if self.config["target_norm_type"] is not None:
-            
+            # select how to normalize target (per sensor or overall normalization)
             if self.config["target_norm_type"] == "sensor_zscore":
                 target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
                 target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
@@ -413,7 +421,9 @@ class Dataset_ST_MultiPoint(Dataset):
         return temp_enc, temp_enc_names
     
     def build_lagged_df(self):
+        # build lagged df with lagged variable as new columns 
         
+        # Get temporal encoding
         (doy_sin, doy_cos), self.temp_enc_names = self.temporal_encoding(mode = self.config["temporal_encoding"], dates = self.wtd_df.index.get_level_values(0))
         
         self.wtd_df[self.temp_enc_names[0]] = doy_sin
@@ -454,7 +464,7 @@ class Dataset_ST_MultiPoint(Dataset):
         self.lagged_df = self.lagged_df.loc[self.lagged_df["avail_mask"]]
         avail_mask_names.append("avail_mask")
         self.lagged_df = self.lagged_df.drop(avail_mask_names,
-                                       axis = 1)
+                                    axis = 1)
         
         self.lag_names = lag_names
         self.features_names = ["lat","lon","height",

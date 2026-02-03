@@ -63,6 +63,7 @@ def loss_masked_mape(Y_hat, Y, Y_mask):
 
 def orthogonality_penality(W):
     
+    # orthogonal penality
     cols = W[0].numel()
     rows = W.shape[0]
     w1 = W.view(-1,cols)
@@ -86,10 +87,10 @@ def l2_reg_ortho(mdl, every_layer = False,
                                     "Value_Embedding_Weather",
                                     "ST_coords_Embedding",
                                     "FiLM_conditioning.fc_gamma_beta"]):
+    # Orthogonal regularization loss
     # from https://github.com/VITA-Group/Orthogonality-in-CNNs/tree/master
 	
     l2_reg = None
- 
     if every_layer is True:
         for W in mdl.parameters():
             if W.ndimension() < 2:
@@ -136,10 +137,9 @@ def recharge_areas_loss(displacement_s, recharge_area_rasterized):
     
     return residuals
 
-##VEDI DeBenzac e optical flow
 def displacement_reg(displacement_term,
-                     res_fn):
-    
+                    res_fn):
+    # displacement (diffusion terms) regularization
     if res_fn == "mse":
         return torch.mean(displacement_term**2)
     
@@ -151,17 +151,22 @@ def smoothness_reg(prediction,
                     mode,
                     step = 1):
     
+    # map smoothness regularization based on finite differences
     if mode == "lon_lat":
         spatial_grads_lat = []
         spatial_grads_lon = []
+        
+        # finite difference for every map in the output video
         for t in range(prediction.shape[0]):
             prediction_t = prediction[t,:,:][None,None,:,:]
 
+            # lat finite differences
             lat_1derivative = Fdiff_conv(prediction_t,
                                     mode = "centered_lat",
                                     der_order = 1)
             lat_1derivative = lat_1derivative / step
             
+            # lon finite differences
             lon_1derivative = Fdiff_conv(prediction_t,
                                     mode = "centered_lon",
                                     der_order = 1)
@@ -190,6 +195,8 @@ def coherence_loss(Lag_GW_true,
                 res_fn,
                 Lag_GW_hat):
     
+    # Loss to supervise the autoregressive component
+    
     # Y_hat, Displacement_GW, and Displacement_S no batch dimension
     not_Lag_GW_true_mask = ~Lag_GW_true_mask
     residuals = Lag_GW_true[not_Lag_GW_true_mask] - Lag_GW_hat[not_Lag_GW_true_mask]
@@ -204,9 +211,12 @@ def coherence_loss(Lag_GW_true,
         return torch.mean(torch.abs(residuals/(Lag_GW_true[not_Lag_GW_true_mask] + 1e-8)))
 
 def groundwater_flow_equation(Lag_GW_denorm,
-                              K_denorm,
-                              dx,
-                              dy):
+                            K_denorm,
+                            dx,
+                            dy):
+
+    # finite difference approximation using centred difference
+    
     spatial_grads = []
     
     for t in range(Lag_GW_denorm.shape[0]):
@@ -237,6 +247,7 @@ def diffusion_loss(Lag_GW, Displacement_GW, K,
                    dx = 1603, #1603 - 70 #1820 - 62 # 1399 - 80
                    dy = 1536):#1536 - 70 #2586 - 42 # 1342 - 80
     
+    # loss for supervising the estimation of the diffusion component wrt the finite difference approx
     Lag_GW_denorm = (Lag_GW*normf_sigma) + normf_mu
     K_denorm = K*normf_sigma
     Displacement_GW_denorm = Displacement_GW*normf_sigma
@@ -314,49 +325,49 @@ def Fdiff_conv(x, mode = "first_lon", der_order = 1):
     
     return output
 
-def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
-                 loss = "mae"):
+# def physics_loss(Y_hat, dataset, K_lat = 1., K_lon = 1., G = 0.,
+#                  loss = "mae"):
     
-    #Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
+#     #Y_hat_denorm = (Y_hat * dataset.norm_factors["target_std"]) + dataset.norm_factors["target_mean"]
     
-    std = torch.from_numpy(dataset.target_stds_xr.values).to(Y_hat.device).to(torch.float32)
-    mean = torch.from_numpy(dataset.target_means_xr.values).to(Y_hat.device).to(torch.float32)
+#     std = torch.from_numpy(dataset.target_stds_xr.values).to(Y_hat.device).to(torch.float32)
+#     mean = torch.from_numpy(dataset.target_means_xr.values).to(Y_hat.device).to(torch.float32)
     
-    Y_hat_denorm = (Y_hat * std) + mean
+#     Y_hat_denorm = (Y_hat * std) + mean
     
     
-    spatial_grads = []
+#     spatial_grads = []
     
-    for t in range(Y_hat_denorm.shape[1]-1):
+#     for t in range(Y_hat_denorm.shape[1]-1):
     
-        Y_hat_t = Y_hat_denorm[:,t,:,:].unsqueeze(1)
-        dh_dy = Fdiff_conv(Y_hat_t, mode = "first_lat")
-        dh_dx = Fdiff_conv(Y_hat_t, mode = "first_lon")
+#         Y_hat_t = Y_hat_denorm[:,t,:,:].unsqueeze(1)
+#         dh_dy = Fdiff_conv(Y_hat_t, mode = "first_lat")
+#         dh_dx = Fdiff_conv(Y_hat_t, mode = "first_lon")
         
-        dh_dy = dh_dy * K_lat
-        dh_dx = dh_dx * K_lon
+#         dh_dy = dh_dy * K_lat
+#         dh_dx = dh_dx * K_lon
         
-        dh_dydy = Fdiff_conv(dh_dy, mode = "first_lat")
-        dh_dxdx = Fdiff_conv(dh_dx, mode = "first_lon")
+#         dh_dydy = Fdiff_conv(dh_dy, mode = "first_lat")
+#         dh_dxdx = Fdiff_conv(dh_dx, mode = "first_lon")
     
-        spatial_grad = dh_dydy + dh_dxdx
+#         spatial_grad = dh_dydy + dh_dxdx
         
-        spatial_grads.append(spatial_grad)
+#         spatial_grads.append(spatial_grad)
         
-    spatial_grads = torch.cat(spatial_grads, dim = 1).to(Y_hat_denorm.device)
+#     spatial_grads = torch.cat(spatial_grads, dim = 1).to(Y_hat_denorm.device)
     
-    temporal_grad = Y_hat_denorm[:,1:,:,:] - Y_hat_denorm[:,:-1,:,:]
+#     temporal_grad = Y_hat_denorm[:,1:,:,:] - Y_hat_denorm[:,:-1,:,:]
     
-    residuals = temporal_grad - spatial_grads - G
+#     residuals = temporal_grad - spatial_grads - G
     
-    residuals_norm = residuals / std
+#     residuals_norm = residuals / std
     
-    if loss == "mae":
-        phyiscs_loss = torch.mean(torch.abs(residuals_norm))
-    elif loss == "mse":
-        phyiscs_loss = torch.mean(residuals_norm**2)
+#     if loss == "mae":
+#         phyiscs_loss = torch.mean(torch.abs(residuals_norm))
+#     elif loss == "mse":
+#         phyiscs_loss = torch.mean(residuals_norm**2)
         
-    return phyiscs_loss
+#     return phyiscs_loss
 
 if __name__ == "__main__":
     pass

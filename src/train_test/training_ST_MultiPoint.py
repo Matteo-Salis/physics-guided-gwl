@@ -8,12 +8,34 @@ from torch import autograd
 from loss.losses_ST_MultiPoint import *
 
 import gc
-         
 
 def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, model_dir, model_name,
-                      start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
-                      device = "cuda", plot_arch = True, l2_alpha = 0, orthogonality_loss_alpha = 0,
-                      plot_displacements = False):  
+                    start_dates_plot, n_pred_plot, sensors_to_plot, t_step_to_plot, lat_lon_points,
+                    device = "cuda", plot_arch = True, l2_alpha = 0, orthogonality_loss_alpha = 0,
+                    plot_displacements = False): 
+    
+    """ training procedure for pure deep learning models
+
+    Args:
+        epoch (_type_): _description_
+        dataset (_type_): _description_
+        model (_type_): _description_
+        train_loader (_type_): _description_
+        loss_fn (_type_): _description_
+        optimizer (_type_): _description_
+        model_dir (_type_): _description_
+        model_name (_type_): _description_
+        start_dates_plot (_type_): _description_
+        n_pred_plot (_type_): _description_
+        sensors_to_plot (_type_): _description_
+        t_step_to_plot (_type_): _description_
+        lat_lon_points (_type_): _description_
+        device (str, optional): _description_. Defaults to "cuda".
+        plot_arch (bool, optional): _description_. Defaults to True.
+        l2_alpha (int, optional): _description_. Defaults to 0.
+        orthogonality_loss_alpha (int, optional): _description_. Defaults to 0.
+        plot_displacements (bool, optional): _description_. Defaults to False.
+    """
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -22,19 +44,20 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                         tepoch.set_description(f"Epoch {epoch}")
                         
                         X = [X[0].to(device),
-                             X[1].to(device),
-                             X[2].to(device)]
+                            X[1].to(device),
+                            X[2].to(device)]
                         
                         W = [W[0].to(device),
-                             W[1].to(device)]
+                            W[1].to(device)]
                         
                         Z = Z.to(device)
                         
                         Y = [Y[0].to(device),
-                             Y[1].to(device)]
+                            Y[1].to(device)]
                         
                         optimizer.zero_grad()
                         
+                        # in case of MoE
                         if "MoE" in model_name:
                             Y_hat, aux_loss = model(X, W, Z, mc_dropout = True,
                                                     get_aux_loss = True)
@@ -42,13 +65,15 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                         else:
                             Y_hat = model(X, W, Z, mc_dropout = True)
                             moe = False
-                            
+                        
+                        # Data loss
                         loss = loss_fn(Y_hat,
                                     Y[0],
                                     Y[1])
                         
                         print("Training_data_loss: ", loss.item(), end = " -- ")
                         
+                        # L2 regularization
                         if l2_alpha > 0:
                             l2reg_loss = loss_l2_regularization(model)
                             loss += l2_alpha * l2reg_loss
@@ -57,14 +82,12 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                         if moe is True:
                             loss += aux_loss
                             print("aux_moe_loss: ", aux_loss, end = " -- ")
-                            
+                        
+                        # OrthoLoss
                         if orthogonality_loss_alpha > 0:
                             
-                            # orthogonality_loss_alpha = adjust_ortho_decay_rate(epoch,
-                            #                                                    orthogonality_loss_alpha)
-                            
                             l2_ortho_loss = l2_reg_ortho(model,
-                                                         every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
+                                                        every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
                             
                             loss += orthogonality_loss_alpha*l2_ortho_loss
                             
@@ -81,6 +104,7 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                     # Plots
                     model.eval()
                     with torch.no_grad():
+                        # plot every 25 epochs
                         if (epoch+1) % 25 == 0:
                             predict_and_plot_time_series(dataset, model, device,
                                 start_dates_plot, n_pred_plot,
@@ -101,6 +125,7 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                             save_dir=model_dir,
                                             title_ext = f"E{epoch}")
                             else:
+                                # plot with equation terms estimations
                                 predict_and_plot_video_displacements(dataset, model, device,
                                             start_dates_plot, n_pred_plot,
                                             t_step_to_plot,
@@ -112,6 +137,7 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                             title_ext = f"E{epoch}")
                         
                         if epoch == 0 and plot_arch is True:
+                            # plot architecture only at epoch 0
                             print("Saving plot of the model's architecture...")
                             
                             #wandb.log({"model_arch": })
@@ -119,6 +145,7 @@ def pure_dl_trainer(epoch, dataset, model, train_loader, loss_fn, optimizer, mod
                                                 sample_input = (X, W, Z),
                                                 device = device)
                             
+                        # Uncommet to plot and save rollout prediction on the training set
                         # if (epoch+1) % 50 == 0:
                             
                         #     print("Computing iterated predictions...")
@@ -170,8 +197,41 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                     reg_delta_s_l2 = 0, reg_delta_s_l1 = 0,
                     reg_recharge_areas = 0,
                     reg_delta_gw_s_on_cps = False,
-                    reg_latlon_smoothness=0, reg_temp_smoothness = 0,
-                    plot_displacements = False):  
+                    plot_displacements = False):
+    
+    """training procedure for physics guided model
+
+    Args:
+        epoch (_type_): _description_
+        dataset (_type_): _description_
+        model (_type_): _description_
+        train_loader (_type_): _description_
+        loss_fn (_type_): _description_
+        optimizer (_type_): _description_
+        model_dir (_type_): _description_
+        model_name (_type_): _description_
+        start_dates_plot (_type_): _description_
+        n_pred_plot (_type_): _description_
+        sensors_to_plot (_type_): _description_
+        t_step_to_plot (_type_): _description_
+        lat_lon_points (_type_): _description_
+        tstep_control_points (_type_): _description_
+        device (str, optional): _description_. Defaults to "cuda".
+        plot_arch (bool, optional): _description_. Defaults to True.
+        l2_alpha (int, optional): _description_. Defaults to 0.
+        orthogonality_loss_alpha (int, optional): _description_. Defaults to 0.
+        coherence_alpha (int, optional): _description_. Defaults to 1.
+        reg_diffusion_eq (int, optional): _description_. Defaults to 1.
+        cpoints_start_epoch (int, optional): _description_. Defaults to 0.
+        reg_delta_gw_l2 (int, optional): _description_. Defaults to 0.
+        reg_delta_gw_l1 (int, optional): _description_. Defaults to 0.
+        reg_K (int, optional): _description_. Defaults to 0.
+        reg_delta_s_l2 (int, optional): _description_. Defaults to 0.
+        reg_delta_s_l1 (int, optional): _description_. Defaults to 0.
+        reg_recharge_areas (int, optional): _description_. Defaults to 0.
+        reg_delta_gw_s_on_cps (bool, optional): _description_. Defaults to False.
+        plot_displacements (bool, optional): _description_. Defaults to False.
+    """
     
     with tqdm(train_loader, unit="batch") as tepoch:
         #with autograd.detect_anomaly():
@@ -180,44 +240,45 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                         tepoch.set_description(f"Epoch {epoch}")
                         
                         X = [X[0].to(device),
-                             X[1].to(device),
-                             X[2].to(device)]
+                            X[1].to(device),
+                            X[2].to(device)]
                         
                         W = [W[0].to(device),
-                             W[1].to(device)]
+                            W[1].to(device)]
                         
                         Z = Z.to(device)
                         
                         Y = [Y[0].to(device),
-                             Y[1].to(device)]
+                            Y[1].to(device)]
                         
                         optimizer.zero_grad()
                         
                         Y_hat, Displacement_GW, Displacement_S, HydrConductivity, Lag_GW_hat = model(X, W, Z, mc_dropout = True,
-                                      get_displacement_terms = True, get_lag_term = True)
-                            
+                                    get_displacement_terms = True, get_lag_term = True)
+                        
+                        # Data loss
                         loss = loss_fn(Y_hat,
                                     Y[0],
                                     Y[1])
                         
                         print("Training_data_loss: ", round(loss.item(),7), end = " -- ")
                         
+                        # L2 regularization
                         if l2_alpha > 0:
                             loss += l2_alpha * loss_l2_regularization(model)
-                            
+                        
+                        # OrthoLoss
                         if orthogonality_loss_alpha > 0:
                             
-                            # orthogonality_loss_alpha = adjust_ortho_decay_rate(epoch,
-                            #                                                    orthogonality_loss_alpha)
-                            
                             l2_ortho_loss = l2_reg_ortho(model,
-                                                         every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
+                                                        every_layer= True if dataset.config["layers_orthogonality"] == "all" else False)
                             
                             loss += orthogonality_loss_alpha*l2_ortho_loss
                             
                             print(f"L2Ortho_loss: {round(l2_ortho_loss.item(),7)}", end = " -- ")
                             wandb.log({"L2Ortho_loss":l2_ortho_loss.item()})
                         
+                        # Coherence loss (autoregressive term supervision)
                         if coherence_alpha > 0:
                             coh_loss = coherence_alpha * coherence_loss(X[0][:,0,:],
                                                                         X[2][:,0,:],
@@ -229,7 +290,7 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                             print(f"COH_loss: {round(coh_loss.item(),7)}", end = " -- ")
                             wandb.log({"COH_loss":coh_loss.item()})
                         
-                        ### Delta GW Regularizations 
+                        ### Delta GW (diffusion term) Regularizations 
                         if reg_delta_gw_l2>0:
                                 reg_delta_gw_l2_loss = reg_delta_gw_l2 * displacement_reg(Displacement_GW*dataset.norm_factors["target_stds"]/(HydrConductivity+1e-7), #
                                                                         res_fn = "mse")
@@ -363,25 +424,6 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                             
                                             print(f"CP_L1DeltaS_loss: {round(reg_delta_s_l1_cp_loss.item(),7)}", end = " -- ")
                                             wandb.log({"CP_L1DeltaS_loss":reg_delta_s_l1_cp_loss.item()})
-                        
-                                    
-                                # if reg_latlon_smoothness >0:
-                                #     reg_smoothness_latlon_dis_gw = reg_latlon_smoothness * sum(smoothness_reg(Displacement_GW_CP.reshape(tstep_control_points,
-                                #                                                     lat_lon_points[0],
-                                #                                                     lat_lon_points[1]), mode = "lon_lat"))
-                                #     reg_smoothness_latlon_dis_s = reg_latlon_smoothness * sum(smoothness_reg(Displacement_S_CP.reshape(tstep_control_points,
-                                #                                                     lat_lon_points[0],
-                                #                                                     lat_lon_points[1]), mode = "lon_lat"))
-                                    
-                                    
-                                #     print(f"LatLon Smooth: {round(reg_smoothness_latlon_dis_gw.item(),7)}; {round(reg_smoothness_latlon_dis_s.item(),7)}", end = " -- ")
-                                #     loss += reg_smoothness_latlon_dis_gw + reg_smoothness_latlon_dis_s
-                                    
-                                # if reg_temp_smoothness > 0:
-                                    
-                                #     reg_smoothness_temp_pred = reg_temp_smoothness * smoothness_reg(Y_hat_CP, mode = "temp")
-                                #     print(f"Temp Smooth: {round(reg_smoothness_temp_pred.item(),7)}", end = " -- ")
-                                #     loss += reg_smoothness_temp_pred
                                 
                                 
                         print("Total_loss: ", round(loss.item(),7))
@@ -473,9 +515,9 @@ def physics_guided_trainer(epoch, dataset, model, train_loader, loss_fn, optimiz
                                 
 
 def Control_Points_Predictions(dataset, model, device,
-                               tstep_control_points,
-                               lat_points, lon_points,
-                               eval_mode = False):
+                            tstep_control_points,
+                            lat_points, lon_points,
+                            eval_mode = False):
     
     ###Z_grid mettiamo in load_trainer con partial, anche lat_ponints e lon:points
     ### non necessario neanche reshape a questo stadio, se facciamo vincolo su diffusion poi sì
@@ -488,32 +530,28 @@ def Control_Points_Predictions(dataset, model, device,
     Z_grid = grid_generation(dataset, lat_points,lon_points)
     
     _, predictions, displacement_gw, displacement_s, hydrConductivity, Lag_GW = compute_predictions_ST_MultiPoint(dataset, model, device,
-                                                                  np.datetime64(random_date),
-                                                                  tstep_control_points,
-                                                                  Z_grid = Z_grid,
-                                                                  iter_pred = eval_mode,
-                                                                  get_displacement_terms = True)
-            
-    # predictions_grid = predictions.reshape(tstep_control_points,lat_points,lon_points)
-    # displacement_gw_grid = displacement_gw.reshape(tstep_control_points,lat_points,lon_points)
-    # displacement_s_grid = displacement_s.reshape(tstep_control_points,lat_points,lon_points)
-    # hydrConductivity_grid = hydrConductivity.reshape(tstep_control_points,lat_points,lon_points)
-    #Z_grid_matrix = Z_grid.reshape(lat_points,lon_points,3)
+                                                                np.datetime64(random_date),
+                                                                tstep_control_points,
+                                                                Z_grid = Z_grid,
+                                                                iter_pred = eval_mode,
+                                                                get_displacement_terms = True)
     
     return predictions, displacement_gw, displacement_s, hydrConductivity, Lag_GW
-    
-def adjust_ortho_decay_rate(epoch, o_d):
-    if epoch > 120:
-        o_d = 0.0
+
+## IDEAS
+
+# def adjust_ortho_decay_rate(epoch, o_d):
+#     if epoch > 120:
+#         o_d = 0.0
          
-    elif epoch > 70:
-        o_d = 1e-6 * o_d
+#     elif epoch > 70:
+#         o_d = 1e-6 * o_d
     
-    elif epoch > 50:
-        o_d = 1e-4 * o_d
+#     elif epoch > 50:
+#         o_d = 1e-4 * o_d
     
-    elif epoch > 30:
-        o_d = 1e-3 * o_d
+#     elif epoch > 30:
+#         o_d = 1e-3 * o_d
 
 
     # # Denormalization

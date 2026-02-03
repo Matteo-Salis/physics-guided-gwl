@@ -163,7 +163,6 @@ cython_debug/
 
 # Folder
 src/runs/
-src/configs/
 src/deprecated/
 src/notebooks/*.nc
 src/*.csv
@@ -172,10 +171,10 @@ src/*.nc
 data/
 results/
 sh/
-
-config/old
+config/local/**
 
 src/notebooks/*.gif
 src/notebooks/*.png
 src/notebooks/plots/**
+src/notebooks/trials/**
 src/deprecated/**

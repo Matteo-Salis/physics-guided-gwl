@@ -15,12 +15,13 @@ def load_dataset(config):
 
 def get_dataloader(dataset, config):
 
+    # load all data or a subset
     if config["all_dataset"] is True:
         max_ds_elems = dataset.__len__()
     else:
         max_ds_elems = config["max_ds_elems"]
         
-        
+    # define the test set        
     if type(config["test_split_p"]) is str:
         
         train_idx = int(dataset.get_iloc_from_date(date_max = np.datetime64(config["test_split_p"])))
