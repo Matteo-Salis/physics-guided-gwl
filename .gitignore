@@ -162,17 +162,15 @@ cython_debug/
 #.idea/
 
 # Folder
+config/local/
+data/
+results/
+
 src/runs/
 src/deprecated/
 src/notebooks/*.nc
 src/*.csv
 src/*.nc
-
-data/
-results/
-sh/
-config/local/**
-
 src/notebooks/*.gif
 src/notebooks/*.png
 src/notebooks/plots/**
