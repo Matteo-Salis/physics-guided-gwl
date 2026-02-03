@@ -20,6 +20,24 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                     model_dir,
                     device = "cuda", plot_displacements = False):
     
+    """ training procedure to test pure deep learning models
+    used also for physics guided models given physics loss
+
+    Args:
+        epoch (_type_): _description_
+        dataset (_type_): _description_
+        model (_type_): _description_
+        test_loader (_type_): _description_
+        loss_fn (_type_): _description_
+        start_dates_plot (_type_): _description_
+        n_pred_plot (_type_): _description_
+        sensors_to_plot (_type_): _description_
+        t_step_to_plot (_type_): _description_
+        lat_lon_points (_type_): _description_
+        model_dir (_type_): _description_
+        device (str, optional): _description_. Defaults to "cuda".
+        plot_displacements (bool, optional): _description_. Defaults to False.
+    """
     with torch.no_grad():
                 with tqdm(test_loader, unit="batch") as tepoch:
                             
@@ -79,6 +97,7 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                                         save_dir=model_dir,
                                         title_ext = f"E{epoch}")
                             
+                            # uncomment if you want to plot images
                             # if (epoch+1) % 50 == 0:
                             
                             #   print("Computing iterated predictions...")
@@ -111,49 +130,3 @@ def pure_dl_tester(epoch, dataset, model, test_loader, loss_fn,
                             #           log_wandb=False,
                             #           save_dir=model_dir,
                             #           title_ext = f"E{epoch}")
-                            
-                            
-# def test_pinns_model(epoch, dataset, model, test_loader, loss_fn, loss_physics_fn,
-#                     start_dates_plot, twindow_plot, sensors_to_plot, timesteps_to_look,
-#                     device = "cuda"):
-    
-#     with torch.no_grad():
-#                 with tqdm(test_loader, unit="batch") as tepoch:
-                            
-#                             for batch_idx, (X, Z, W, Y, X_mask, Y_mask) in enumerate(tepoch):
-#                                 tepoch.set_description(f"Epoch {epoch}")
-
-#                                 X = X[:,0,:,:].to(device)
-#                                 X_mask = X_mask[:,0,:].to(device)
-#                                 Z = Z.to(device)
-#                                 W = [W[0].to(device), W[1].to(device)]
-#                                 Y = Y.to(device)
-#                                 Y_mask = Y_mask.to(device)
-#                                 #print('Batch mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-
-#                                 Y_hat, K_lat_lon = model(X, Z, W, X_mask,
-#                                                          mc_dropout = False,
-#                                                          K_out = True)
-                                
-#                                 #print('After predict mem allocated in MB: ', torch.cuda.memory_allocated() / 1024**2)
-
-#                                 loss_data = loss_fn(Y_hat,
-#                                           Y,
-#                                           Y_mask)
-                                
-#                                 loss_physics = loss_physics_fn(Y_hat,
-#                                                               K_lat = K_lat_lon[:,0,:,:].unsqueeze(1),
-#                                                               K_lon = K_lat_lon[:,1,:,:].unsqueeze(1))
-                                
-#                                 print(f"Test_data_loss: {loss_data.item()} --- Test_physics_loss: {loss_physics.item()}")
-#                                 wandb.log({"Test_data_loss":loss_data.item()})
-#                                 wandb.log({"Test_physics_loss":loss_physics.item()})
-                            
-#                             plot_maps_and_time_series(dataset, model, device,
-#                               start_dates_plot, twindow_plot,
-#                               sensors_to_plot, 
-#                               timesteps_to_look,
-#                               eval_mode=True)
-                            
-#                             K_lat_lon = build_xarray(K_lat_lon[0].detach().cpu(), dataset, variable = "K_lat_lon")
-#                             wandb.log({"K_maps_test":wandb.Image(plot_K_lat_lon_maps(K_lat_lon))})

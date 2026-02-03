@@ -48,7 +48,7 @@
 
     "lat_lon_npoints":[70,70],
 
-    "model":"ST_MultiPoint_STNet_SAGW",
+    "model":"STAINet",
     "emb_W":"3DCNN",
     "model_init":null,
     "pretrain_model":null,
