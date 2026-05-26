@@ -130,7 +130,8 @@ def main(config):
     # plot ts?
     
         # Create Saving Directory
-        ts_saving_path = f"{config['prediction_dir']}/time_series_{config['file_format']}"
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        ts_saving_path = f"{config['prediction_dir']}/time_series_{config['file_format']}_{timestamp}"
         os.makedirs(ts_saving_path)
             
         # Time Series plot
@@ -201,7 +202,8 @@ def main(config):
                     ax.get_ylim()[1] + ax.get_ylim()[1].min()*0.0005])
             
             # Start Test Vline
-            ax.vlines(config["test_split_p"], ymin = ax.get_ylim()[0],
+            if config["vline_test"] is True:
+                ax.vlines(config["test_split_p"], ymin = ax.get_ylim()[0],
                     ymax = ax.get_ylim()[1], ls = "--", color = "darkred", lw = 2,
                     label = "Start Test")
             
@@ -220,12 +222,15 @@ def main(config):
             plt.xlabel("Date")
             plt.ylabel("Groundwater Level [m]")
             plt.legend(ncol=np.ceil(len(plt.gca().get_legend_handles_labels()[0])/2),
-                       fontsize=12, markerscale=1.5, borderpad=0.2, labelspacing=0.1)
+                       fontsize=14.5, markerscale=1.5, borderpad=0.2, labelspacing=0.1)
             ax.grid(axis="x", ls = "--", which = "both", lw = "1.5", color = 'black', alpha = 0.5)
             
             if date_xticks is not None:
                 ax.set_xticks(date_xticks, date_xticks.strftime(date_xticks_format))
                 ax.tick_params(axis = "x", rotation=25)
+                
+            plt.xlim(np.datetime64(config["start_date_pred_ts"]),
+                    np.datetime64("2023-12-31"))
             
             if config["forecast_horizon"] is None:
                 n_pred = config['n_pred_ts']
