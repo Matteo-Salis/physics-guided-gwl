@@ -25,7 +25,11 @@ def get_dataloader(dataset, config):
     if type(config["test_split_p"]) is str:
         
         train_idx = int(dataset.get_iloc_from_date(date_max = np.datetime64(config["test_split_p"])))
-        test_idx = int(max_ds_elems - train_idx)
+        if type(max_ds_elems) is str:
+            test_idx = int(dataset.get_iloc_from_date(date_max = np.datetime64(max_ds_elems)))
+            test_idx = test_idx - train_idx + 1
+        else:
+            test_idx = int(max_ds_elems - train_idx)
     else:
         test_split_p = config["test_split_p"]
         train_split_p = 1 - test_split_p

@@ -123,6 +123,7 @@ def main(config):
     median_metrics_dict = {}
     mean_metrics_dict = {}
     std_metrics_dict = {}
+    iqr_metrics_dict = {}
         
     #Compute denormalized sensor statistics
     subset_wtd_df = dataset.wtd_df.loc[pd.IndexSlice[dataset.wtd_df.index.get_level_values(0) <= np.datetime64(dataset.config["date_max_norm"]),
@@ -149,6 +150,7 @@ def main(config):
         model_median_metrics = []
         model_mean_metrics = []
         model_std_metrics = []
+        model_iqr_metrics = []
         
         # define temporal domain
         if config["metrics_only_on_test"] is True:
@@ -157,7 +159,9 @@ def main(config):
         else:
             true_values = models_predictions[model_i][0]
             predicted_values = models_predictions[model_i][1]
-            
+        
+        # compute metrics 
+        # nbias    
         sensors_nbias = metrics.compute_test_nbias_per_sensor(true_values,
                                                             predicted_values,
                                                             sensor_iv)
@@ -165,14 +169,18 @@ def main(config):
         model_median_metrics.append(sensors_nbias.median())
         model_mean_metrics.append(sensors_nbias.mean())
         model_std_metrics.append(sensors_nbias.std())
+        model_iqr_metrics.append(sensors_nbias.quantile(0.75)-sensors_nbias.quantile(0.25))
         
+        # rmse
         sensors_rmse = metrics.compute_test_rmse_per_sensor(true_values,
                                                             predicted_values)
         sensors_rmse.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_rmse.csv", index=True)
         model_median_metrics.append(sensors_rmse.median())
         model_mean_metrics.append(sensors_rmse.mean())
         model_std_metrics.append(sensors_rmse.std())
+        model_iqr_metrics.append(sensors_rmse.quantile(0.75) - sensors_rmse.quantile(0.25))
         
+        # ape mape
         sensors_ape = metrics.compute_test_ape_per_sensor(true_values,
                                                             predicted_values)
         sensors_mape = metrics.compute_test_mape_per_sensor(true_values,
@@ -182,7 +190,9 @@ def main(config):
         model_median_metrics.append(sensors_mape.median())
         model_mean_metrics.append(sensors_mape.mean())
         model_std_metrics.append(sensors_mape.std())
+        model_iqr_metrics.append(sensors_mape.quantile(0.75)-sensors_mape.quantile(0.25))
         
+        # nse
         sensors_nse = metrics.compute_test_nse_per_sensor(true_values,
                                                         predicted_values,
                                                         sensor_means)
@@ -190,25 +200,33 @@ def main(config):
         model_median_metrics.append(sensors_nse.median())
         model_mean_metrics.append(sensors_nse.mean())
         model_std_metrics.append(sensors_nse.std())
+        model_iqr_metrics.append(sensors_nse.quantile(0.75)-sensors_nse.quantile(0.25))
         
+        # kge
         sensors_kge = metrics.compute_test_kge_per_sensor(true_values,
                                                         predicted_values)
         sensors_kge.to_csv(f"{metrics_saving_path}/{model_i}{name_suffix}_kge.csv", index=True)
         model_median_metrics.append(sensors_kge.median())
         model_mean_metrics.append(sensors_kge.mean())
         model_std_metrics.append(sensors_kge.std())
+        model_iqr_metrics.append(sensors_kge.quantile(0.75)-sensors_kge.quantile(0.25))
         
+        # filling dictionaries
         median_metrics_dict[model_i] = model_median_metrics
         mean_metrics_dict[model_i] = model_mean_metrics
         std_metrics_dict[model_i] = model_std_metrics
-        
+        iqr_metrics_dict[model_i] = model_iqr_metrics
+
+    # dataframe and savings         
     median_metrics_ds = pd.DataFrame(median_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
     mean_metrics_ds = pd.DataFrame(mean_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
     std_metrics_ds = pd.DataFrame(std_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
+    iqr_metrics_ds = pd.DataFrame(iqr_metrics_dict, index = ["NBIAS","RMSE","MAPE","NSE","KGE"])
         
     median_metrics_ds.to_csv(f"{metrics_saving_path}/median_metrics{name_suffix}.csv", index=True)
     mean_metrics_ds.to_csv(f"{metrics_saving_path}/mean_metrics{name_suffix}.csv", index=True)
     std_metrics_ds.to_csv(f"{metrics_saving_path}/std_metrics{name_suffix}.csv", index=True)
+    iqr_metrics_ds.to_csv(f"{metrics_saving_path}/iqr_metrics{name_suffix}.csv", index=True)
     
     print("################# All metrics saved! #################")
         
