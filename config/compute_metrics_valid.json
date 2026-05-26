@@ -25,9 +25,9 @@
     "temporal_encoding":"sin",
 
     "random_sampler": true,
-    "all_dataset" : true,
-    "max_ds_elems" : null,
-    "test_split_p" :"2021-12-31",
+    "all_dataset" : false,
+    "max_ds_elems" :"2021-12-31",
+    "test_split_p" :"2019-12-31",
     "frequency": "W",
 
     "weather_lags": 4,
@@ -38,25 +38,14 @@
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
-    "model_name":["PSTAINet-ILB"],
-    "model_with_displacements":["PSTAINet-ILB"],
-    "ts_colors":["darkgreen"],
+    "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
+    "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     
-    "n_pred_ts":45,
-    "forecast_horizon":26,
-    "start_date_pred_ts":"2001-07-01",
-    "recon_ts":true,
+    "forecast_horizon":null,
     "get_displacement":true,
-    "iter_pred":true,
+    "iter_pred":false,
+    "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
-    "vline_test":true,
 
-    "n_pred_map":0,
-    "plot_recharge_areas": null,
-    "start_date_pred_map":null,
-    "map_dates":null,
-    "draw_gif":false,
-
-    "file_format":"jpg",
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/PSTAINet-ILB_iter_pred_FO26_20260108_174550"
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260525_134018"
 }

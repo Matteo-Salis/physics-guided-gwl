@@ -25,38 +25,41 @@
     "temporal_encoding":"sin",
 
     "random_sampler": true,
-    "all_dataset" : true,
-    "max_ds_elems" : null,
-    "test_split_p" :"2021-12-31",
+    "all_dataset" : false,
+    "max_ds_elems" :"2021-12-31",
+    "test_split_p" :"2019-12-31",
     "frequency": "W",
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
     "target_lags":[1,2,3,4],
     "weather_get_coords": true,
-
+    
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
     "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
-    "ts_colors":["tab:brown","tab:orange","darkgreen","darkmagenta"],
     
-    "n_pred_ts":132,
+    "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STNet_SAGW_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_PI_RCH_ERA5.json"],
+    
+    "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STNet_SAGW_S_ref_20260523_190653/ST_MultiPoint_STNet_SAGW_S_ref_20260523_190653.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20260523_191152/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20260523_191152.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20260523_191252/ST_MultiPoint_STDisNet_SAGW_K_PI_S_ref_20260523_191252.pt",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20260523_191325/ST_MultiPoint_STDisNet_SAGW_K_PI_RCH_S_ref_20260523_191325.pt"],
+
+    "n_pred_ts":104,
     "forecast_horizon":null,
-    "start_date_pred_ts":"2022-01-01",
-    "recon_ts":false,
+    "start_date_pred_ts":"2020-01-05",
     "get_displacement":true,
     "iter_pred":false,
     "lat_lon_npoints":[70,70],
-    "vline_test":false,
 
-    "n_pred_map":132,
-    "plot_recharge_areas": true,
-    "start_date_pred_map":"2021-06-20",
-    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],
-    "draw_gif":false,
-
-    "file_format":"jpg",
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20251209_100741"
+    "n_pred_map":104,
+    "start_date_pred_map":"2020-01-05",
+    
+    "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions"
 }
