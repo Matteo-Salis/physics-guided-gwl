@@ -44,11 +44,12 @@
     
     "n_pred_ts":132,
     "forecast_horizon":null,
-    "start_date_pred_ts":"2021-06-20",
+    "start_date_pred_ts":"2022-01-01",
     "recon_ts":false,
     "get_displacement":true,
     "iter_pred":true,
     "lat_lon_npoints":[70,70],
+    "vline_test":false,
 
     "n_pred_map":132,
     "plot_recharge_areas": true,

@@ -44,11 +44,12 @@
     
     "n_pred_ts":45,
     "forecast_horizon":26,
-    "start_date_pred_ts":"2001-07-29",
+    "start_date_pred_ts":"2001-07-01",
     "recon_ts":true,
     "get_displacement":true,
     "iter_pred":true,
     "lat_lon_npoints":[70,70],
+    "vline_test":true,
 
     "n_pred_map":0,
     "plot_recharge_areas": null,
