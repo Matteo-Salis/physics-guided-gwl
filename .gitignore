@@ -176,3 +176,4 @@ src/notebooks/*.png
 src/notebooks/plots/**
 src/notebooks/trials/**
 src/deprecated/**
+src/wandb/**
