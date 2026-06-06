@@ -33,9 +33,9 @@
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
 
-    "all_dataset" : false,
-    "max_ds_elems" :"2021-12-31",
-    "test_split_p" :"2019-12-31",
+    "all_dataset" : true,
+    "max_ds_elems" : null,
+    "test_split_p" :"2021-12-31",
     "frequency": "W",
 
     "random_sampler": true,
@@ -48,7 +48,7 @@
 
     "lat_lon_npoints":[70,70],
 
-    "model":"ST_MultiPoint_STDisNet_SAGW_K",
+    "model":"PSTAINet_IB",
     "emb_W":"3DCNN",
     "model_init":null,
     "pretrain_model":null,
@@ -85,7 +85,7 @@
     "lr": 2.5e-4,
     "lr_scheduling":[[400],4e-1],
     "batch_size": 32,
-    "epochs": 850, 
+    "epochs": 600, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
