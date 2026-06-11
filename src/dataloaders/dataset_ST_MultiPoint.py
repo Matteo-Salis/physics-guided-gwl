@@ -229,8 +229,13 @@ class Dataset_ST_MultiPoint(Dataset):
             
         if self.config["relative_target"] is True:
             self.relative_target()
-            
-        self.lag_coords = self.wtd_geodf.loc[~self.wtd_geodf["sensor_id"].isin(self.config["exclude_from_lags"]),
+        
+        if self.config["exclude_from_lags"] is not None:
+            exclude_sensors_lag = self.config["exclude_from_lags"]
+        else:
+            exclude_sensors_lag = []
+        
+        self.lag_coords = self.wtd_geodf.loc[~self.wtd_geodf["sensor_id"].isin(exclude_sensors_lag),
                                                 ["lat","lon","height"]].values
     
     
