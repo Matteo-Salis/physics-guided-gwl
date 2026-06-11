@@ -22,7 +22,8 @@ def load_model(config):
                 activation = config["activation"],
                 emb_W=config["emb_W"],
                 normalization = config["model_normalization"],
-                simplified_embedding= config["simplified_embedding"])
+                simplified_embedding= config["simplified_embedding"],
+                FiLM = config["FiLM_conditioning"])
         
     elif config["model"] == "PSTAINet_IB":
         
@@ -43,7 +44,8 @@ def load_model(config):
                 activation = config["activation"],
                 emb_W=config["emb_W"],
                 normalization = config["model_normalization"],
-                simplified_embedding= config["simplified_embedding"])
+                simplified_embedding= config["simplified_embedding"],
+                FiLM = config["FiLM_conditioning"])
     
     else:
         raise Exception("Model name unknown.")

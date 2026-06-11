@@ -97,8 +97,8 @@ def training_model(config):
                            reg_delta_s_l1 = reg_delta_s_l1,
                            reg_delta_gw_s_on_cps = reg_delta_gw_s_on_cps,
                            reg_recharge_areas = reg_recharge_areas,
-                           reg_latlon_smoothness = reg_latlon_smoothness,
-                           reg_temp_smoothness = reg_temp_smoothness,
+                           #reg_latlon_smoothness = reg_latlon_smoothness,
+                           #reg_temp_smoothness = reg_temp_smoothness,
                            plot_displacements = plot_displacements)
             
     else:
