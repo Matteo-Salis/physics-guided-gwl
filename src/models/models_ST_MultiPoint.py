@@ -735,7 +735,8 @@ class STAINet(nn.Module):
                 densification_dropout_p = 0.25,
                 activation = "GELU",
                 simplified_embedding = False,
-                normalization = "layernorm"):
+                normalization = "layernorm",
+                FiLM = True):
         
         super().__init__()
         
@@ -752,6 +753,7 @@ class STAINet(nn.Module):
         self.emb_W = emb_W
         self.normalization = normalization
         self.simplified_embedding = simplified_embedding
+        self.FiLM = FiLM
         
         if self.activation == "LeakyReLU":
             self.activation_fn = nn.LeakyReLU()
@@ -812,11 +814,11 @@ class STAINet(nn.Module):
                                             activation = self.activation,
                                             normalization = None,
                                             elementwise_affine = False)
+        if self.FiLM is True:
+            self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
+                                                    cond_dim=self.embedding_dim,
+                                                    n_layer=3)
         
-        self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
-                                                cond_dim=self.embedding_dim,
-                                                n_layer=3)
-    
         
         ### Self-Attention and Interpolation Modules #####
         self.SA_GW_Module_1 = MHA_Block(embedding_dim = self.embedding_dim,
@@ -918,8 +920,9 @@ class STAINet(nn.Module):
             
         Weather_st_coords = self.ST_coords_Embedding(W_coors) #N, D, S, C
         
-        FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
-        
+        if self.FiLM is True:
+            FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
+            
         ##### GW lag #####
         GW_values = GW_values.flatten(1,2)
         GW_st_coords = GW_st_coords.flatten(1,2)
@@ -933,14 +936,16 @@ class STAINet(nn.Module):
                             Q = Z_st_coords)
         
         ## Add FiLM
-        GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
-        GW_out = self.activation_fn(GW_out)
+        if self.FiLM is True:
+            GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
+            GW_out = self.activation_fn(GW_out)
         GW_out = self.SA_GW_Module_2(K = GW_out,
                                     V = GW_out, 
                                     Q = GW_out)
         ## Add Film
-        GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
-        GW_out = self.activation_fn(GW_out)
+        if self.FiLM is True:
+            GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+            GW_out = self.activation_fn(GW_out)
         
         ##### Weather ####
         Weather_values = Weather_values.flatten(1,2)
@@ -950,9 +955,10 @@ class STAINet(nn.Module):
                                 V = Weather_values,
                                 Q = Z_st_coords)
         ## Add FiLM
-        Weather_out =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
-        Weather_out = self.activation_fn(Weather_out)
-        
+        if self.FiLM is True:
+            Weather_out =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
+            Weather_out = self.activation_fn(Weather_out)
+            
         # Joint modules
         Output = torch.cat([GW_out,
                             Weather_out], dim = -1)
@@ -985,7 +991,8 @@ class PSTAINet_IB(nn.Module):
                 densification_dropout_p = 0.25,
                 activation = "GELU",
                 simplified_embedding = False,
-                normalization = "layernorm"):
+                normalization = "layernorm",
+                FiLM = True):
         
         super().__init__()
         
@@ -1003,6 +1010,7 @@ class PSTAINet_IB(nn.Module):
         self.emb_W = emb_W
         self.normalization = normalization
         self.simplified_embedding = simplified_embedding
+        self.FiLM = FiLM
         
         if self.activation == "LeakyReLU":
             self.activation_fn = nn.LeakyReLU()
@@ -1063,10 +1071,10 @@ class PSTAINet_IB(nn.Module):
                                             activation = self.activation,
                                             normalization = None,
                                             elementwise_affine = False)
-        
-        self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
-                                                cond_dim=self.embedding_dim,
-                                                n_layer=3)
+        if self.FiLM is True:
+            self.FiLM_conditioning = FiLM_conditioning(feature_dim=self.embedding_dim,
+                                                    cond_dim=self.embedding_dim,
+                                                    n_layer=3)
         
         ### HydrConductivity Module ####
         
@@ -1198,7 +1206,8 @@ class PSTAINet_IB(nn.Module):
         Weather_st_coords = self.ST_coords_Embedding(W_coors) #N, D, S, C
         #Weather_st_coords = self.activation_fn(Weather_st_coords)
         
-        FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
+        if self.FiLM is True:
+            FiLM_gammas, FiLM_betas = self.FiLM_conditioning(Z_st_coords)
         
         ##### GW lag #####
         GW_values = GW_values.flatten(1,2)
@@ -1213,14 +1222,16 @@ class PSTAINet_IB(nn.Module):
                             Q = Z_st_coords)
         
         ## Add FiLM
-        GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
-        GW_out = self.activation_fn(GW_out)
+        if self.FiLM is True:
+            GW_out =  (GW_out*FiLM_gammas[:,:,:self.embedding_dim]) + FiLM_betas[:,:,:self.embedding_dim]
+            GW_out = self.activation_fn(GW_out)
         GW_out = self.SA_GW_Module_2(K = GW_out,
                                     V = GW_out, 
                                     Q = GW_out)
         ## Add Film
-        GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
-        GW_out = self.activation_fn(GW_out)
+        if self.FiLM is True:
+            GW_out =  (GW_out*FiLM_gammas[:,:,self.embedding_dim:self.embedding_dim*2]) + FiLM_betas[:,:,self.embedding_dim:self.embedding_dim*2]
+            GW_out = self.activation_fn(GW_out)
         Displacement_GW_p = GW_out
         
         ##### Weather ####
@@ -1231,8 +1242,9 @@ class PSTAINet_IB(nn.Module):
                                 V = Weather_values,
                                 Q = Z_st_coords)
         ## Add FiLM
-        Displacement_S_p =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
-        Displacement_S_p = self.activation_fn(Displacement_S_p)
+        if self.FiLM is True:
+            Weather_out =  (Weather_out*FiLM_gammas[:,:,self.embedding_dim*2:self.embedding_dim*3]) + FiLM_betas[:,:,self.embedding_dim*2:self.embedding_dim*3]
+            Weather_out = self.activation_fn(Weather_out)
         # Weather_out = self.SA_W_Module_1(K = Weather_out,
         #                             V = Weather_out, 
         #                             Q = Weather_out)
@@ -1258,7 +1270,7 @@ class PSTAINet_IB(nn.Module):
         Displacement_GW = Displacement_GW * HydrConductivity # Weight by HydrConductivity: ISOTROPIC Conductivity Field
         
         
-        Displacement_S = self.Output_Delta_S(Displacement_S_p)
+        Displacement_S = self.Output_Delta_S(Weather_out)
         #Displacement_S =  Displacement_S_p * torch.abs(GW_lag_out)
         
         
