@@ -127,21 +127,21 @@ def main(config):
         
     #Compute denormalized sensor statistics
     subset_wtd_df = dataset.wtd_df.loc[pd.IndexSlice[dataset.wtd_df.index.get_level_values(0) <= np.datetime64(dataset.config["date_max_norm"]),
-                                                    :]] #
+                                                    dataset.sensor_id_list_target]] #
     
     subset_wtd_df = (subset_wtd_df[dataset.target] * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]
     
     sensor_means = subset_wtd_df.groupby(level=1).transform('mean').values
-    sensor_means = sensor_means.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                        len(dataset.sensor_id_list))[0,:] 
+    sensor_means = sensor_means.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list_target),
+                                        len(dataset.sensor_id_list_target))[0,:] 
     
     sensor_min = subset_wtd_df.groupby(level=1).transform('min').values
-    sensor_min = sensor_min.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                        len(dataset.sensor_id_list))[0,:] 
+    sensor_min = sensor_min.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list_target),
+                                        len(dataset.sensor_id_list_target))[0,:] 
     
     sensor_max = subset_wtd_df.groupby(level=1).transform('max').values
-    sensor_max = sensor_max.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list),
-                                        len(dataset.sensor_id_list))[0,:] 
+    sensor_max = sensor_max.reshape(len(subset_wtd_df.index)//len(dataset.sensor_id_list_target),
+                                        len(dataset.sensor_id_list_target))[0,:] 
     sensor_iv = sensor_max - sensor_min
 
     # computing metrics    

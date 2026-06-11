@@ -102,27 +102,27 @@ def compute_ts_prediction_with_displacemnt(config, dataset,
         
         ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_Displacement_GW_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_GW.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_Displacement_S_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Displacement_S.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_Conductivity_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_Conductivity.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_Lag_GW = plot_ST_MultiPoint.build_ds_from_pred(ts_Lag_GW.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         
         
@@ -179,11 +179,11 @@ def compute_ts_prediction(config, dataset,
         
         ts_true_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_true.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         ts_predictions_ds = plot_ST_MultiPoint.build_ds_from_pred(ts_predictions.detach().cpu(), dataset,
                                                         start_date=np.datetime64(config["start_date_pred_ts"]), n_pred=n_pred,
-                                                        sensor_names=dataset.sensor_id_list)
+                                                        sensor_names=dataset.sensor_id_list_target)
         
         # Denormalize
         ts_true_ds = (ts_true_ds * dataset.norm_factors["target_stds"]) + dataset.norm_factors["target_means"]

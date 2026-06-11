@@ -57,8 +57,8 @@ class Dataset_ST_MultiPoint(Dataset):
         print("Done!")
         
         if self.config["normalization"] is True:
-            
-            self.normalize(date_max = np.datetime64(self.config["date_max_norm"]))
+            self.normalize(date_max = np.datetime64(self.config["date_max_norm"]),
+                           exclude_sensor_list = self.config["exclude_sensor_list_normalization"])
             
         print("    Building lagged dataframe...", end = " ")
         self.build_lagged_df()
@@ -179,6 +179,7 @@ class Dataset_ST_MultiPoint(Dataset):
         # Subset Stations
         if self.config["discard_sensor_list"] is not None:
 
+            print(f"Discarding sensors {self.config['discard_sensor_list']}")
             self.wtd_geodf = self.wtd_geodf.loc[~self.wtd_geodf["sensor_id"].isin(self.config["discard_sensor_list"]), :]
             self.wtd_df = self.wtd_df.loc[~self.wtd_df["sensor_id"].isin(self.config["discard_sensor_list"]), :]
         
@@ -188,7 +189,7 @@ class Dataset_ST_MultiPoint(Dataset):
             self.wtd_df = self.wtd_df.loc[self.wtd_df["sensor_id"].isin(self.config["sel_sensor_list"]), :]
         
         # Resampling
-        if self.config["frequency"] != "D":
+        if self.config["frequency"] != self.config["wtd_ds_frequency"]:
             self.wtd_df.sort_values(by='date', inplace = True)
             self.wtd_df = self.wtd_df.set_index(["date"])
             self.wtd_df = self.wtd_df.groupby([pd.Grouper(freq=self.config["frequency"], label = "left"), "sensor_id"]).mean()
@@ -229,7 +230,8 @@ class Dataset_ST_MultiPoint(Dataset):
         if self.config["relative_target"] is True:
             self.relative_target()
             
-        self.target_coords = self.wtd_geodf[["lat","lon","height"]].values
+        self.lag_coords = self.wtd_geodf.loc[~self.wtd_geodf["sensor_id"].isin(self.config["exclude_from_lags"]),
+                                                ["lat","lon","height"]].values
     
     
     ### Normalization
@@ -258,10 +260,21 @@ class Dataset_ST_MultiPoint(Dataset):
                 array[i,j] = data.loc[idx, var]
         return array
             
-    def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"), verbose = True, dict_out = False):
+    def compute_norm_factors(self, date_max = np.datetime64("2020-01-01"),
+                            verbose = True,
+                            dict_out = False,
+                            exclude_sensor_list = None):
+        
+        if exclude_sensor_list is None:
+            sensor_id_list_norm = self.sensor_id_list
+        
+        else:
+            print("Excluding sensors from normalization: ", exclude_sensor_list)
+            sensor_id_list_norm = [self.sensor_id_list[i] for i in range(len(self.sensor_id_list)) if self.sensor_id_list[i] not in exclude_sensor_list]
         
         subset_wtd_df = self.wtd_df.loc[pd.IndexSlice[self.wtd_df.index.get_level_values(0) <= date_max,
-                                                        :]] #
+                                                    self.wtd_df.index.get_level_values(1).isin(sensor_id_list_norm)],
+                                        :] #
         #subset_wtd_df = subset_wtd_df.loc[subset_wtd_df["nan_mask"] == True, :] #compute only for not nan values
         subset_weather_xr = self.weather_xr.sel(time = slice(date_max)) #slice include extremes
             
@@ -270,11 +283,11 @@ class Dataset_ST_MultiPoint(Dataset):
             
             # Compute rasterized NN norm factors 
             target_means = subset_wtd_df[self.target].groupby(level=1).transform('mean').values
-            target_means = target_means.reshape(len(subset_wtd_df.index)//len(self.sensor_id_list),
-                                                len(self.sensor_id_list))[0,:] 
+            target_means = target_means.reshape(len(subset_wtd_df.index)//len(sensor_id_list_norm),
+                                                len(sensor_id_list_norm))[0,:] 
             target_stds = subset_wtd_df[self.target].groupby(level=1).transform('std').values
-            target_stds = target_stds.reshape(len(subset_wtd_df.index)//len(self.sensor_id_list),
-                                                len(self.sensor_id_list))[0,:]
+            target_stds = target_stds.reshape(len(subset_wtd_df.index)//len(sensor_id_list_norm),
+                                                len(sensor_id_list_norm))[0,:]
             
             target_means_gpd = gpd.GeoDataFrame({"mean": target_means}, geometry=self.wtd_geodf.geometry).set_crs(self.wtd_geodf.crs)
             target_stds_gpd = gpd.GeoDataFrame({"std": target_stds}, geometry=self.wtd_geodf.geometry).set_crs(self.wtd_geodf.crs)
@@ -352,9 +365,12 @@ class Dataset_ST_MultiPoint(Dataset):
         if dict_out is True:
             return self.norm_factors
         
-    def normalize(self, norm_factors = None, date_max = np.datetime64("2020-01-01")):
+    def normalize(self, norm_factors = None,
+                  date_max = np.datetime64("2020-01-01"),
+                  exclude_sensor_list = None):
         if norm_factors is None:
-            self.compute_norm_factors(date_max = date_max)
+            self.compute_norm_factors(date_max = date_max,
+                                      exclude_sensor_list = exclude_sensor_list)
             ## compute norm factors by default
             
         else:
@@ -368,8 +384,8 @@ class Dataset_ST_MultiPoint(Dataset):
         if self.config["target_norm_type"] is not None:
             # select how to normalize target (per sensor or overall normalization)
             if self.config["target_norm_type"] == "sensor_zscore":
-                target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(self.sensor_id_list))
-                target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(self.sensor_id_list))
+                target_norm_means = np.tile(self.norm_factors["target_means"], len(self.wtd_df.index)//len(sensor_id_list_norm))
+                target_norm_stds = np.tile(self.norm_factors["target_stds"], len(self.wtd_df.index)//len(sensor_id_list_norm))
             
             elif self.config["target_norm_type"] == "overall_zscore":
                 target_norm_means = self.norm_factors["target_means"]
@@ -386,9 +402,9 @@ class Dataset_ST_MultiPoint(Dataset):
         self.dtm_roi = (self.dtm_roi - self.norm_factors["dtm_mean"])/self.norm_factors["dtm_std"]
         self.wtd_df["height"] = (self.wtd_df["height"] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         
-        self.target_coords[:,0] = (self.target_coords[:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
-        self.target_coords[:,1] = (self.target_coords[:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
-        self.target_coords[:,2] = (self.target_coords[:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
+        self.lag_coords[:,0] = (self.lag_coords[:,0] - self.norm_factors["lat_mean"])/self.norm_factors["lat_std"]
+        self.lag_coords[:,1] = (self.lag_coords[:,1] - self.norm_factors["lon_mean"])/self.norm_factors["lon_std"]
+        self.lag_coords[:,2] = (self.lag_coords[:,2] - self.norm_factors["dtm_mean"].values)/self.norm_factors["dtm_std"].values
         
         norm_weather_var = list(self.weather_xr.keys())
         norm_weather_var = [var for var in norm_weather_var if var not in ["tmax","tmin"]]
@@ -471,6 +487,25 @@ class Dataset_ST_MultiPoint(Dataset):
                                *self.temp_enc_names,
                                *self.lag_names]
         
+        # to exclude form lag
+        if self.config["exclude_from_lags"] is not None:
+    
+            for j in range(len(self.config["exclude_from_lags"])):
+                self.lag_names = [ln for ln in self.lag_names if self.config["exclude_from_lags"][j] not in ln]
+                
+            print(f"{self.config['exclude_from_lags']} excluded from lags")
+            
+            self.sensor_id_list_lag = [s for s in self.sensor_id_list if s not in self.config["exclude_from_lags"]]
+            
+        # set target sensors
+        if self.config["target_sensors"] == "all":
+            print("Target sensors: all")
+            self.sensor_id_list_target = self.sensor_id_list 
+        else:
+            self.sensor_id_list_target = self.config["target_sensors"]
+            print(f"Target sensors: {self.config['target_sensors']}")
+        
+        # Define lagged df
         self.lagged_df = self.lagged_df.set_index(['date', 'sensor_id'])
         
         # Discard Summer
@@ -485,13 +520,18 @@ class Dataset_ST_MultiPoint(Dataset):
         
         if isinstance(self.config["fill_value"], float):
             self.fill_value = self.config["fill_value"]
+            self.lagged_df_filled = self.lagged_df.fillna(self.fill_value)
             
         elif self.config["fill_value"] == "ffill_bfill":
             self.lagged_df_filled = self.lagged_df.groupby(level="sensor_id").ffill().groupby(level="sensor_id").bfill()
             self.fill_value = 0
             
-        else:
+        elif self.config["fill_value"] == "ffill":
+            self.lagged_df_filled = self.lagged_df.groupby(level="sensor_id").ffill()
             self.fill_value = 0
+            
+        # else:
+        #     self.fill_value = 0
     
     
     ### Utilities
@@ -577,8 +617,8 @@ class Dataset_ST_MultiPoint(Dataset):
         target_lags_values = lagged_features[~lagged_features.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
         target_lags_values_filled = lagged_features_filled[~lagged_features_filled.index.str.contains("|".join(self.temp_enc_names), regex=True)].values
         
-        target_lags_values = target_lags_values.reshape((len(self.target_lags),len(self.sensor_id_list)))
-        target_lags_values_filled = target_lags_values_filled.reshape((len(self.target_lags),len(self.sensor_id_list)))
+        target_lags_values = target_lags_values.reshape((len(self.target_lags),len(self.sensor_id_list_lag)))
+        target_lags_values_filled = target_lags_values_filled.reshape((len(self.target_lags),len(self.sensor_id_list_lag)))
         
         target_lags_nan_mask = np.isnan(target_lags_values)
         
@@ -589,9 +629,9 @@ class Dataset_ST_MultiPoint(Dataset):
         target_lags_st_info = []
         for i in range(len(self.target_lags)):
             temp_encoding_expand = np.repeat(temp_encoding_lags[i,:][None,:],
-                                             len(self.sensor_id_list), axis=0)
+                                             len(self.sensor_id_list_lag), axis=0)
             
-            target_lags_st_info.append(np.concat([self.target_coords,
+            target_lags_st_info.append(np.concat([self.lag_coords,
                                                   temp_encoding_expand], axis = 1))
             
         target_lags_st_info = np.stack(target_lags_st_info, axis = 0) # (D,S,C)
@@ -638,17 +678,31 @@ class Dataset_ST_MultiPoint(Dataset):
             idx = self.__len__() + idx
             
         target_date = np.datetime64(self.dates[idx]) #.astype(f"datetime64[{self.config['frequency']}]")
-            
+        
         subset_df = self.lagged_df.loc[pd.IndexSlice[target_date,:],:]
         subset_df_filled = self.lagged_df_filled.loc[pd.IndexSlice[target_date,:],:]
+        
+        if self.sensor_id_list_lag == self.sensor_id_list_target:
             
+            subset_df_input = subset_df
+            subset_df_filled_input = subset_df_filled
+            subset_df_output = subset_df
+            subset_df_filled_output = subset_df_filled
+            
+        else: 
+            subset_df_input = subset_df.loc[pd.IndexSlice[:,self.sensor_id_list_lag],:] 
+            subset_df_filled_input = subset_df_filled.loc[pd.IndexSlice[:,self.sensor_id_list_lag],:] 
+            subset_df_output = subset_df.loc[pd.IndexSlice[:,self.sensor_id_list_target],:] 
+            subset_df_filled_output = subset_df_filled.loc[pd.IndexSlice[:,self.sensor_id_list_target],:] 
+            
+
         # Get target Y, Z
-        Y = self.get_target_values(subset_df)
-        Z = self.get_target_st_info(subset_df)
+        Y = self.get_target_values(subset_df_output)
+        Z = self.get_target_st_info(subset_df_output)
         
         # Get features X
         ## lagged 
-        X = self.get_lagged_features(subset_df, subset_df_filled)
+        X = self.get_lagged_features(subset_df_input, subset_df_filled_input)
         
         # Weather W
         W = self.get_weather_features(target_date)
