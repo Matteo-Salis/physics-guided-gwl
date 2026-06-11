@@ -27,13 +27,26 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
     subset_df = dataset.lagged_df.loc[pd.IndexSlice[date,:],:]
     subset_df_filled = dataset.lagged_df_filled.loc[pd.IndexSlice[date,:],:]
     
+    if dataset.sensor_id_list_lag == dataset.sensor_id_list_target:
+            
+            subset_df_input = subset_df
+            subset_df_filled_input = subset_df_filled
+            subset_df_output = subset_df
+            subset_df_filled_output = subset_df_filled
+            
+    else: 
+        subset_df_input = subset_df.loc[pd.IndexSlice[:,dataset.sensor_id_list_lag],:] 
+        subset_df_filled_input = subset_df_filled.loc[pd.IndexSlice[:,dataset.sensor_id_list_lag],:] 
+        subset_df_output = subset_df.loc[pd.IndexSlice[:,dataset.sensor_id_list_target],:] 
+        subset_df_filled_output = subset_df_filled.loc[pd.IndexSlice[:,dataset.sensor_id_list_target],:]
+    
     W = dataset.get_weather_features(date)
         
     if X is None:
-        X = dataset.get_lagged_features(subset_df, subset_df_filled)
+        X = dataset.get_lagged_features(subset_df_input, subset_df_filled_input)
         
     if Z_grid is None:
-        Z = dataset.get_target_st_info(subset_df)
+        Z = dataset.get_target_st_info(subset_df_output)
     else:
         Z = torch.from_numpy(Z_grid).to(torch.float32)
         (doy_sin, doy_cos), _ = dataset.temporal_encoding(mode = "sin", dates = pd.DatetimeIndex([date]))
@@ -43,7 +56,7 @@ def compute_predictions_MultiPoint(date, dataset, model, device, X = None, Z_gri
                       dim = -1).to(torch.float32)
         
     Z = Z.to(device)
-    Y, _ = dataset.get_target_values(subset_df)
+    Y, _ = dataset.get_target_values(subset_df_output)
     
     if get_displacement_terms is False:
         Y_hat = model(X = [X[0].unsqueeze(0).to(device),
@@ -125,9 +138,9 @@ def compute_predictions_ST_MultiPoint(dataset, model, device, start_date, n_pred
     else:
         #X = None
         # ANDIAMO A PRENDERE NOI X
-        subset_df = dataset.lagged_df.loc[pd.IndexSlice[dataset.dates[start_date_idx],:],:]
-        subset_df_filled = dataset.lagged_df_filled.loc[pd.IndexSlice[dataset.dates[start_date_idx],:],:]
-        X = dataset.get_lagged_features(subset_df, subset_df_filled)
+        subset_df_input = dataset.lagged_df.loc[pd.IndexSlice[dataset.dates[start_date_idx],dataset.sensor_id_list_lag],:]
+        subset_df_filled_input = dataset.lagged_df_filled.loc[pd.IndexSlice[dataset.dates[start_date_idx],dataset.sensor_id_list_lag],:]
+        X = dataset.get_lagged_features(subset_df_input, subset_df_filled_input)
         
 
         X_deque = [deque(maxlen=len(dataset.target_lags)),
@@ -286,8 +299,17 @@ def predict_and_plot_time_series(dataset, model, device,
                                                                   n_pred,
                                                                   iter_pred = eval_mode)
             
-            prediction_ds = build_ds_from_pred(predictions.detach().cpu(), dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
-            true_ds = build_ds_from_pred(true.detach().cpu(), dataset, start_date=np.datetime64(date), n_pred=n_pred, sensor_names=dataset.sensor_id_list)
+            prediction_ds = build_ds_from_pred(predictions.detach().cpu(),
+                                               dataset, 
+                                               start_date=np.datetime64(date),
+                                               n_pred=n_pred,
+                                               sensor_names=dataset.sensor_id_list_target)
+            
+            true_ds = build_ds_from_pred(true.detach().cpu(),
+                                         dataset,
+                                         start_date=np.datetime64(date),
+                                         n_pred=n_pred,
+                                         sensor_names=dataset.sensor_id_list_target)
            
             # Denormalization
             if dataset.config["normalization"] is True and dataset.config["target_norm_type"] is not None:
