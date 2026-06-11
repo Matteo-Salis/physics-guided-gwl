@@ -94,6 +94,9 @@ def main(config):
     
     models_predictions = {}
     
+    if config['print_metric_ts'] is not None:
+        models_metrics = {}
+    
     print("Loading predictions...", end = " ")
     # Load predictions
     for i in range(len(config["model_name"])):
@@ -123,6 +126,14 @@ def main(config):
                 break
             
         models_predictions[config["model_name"][i]] = [ts_ds_list, xr_ds_list]
+        
+        if config['print_metric_ts'] is not None:
+            tmp_ds = pd.read_csv(f"{config['prediction_dir']}/metrics/{config['model_name'][i]}{name_suffix}_{config['print_metric_ts']}.csv",
+                                 dtype= {"Unnamed: 0": "str"})
+            
+            tmp_ds.columns = ["id_sensor", config["model_name"][i]]
+            tmp_ds = tmp_ds.set_index("id_sensor")
+            models_metrics[config["model_name"][i]] = tmp_ds
         
     print("Done!")
             
@@ -154,9 +165,9 @@ def main(config):
             date_xticks = None
             #date_xticks_format = '%d/%m/%Y'
             
-        for sensor_idx in range(len(dataset.sensor_id_list)):
+        for sensor_idx in range(len(dataset.sensor_id_list_target)):
 
-            sensor = dataset.sensor_id_list[sensor_idx]
+            sensor = dataset.sensor_id_list_target[sensor_idx]
             munic = dataset.wtd_geodf.loc[dataset.wtd_geodf["sensor_id"] == sensor,"munic"].values[0]
 
             plt.rcParams.update({'font.size': 16})
@@ -169,24 +180,33 @@ def main(config):
             i = 0
             for model_i in config["model_name"]:
                 
+                # Add metric to label if specified
+                if config['print_metric_ts'] is not None:
+                    metric = models_metrics[model_i].loc[models_metrics[model_i].index == sensor].values[0][0]
+                    label_metric = f"{model_i} - {config['print_metric_ts'].upper()}: {metric:.3f}"
+                else:
+                    label_metric = f"{model_i}"
+                
+                # Plot predictions
                 if config["forecast_horizon"] is not None:
                     for j in range(config["n_pred_ts"]):
                         models_predictions[model_i][0][1][sensor].iloc[j*config["forecast_horizon"]:(j+1)*config["forecast_horizon"]].plot(
                                                                                             ax = ax,
                                                                                             color = colors[i % len(markers)],
                                                                                             marker=markers[i % len(markers)],
-                                                                                            label = f"{model_i}" if j == config["n_pred_ts"]-1 else "",
+                                                                                            label = f"{label_metric}" if j == config["n_pred_ts"]-1 else "",
                                                                                             markersize = markersize,
                                                                                             linewidth = linewidth
                                                                                             )
                 else:
-                    models_predictions[model_i][0][1][sensor].plot(label = f"{model_i}", ax = ax,
+                    models_predictions[model_i][0][1][sensor].plot(label = f"{label_metric}", ax = ax,
                                                             color = colors[i % len(markers)],
                                                             marker=markers[i % len(markers)],
                                                             markersize = markersize,
                                                             linewidth = linewidth
                                                             )
                 
+                # Plot true data only for the last model to avoid overplotting
                 if model_i == config["model_name"][-1] :
                     models_predictions[model_i][0][0][sensor].plot(label = "Truth", ax = ax,
                                                                 color = "tab:blue",
