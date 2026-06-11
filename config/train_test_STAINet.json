@@ -32,11 +32,13 @@
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
+    "exclude_sensor_list_normalization":null,
 
     "all_dataset" : true,
     "max_ds_elems" : null,
     "test_split_p" :"2021-12-31",
     "frequency": "W",
+    "wtd_ds_frequency": "D",
 
     "random_sampler": true,
     "densification_dropout_p":0.15,
@@ -65,6 +67,7 @@
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
     "simplified_embedding":true,
+    "FiLM_conditioning":true,
 
     "loss":"mape",
     "optimizer": "adamw",
@@ -94,5 +97,7 @@
     "start_dates_plot_test": ["2021-07-04"],
 
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
-    "sel_sensor_list":null
+    "sel_sensor_list":null,
+    "target_sensors": "all",
+    "exclude_from_lags": null
 }

@@ -23,12 +23,14 @@
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
+    "exclude_sensor_list_normalization":null,
 
     "random_sampler": true,
     "all_dataset" : true,
     "max_ds_elems" : null,
     "test_split_p" :"2021-12-31",
     "frequency": "W",
+    "wtd_ds_frequency": "D",
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -47,5 +49,5 @@
     "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
 
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20251209_100741"
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_181651"
 }

@@ -23,12 +23,14 @@
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
+    "exclude_sensor_list_normalization":null,
 
     "random_sampler": true,
     "all_dataset" : true,
     "max_ds_elems" : null,
     "test_split_p" :"2021-12-31",
     "frequency": "W",
+    "wtd_ds_frequency": "D",
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -41,10 +43,10 @@
     "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     
-    "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STNet_SAGW_ERA5.json",
-        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_ERA5.json",
-        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_PI_ERA5.json",
-        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/ST_MultiPoint_STDisNet_SAGW_PI_RCH_ERA5.json"],
+    "model_config_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/train_test_STAINet.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/train_test_PSTAINet_IB.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/train_test_PSTAINet_ILB.json",
+        "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/train_test_PSTAINet_ILRB.json"],
     
     "model_path":["/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STNet_SAGW_S_ref_20250917_233851/ST_MultiPoint_STNet_SAGW_S_ref_20250917_233851.pt",
         "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/runs/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250917_182701/ST_MultiPoint_STDisNet_SAGW_K_S_ref_20250917_182701.pt",
@@ -58,7 +60,7 @@
     "iter_pred":false,
     "lat_lon_npoints":[70,70],
 
-    "n_pred_map":132,
+    "n_pred_map":0,
     "start_date_pred_map":"2021-06-20",
     
     "save_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions"
