@@ -17,13 +17,13 @@
     "discard_summer_data":false,
     "piezo_head":true,
     "relative_target":false,
-    "nan_treshold":10,
-    "fill_value":"ffill_bfill",
+    "nan_treshold":0,
+    "fill_value":"ffill",
     "normalization": true,
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
-    "exclude_sensor_list_normalization":null,
+    "exclude_sensor_list_normalization":["00104810001", "00121510001", "00127210005"],
 
     "random_sampler": true,
     "all_dataset" : true,
@@ -37,11 +37,11 @@
     "target_lags":[1,2,3,4],
     "weather_get_coords": true,
 
-    "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
+    "discard_sensor_list": null,
     "sel_sensor_list":null,
 
-    "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
-    "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
+    "model_name":["PSTAINet-IB","PSTAINet-IB-noFiLM"],
+    "model_with_displacements":["PSTAINet-IB","PSTAINet-IB-noFiLM"],
     
     "forecast_horizon":null,
     "get_displacement":true,
@@ -49,5 +49,5 @@
     "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
 
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_181651"
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/PSTAINet-IB_PSTAINet-IB-noFiLM_20260610_183435"
 }

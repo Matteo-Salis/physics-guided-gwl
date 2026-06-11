@@ -50,8 +50,9 @@
     "iter_pred":true,
     "lat_lon_npoints":[70,70],
     "vline_test":false,
+    "print_metric_ts":"mape",
 
-    "n_pred_map":132,
+    "n_pred_map":0,
     "plot_recharge_areas": true,
     "start_date_pred_map":"2021-06-20",
     "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],

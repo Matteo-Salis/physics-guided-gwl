@@ -68,7 +68,7 @@
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
     "simplified_embedding":true,
-    "FiLM_conditioning":true,
+    "FiLM_conditioning":false,
 
     "loss":"mape",
     "optimizer": "adamw",
@@ -108,7 +108,5 @@
     "start_dates_plot_test": ["2021-07-04"],
 
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
-    "sel_sensor_list":null,
-    "target_sensors": "all",
-    "exclude_from_lags": null
+    "sel_sensor_list":null
 }

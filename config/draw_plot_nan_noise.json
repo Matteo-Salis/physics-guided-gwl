@@ -4,7 +4,7 @@
     "dtm_nc" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dtm_ROI.nc",
     "weather_nc_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/era5land_2000_2024_weekly.nc",
     "weather_dtm": "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/era5land_dtm.nc",
-    "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dataset_wtd_roi.csv",
+    "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dataset_wtd_roi_test_nan_50.csv",
     "wtd_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/piemonte_admin_boundaries.shp",
     "recharge_areas_shp":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
@@ -17,8 +17,8 @@
     "discard_summer_data":false,
     "piezo_head":true,
     "relative_target":false,
-    "nan_treshold":10,
-    "fill_value":"ffill_bfill",
+    "nan_treshold":0,
+    "fill_value":0.0,
     "normalization": true,
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
@@ -30,24 +30,36 @@
     "max_ds_elems" : null,
     "test_split_p" :"2021-12-31",
     "frequency": "W",
-    "wtd_ds_frequency": "D",
+    "wtd_ds_frequency": "W",
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
     "target_lags":[1,2,3,4],
     "weather_get_coords": true,
 
-    "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
+    "discard_sensor_list":["00104810001", "00121510001", "00127210005"],
     "sel_sensor_list":null,
 
     "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
     "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
+    "ts_colors":["tab:brown","tab:orange","darkgreen","darkmagenta"],
     
+    "n_pred_ts":132,
     "forecast_horizon":null,
+    "start_date_pred_ts":"2022-01-01",
+    "recon_ts":false,
     "get_displacement":true,
     "iter_pred":false,
-    "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
+    "vline_test":false,
+    "print_metric_ts":"mape",
 
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_181651"
+    "n_pred_map":0,
+    "plot_recharge_areas": true,
+    "start_date_pred_map":"2021-06-20",
+    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],
+    "draw_gif":false,
+
+    "file_format":"jpg",
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_110134"
 }

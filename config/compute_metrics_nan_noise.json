@@ -4,7 +4,7 @@
     "dtm_nc" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dtm_ROI.nc",
     "weather_nc_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/era5land_2000_2024_weekly.nc",
     "weather_dtm": "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/era5land_dtm.nc",
-    "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dataset_wtd_roi.csv",
+    "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dataset_wtd_roi_test_nan_75.csv",
     "wtd_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/piemonte_admin_boundaries.shp",
     "recharge_areas_shp":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
@@ -17,8 +17,8 @@
     "discard_summer_data":false,
     "piezo_head":true,
     "relative_target":false,
-    "nan_treshold":10,
-    "fill_value":"ffill_bfill",
+    "nan_treshold":0,
+    "fill_value":0.0,
     "normalization": true,
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
@@ -30,7 +30,7 @@
     "max_ds_elems" : null,
     "test_split_p" :"2021-12-31",
     "frequency": "W",
-    "wtd_ds_frequency": "D",
+    "wtd_ds_frequency": "W",
 
     "weather_lags": 4,
     "weather_variables": ["tp","t2m","pev","smlt"],
@@ -49,5 +49,5 @@
     "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
 
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_181651"
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_110134"
 }

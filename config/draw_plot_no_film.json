@@ -17,13 +17,13 @@
     "discard_summer_data":false,
     "piezo_head":true,
     "relative_target":false,
-    "nan_treshold":10,
-    "fill_value":"ffill_bfill",
+    "nan_treshold":0,
+    "fill_value":"ffill",
     "normalization": true,
     "target_norm_type": "overall_zscore",
     "date_max_norm":"2021-12-31",
     "temporal_encoding":"sin",
-    "exclude_sensor_list_normalization":null,
+    "exclude_sensor_list_normalization":["00104810001", "00121510001", "00127210005"],
 
     "random_sampler": true,
     "all_dataset" : true,
@@ -37,17 +37,32 @@
     "target_lags":[1,2,3,4],
     "weather_get_coords": true,
 
-    "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
+    "discard_sensor_list":null,
     "sel_sensor_list":null,
+    "exclude_from_lags": ["00104810001", "00121510001", "00127210005"],
+    "target_sensors": ["00104810001", "00121510001", "00127210005"],
 
-    "model_name":["STAINet","PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
-    "model_with_displacements":["PSTAINet-IB","PSTAINet-ILB","PSTAINet-ILRB"],
+    "model_name":["PSTAINet-IB-noFiLM", "PSTAINet-ILB-noFiLM"],
+    "model_with_displacements":["PSTAINet-IB-noFiLM", "PSTAINet-ILB-noFiLM"],
     
+    "ts_colors":["tab:orange","tab:red"],
+    
+    "n_pred_ts":132,
     "forecast_horizon":null,
+    "start_date_pred_ts":"2022-01-01",
+    "recon_ts":false,
     "get_displacement":true,
     "iter_pred":false,
-    "metrics_only_on_test":true,
     "lat_lon_npoints":[70,70],
+    "vline_test":false,
+    "print_metric_ts":null,
 
-    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/STAINet_PSTAINet-IB_PSTAINet-ILB_PSTAINet-ILRB_20260610_181651"
+    "n_pred_map":0,
+    "plot_recharge_areas": true,
+    "start_date_pred_map":"2021-06-20",
+    "map_dates":["2021-07-04","2022-01-02","2022-05-15","2022-07-17","2022-11-13","2023-03-12","2023-08-06","2023-10-08"],
+    "draw_gif":false,
+
+    "file_format":"jpg",
+    "prediction_dir":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/test_predictions/PSTAINet-IB-noFiLM_PSTAINet-ILB-noFiLM_20260611_143247"
 }

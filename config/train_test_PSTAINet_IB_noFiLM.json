@@ -1,10 +1,10 @@
 {
     "cuda_device":"cuda:0",
     "seed":42,
-
+    
     "entity" : "gsartor-unito",
     "experiment_name": "ST_MultiPoint",
-    "run_name": "PI_S_ref",
+    "run_name": "S_ref",
     "comments": null,
     "wandb_mode": "offline",
 
@@ -17,8 +17,7 @@
     "wtd_csv_path" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/dataset_wtd_roi.csv",
     "wtd_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/underground_wtd_sensor_roi.shp",
     "piedmont_shp" : "/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/piemonte_admin_boundaries.shp",
-    "recharge_areas_shp":"/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/data/shapefile/AreeRicaricaAcquiferiProfondi.shp",
-    "buffer_recharge":0.05,
+    "recharge_areas_shp":null,
 
     "stdout_log_dir" : null,
     "stderr_log_dir" : null,
@@ -68,7 +67,7 @@
     "activation":"LeakyReLU",
     "model_normalization":"instancenorm",
     "simplified_embedding":true,
-    "FiLM_conditioning":true,
+    "FiLM_conditioning":false,
 
     "loss":"mape",
     "optimizer": "adamw",
@@ -79,27 +78,17 @@
     "orthogonality_loss_alpha":1e-3,
     "layers_orthogonality": "embedding",
 
-    "physics":true,
+    "physics":false,
     "physics_scheduling":null,
     "physics_scheduling_offset":null,
-    "coherence_alpha":1,
-    "cpoints_start_epoch":0,
-    "reg_diffusion_eq":2.5e-2,
-    "reg_delta_gw_l2":0,
-    "reg_delta_gw_l1":0,
-    "reg_K":0,
-    "reg_delta_s_l2":1e-4,
-    "reg_delta_s_l1":5e-4,
-    "reg_delta_gw_s_on_cps":true,
-    "reg_recharge_areas":0,
-    "reg_latlon_smoothness":0,
-    "reg_temp_smoothness":0,
-    "tstep_control_points":2,
+    "coherence_alpha":0,
+    "diffusion_alpha":0,
+    "tstep_control_points":null,
 
     "lr": 2.5e-4,
     "lr_scheduling":[[400],4e-1],
     "batch_size": 32,
-    "epochs": 600, 
+    "epochs": 850, 
 
     "n_pred_plot":125,
     "sensors_to_plot":["00417910001", "00105910001", "00425010001", "00401210001"],
@@ -108,7 +97,5 @@
     "start_dates_plot_test": ["2021-07-04"],
 
     "discard_sensor_list": ["00104810001", "00121510001", "00127210005"],
-    "sel_sensor_list":null,
-    "target_sensors": "all",
-    "exclude_from_lags": null
+    "sel_sensor_list":null
 }
