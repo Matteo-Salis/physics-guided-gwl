@@ -18,4 +18,4 @@ source /leonardo_scratch/fast/IscrC_DL4STP/.venv/bin/activate
 export WANDB_MODE="offline"
 cd /leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/src
 
-python compute_metrics.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/compute_metrics.json
+python compute_metrics.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/compute_metrics_no_film.json

@@ -5,8 +5,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=80000          # memory per node out of 80000MB (80GB)
 #SBATCH --time=05:00:00               # time limits: 1 hour
-#SBATCH --error=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot.err            # standard error file
-#SBATCH --output=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot.out           # standard output file
+#SBATCH --error=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_%j.err            # standard error file
+#SBATCH --output=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_%j.out           # standard output file
 #SBATCH --account=IscrC_DL4STP       # account name
 #SBATCH --partition=boost_usr_prod   # partition name
 #SBATCH --qos=normal             # quality of service
@@ -18,4 +18,4 @@ source /leonardo_scratch/fast/IscrC_DL4STP/.venv/bin/activate
 export WANDB_MODE="offline"
 cd /leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/src
 
-python draw_plot.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/draw_plot.json
+python draw_plot.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/draw_plot_no_film.json

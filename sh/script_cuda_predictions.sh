@@ -18,4 +18,4 @@ source /leonardo_scratch/fast/IscrC_DL4STP/.venv/bin/activate
 export WANDB_MODE="offline"
 cd /leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/src
 
-python compute_predictions.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/predictions.json
+python compute_predictions.py --config=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/config/predictions_no_film.json
