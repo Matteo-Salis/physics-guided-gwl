@@ -5,8 +5,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=80000          # memory per node out of 80000MB (80GB)
 #SBATCH --time=05:00:00               # time limits: 1 hour
-#SBATCH --error=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_iter_pred.err            # standard error file
-#SBATCH --output=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_iter_pred.out           # standard output file
+#SBATCH --error=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_iter_pred_%j.err            # standard error file
+#SBATCH --output=/leonardo_scratch/fast/IscrC_DL4STP/physics-guided-gwl/results/logs/draw_plot_iter_pred_%j.out           # standard output file
 #SBATCH --account=IscrC_DL4STP       # account name
 #SBATCH --partition=boost_usr_prod   # partition name
 #SBATCH --qos=normal             # quality of service
