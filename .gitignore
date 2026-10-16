@@ -168,12 +168,10 @@ results/
 
 src/runs/
 src/deprecated/
-src/notebooks/*.nc
+src/notebooks/**
 src/*.csv
 src/*.nc
-src/notebooks/*.gif
-src/notebooks/*.png
-src/notebooks/plots/**
-src/notebooks/trials/**
 src/deprecated/**
 src/wandb/**
+
+config/**
