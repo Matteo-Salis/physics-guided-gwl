@@ -39,4 +39,6 @@ Here is the predicted evolution of the diffusion component $\hat{\Delta}_{GW}$ a
   <img src="https://lh3.googleusercontent.com/d/18b30t3wg9dJzH1pGVBLR0Ek_-W8xgZax=s400" >
 </p>
 
+Citation: Salis, M., Sartor, G., Meo, R., Ferraris, S., and Atto, A. M. Pure and physics-guided deep learning approaches for spatio-temporal groundwater level prediction. Machine Learning: Science and Technology, 7(5):055016, 2026. doi:10.1088/2632-2153/ae9af0
+
 
